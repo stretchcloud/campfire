@@ -485,6 +485,10 @@ Type `@` in the message box to open the prompt picker. Start typing to filter by
 
 The full content of the selected prompt replaces the `@query` in your message, so you can mix prompt snippets with your own text.
 
+**CWD-scoped loading:**
+
+The prompt picker automatically filters prompts based on the current session's working directory. When you switch sessions with different working directories, the prompt list refreshes to show only prompts relevant to that project. Global prompts are always available regardless of the working directory.
+
 **REST API:**
 
 ```bash
@@ -515,7 +519,7 @@ Prompts are stored at `~/.companion/prompts.json`.
 
 ### Linear Integration
 
-Connect your Linear workspace to browse issues, inject issue context into sessions, and auto-generate branch names from issue titles.
+Connect your Linear workspace to manage issues end-to-end: browse and search issues, link them to sessions, auto-generate branch names, map projects to repositories, and auto-transition issue state when work begins.
 
 **Setup:**
 
@@ -526,8 +530,23 @@ Connect your Linear workspace to browse issues, inject issue context into sessio
 **What it enables:**
 
 - Browse and search Linear issues when creating a new session
-- Inject the issue title and description as startup context for the agent
 - Auto-generate a recommended git branch name from the issue (e.g. `feat/eng-123-add-auth`)
+- Link issues to sessions — track which issue each session is working on
+- Map Linear teams/projects to git repositories for automatic filtering
+- Auto-transition issues to "In Progress" when a linked session starts
+
+**Project-repo mapping:**
+
+When you first use Linear in a git repository, Campfire prompts you to link the repo to a Linear team. Once linked, issue searches are automatically filtered to that team. Mappings are stored in `~/.companion/linear-projects.json`.
+
+**Issue-session workflow:**
+
+1. Open the **New Session** page in a git repo with a linked Linear team
+2. The **Linear Issues** section appears automatically
+3. Search for an issue by title or identifier
+4. Select an issue — a branch name is auto-generated (e.g. `feat/ENG-123-add-oauth-flow`)
+5. The worktree toggle activates with the generated branch name
+6. Create the session — the issue is linked and transitions to "In Progress"
 
 **REST API:**
 
@@ -536,12 +555,49 @@ Connect your Linear workspace to browse issues, inject issue context into sessio
 curl http://localhost:3456/api/linear/connection
 # → {"connected": true, "viewer": {"name": "...", "email": "..."}, "teams": [...]}
 
-# Search issues
+# Search issues (cached, deduplicated)
 curl "http://localhost:3456/api/linear/issues?query=auth&limit=10"
-# → {"issues": [{"id": "...", "identifier": "ENG-123", "title": "Add OAuth", ...}]}
+
+# List teams
+curl http://localhost:3456/api/linear/teams
+
+# Get workflow states for a team
+curl http://localhost:3456/api/linear/team/:teamId/states
+
+# Project-repo mapping
+curl http://localhost:3456/api/linear/project-mapping?repoRoot=/path/to/repo
+curl -X POST http://localhost:3456/api/linear/project-mapping \
+  -H "Content-Type: application/json" \
+  -d '{"repoRoot": "/path/to/repo", "teamId": "...", "teamKey": "ENG", "teamName": "Engineering"}'
+curl -X DELETE http://localhost:3456/api/linear/project-mapping \
+  -H "Content-Type: application/json" \
+  -d '{"repoRoot": "/path/to/repo"}'
+
+# Link an issue to a session
+curl -X POST http://localhost:3456/api/linear/session/:sessionId/link-issue \
+  -H "Content-Type: application/json" \
+  -d '{"issueId": "...", "identifier": "ENG-123", "title": "Add OAuth", "url": "...", "state": "Todo", "teamKey": "ENG"}'
+
+# Get linked issue for a session
+curl http://localhost:3456/api/linear/session/:sessionId/issue
+
+# Transition an issue's state
+curl -X POST http://localhost:3456/api/linear/issues/:issueId/transition \
+  -H "Content-Type: application/json" \
+  -d '{"stateId": "..."}'
 ```
 
-The API key is stored in `~/.companion/settings.json` and never exposed via the settings GET endpoint (only `linearApiKeyConfigured: true/false` is returned).
+**Caching:**
+
+Linear API responses are cached with a 60-second TTL to reduce API calls. Concurrent identical requests are deduplicated — only one GraphQL call is made, and all callers receive the same result.
+
+**Data storage:**
+
+| File | Contents |
+|------|----------|
+| `~/.companion/settings.json` | Linear API key (never exposed via GET) |
+| `~/.companion/linear-projects.json` | Repo → team/project mappings |
+| `~/.companion/linear-session-issues.json` | Session → issue links |
 
 ---
 
@@ -973,10 +1029,61 @@ Optionally sandbox sessions inside Docker containers for isolation. When enabled
 
 **How it works:**
 
-1. When creating a session, enable the **Docker container** option
-2. Choose a Docker image (default: `companion-dev:latest`)
-3. Optionally configure ports, volumes, and environment variables
-4. The session runs inside the container with `~/.claude` mounted read-only for authentication
+1. When creating a session, click the **Container** toggle in the toolbar
+2. Choose a Docker image (default: `companion-dev:latest`) in the text field that appears
+3. Click **Create** — a progress overlay appears showing each step
+4. The session runs inside the container with authentication automatically seeded
+
+**Creation progress overlay:**
+
+When launching a container session, a step-by-step progress modal appears:
+
+| Step | What happens |
+|------|-------------|
+| Checking image | Verifies if the Docker image exists locally |
+| Pulling image | Downloads the image if not found (with progress bar showing layer download %) |
+| Creating container | Creates and starts the Docker container with mounted volumes |
+| Seeding authentication | Copies `~/.claude/` (for Claude Code) or `~/.codex/` (for Codex) into the container |
+| Launching agent | Starts the agent process inside the container |
+
+If any step fails, the overlay shows an error with **Retry** and **Cancel** buttons.
+
+**Authentication seeding:**
+
+Campfire automatically copies authentication credentials into containers so agents can authenticate without manual setup:
+
+- **Claude Code sessions**: `~/.claude/` is copied to `/root/.claude/` inside the container
+- **Codex sessions**: `~/.codex/` is copied to `/root/.codex/` inside the container
+
+**Image pull management:**
+
+Images are checked locally before pulling. Recently pulled images are cached for 30 minutes to skip redundant checks. During a pull, the progress overlay shows per-layer download progress with a percentage bar.
+
+**Git info inside containers:**
+
+Campfire resolves git information (branch, ahead/behind, worktree status) from inside the container via `docker exec`, so sidebar session metadata stays accurate even for containerized sessions.
+
+**SSE creation endpoint:**
+
+Container session creation uses Server-Sent Events (SSE) for real-time progress reporting:
+
+```bash
+# Create a container session with progress (returns text/event-stream)
+curl -N -X POST http://localhost:3456/api/sessions/create-with-progress \
+  -H "Content-Type: application/json" \
+  -d '{
+    "backend": "claude",
+    "model": "claude-sonnet-4-5-20250929",
+    "cwd": "/home/user/project",
+    "container": {"image": "companion-dev:latest"}
+  }'
+# event: step
+# data: {"step":"checking_image","message":"Checking image companion-dev:latest..."}
+# event: step
+# data: {"step":"pulling_image","message":"Pulling companion-dev:latest...","percent":45}
+# event: done
+# data: {"sessionId":"abc-123","session":{...}}
+```
 
 **Requirements:**
 
@@ -1217,6 +1324,8 @@ All state is file-based — no database required:
 | Settings | `~/.companion/settings.json` | Single JSON file |
 | Prompts | `~/.companion/prompts.json` | Single JSON array |
 | Session names | `~/.companion/session-names.json` | Single JSON file |
+| Linear project mappings | `~/.companion/linear-projects.json` | Single JSON file |
+| Linear session issues | `~/.companion/linear-session-issues.json` | Single JSON file |
 | **CI Memory** | `~/.companion/memory/lancedb/` | LanceDB vector tables |
 | **CI Capabilities** | `~/.companion/capabilities/` | JSON per session |
 | **CI Learning log** | `~/.companion/capability-learning.jsonl` | JSONL append-only |
@@ -1449,6 +1558,7 @@ All endpoints are under `/api`.
 | `POST` | `/api/sessions/:id/fork` | Fork a session at a specific point |
 | `POST` | `/api/sessions/:id/invite` | Create a shareable invite link |
 | `GET` | `/api/sessions/join/:token` | Resolve an invite token |
+| `POST` | `/api/sessions/create-with-progress` | Create a container session with SSE progress (returns `text/event-stream`) |
 
 ### Session Recording
 
@@ -1592,6 +1702,15 @@ All endpoints are under `/api`.
 |--------|------|-------------|
 | `GET` | `/api/linear/connection` | Check connection status and list teams |
 | `GET` | `/api/linear/issues` | Search issues (`?query=&limit=`) |
+| `GET` | `/api/linear/teams` | List all Linear teams |
+| `GET` | `/api/linear/team/:id/states` | Get workflow states for a team |
+| `GET` | `/api/linear/projects` | List all Linear projects |
+| `GET` | `/api/linear/project-mapping` | Get project-repo mapping (`?repoRoot=`) |
+| `POST` | `/api/linear/project-mapping` | Create or update a project-repo mapping |
+| `DELETE` | `/api/linear/project-mapping` | Remove a project-repo mapping |
+| `POST` | `/api/linear/session/:id/link-issue` | Link a Linear issue to a session |
+| `GET` | `/api/linear/session/:id/issue` | Get the linked issue for a session |
+| `POST` | `/api/linear/issues/:id/transition` | Transition an issue to a new state |
 
 ### Settings & System
 
@@ -1724,7 +1843,24 @@ web/
 │   ├── index.ts            # Server bootstrap
 │   ├── ws-bridge.ts        # WebSocket message router
 │   ├── cli-launcher.ts     # Agent process management
-│   ├── routes.ts           # REST API endpoints
+│   ├── routes.ts           # RE-export shim (delegates to routes/)
+│   ├── routes/             # Modular REST API endpoints
+│   │   ├── route-deps.ts   # Shared RouteDeps interface
+│   │   ├── index.ts        # Composition layer (imports all modules)
+│   │   ├── session-routes.ts    # Session CRUD, fork, invite, SSE creation
+│   │   ├── recording-routes.ts  # Recording start/stop/status
+│   │   ├── fs-routes.ts         # File tree, read/write, diff, CLAUDE.md
+│   │   ├── env-routes.ts        # Environment CRUD
+│   │   ├── settings-routes.ts   # Settings get/update
+│   │   ├── git-routes.ts        # Repo info, branches, worktrees, PR status
+│   │   ├── system-routes.ts     # Backends, containers, usage, terminal
+│   │   ├── cron-routes.ts       # Cron job CRUD
+│   │   ├── gallery-routes.ts    # Gallery, ClawHub, public replay
+│   │   ├── webhook-routes.ts    # Webhook CRUD, OpenClaw inbound
+│   │   ├── adapter-routes.ts    # Adapter install/uninstall
+│   │   ├── ci-routes.ts         # Collective Intelligence endpoints
+│   │   ├── prompt-routes.ts     # Prompt CRUD
+│   │   └── linear-routes.ts     # Linear integration (full suite)
 │   ├── session-store.ts    # Session persistence
 │   ├── session-types.ts    # Protocol types
 │   ├── codex-adapter.ts    # Codex JSON-RPC adapter
@@ -1739,6 +1875,13 @@ web/
 │   ├── gallery-store.ts    # Session gallery
 │   ├── cron-scheduler.ts   # Scheduled tasks
 │   ├── recorder.ts         # Protocol recording
+│   ├── linear-cache.ts     # TTL cache for Linear API responses
+│   ├── linear-project-manager.ts  # Repo → team/project mapping
+│   ├── session-linear-issues.ts   # Session → issue linking
+│   ├── claude-container-auth.ts   # Seed ~/.claude/ into containers
+│   ├── codex-container-auth.ts    # Seed ~/.codex/ into containers
+│   ├── image-pull-manager.ts      # Docker image pull with progress
+│   ├── session-git-info.ts        # Git info from inside containers
 │   ├── collective-intelligence.ts  # CI orchestrator (all 4 layers)
 │   ├── semantic-memory.ts  # Layer 1: LanceDB vector memory
 │   ├── deliberation-engine.ts      # Layer 2: Structured decision making
@@ -1757,7 +1900,9 @@ web/
 │       ├── PromptsPage.tsx         # Prompt library management
 │       ├── IntegrationsPage.tsx    # Integrations hub
 │       ├── LinearSettingsPage.tsx  # Linear API key config
-│       └── LinearLogo.tsx          # Linear SVG logo
+│       ├── LinearLogo.tsx          # Linear SVG logo
+│       ├── LinearSection.tsx       # Issue search & project mapping (HomePage)
+│       └── SessionLaunchOverlay.tsx # Container creation progress modal
 ├── bin/cli.ts              # CLI entry point
 ├── public/                 # PWA assets
 └── package.json
