@@ -689,4 +689,74 @@ export const api = {
     get<{ issues: import("./utils/linear-branch.js").LinearIssue[] }>(
       `/linear/issues?query=${encodeURIComponent(query)}${limit ? `&limit=${limit}` : ""}`,
     ),
+
+  // Collective Intelligence - Layer 1: Semantic Memory
+  getSessionMemory: (sessionId: string) =>
+    get<{ fragments: import("./types.js").MemoryFragment[]; consolidated: import("./types.js").ConsolidatedKnowledge[] }>(
+      `/sessions/${encodeURIComponent(sessionId)}/memory`,
+    ),
+  queryMemory: (sessionId: string, query: string, limit = 10) =>
+    get<{ results: import("./types.js").MemoryFragment[]; consolidated: import("./types.js").ConsolidatedKnowledge[] }>(
+      `/sessions/${encodeURIComponent(sessionId)}/memory/query?q=${encodeURIComponent(query)}&limit=${limit}`,
+    ),
+  storeMemory: (sessionId: string, data: { content: string; type: string; tags: string[]; gitContext?: Record<string, unknown> }) =>
+    post<{ fragment: import("./types.js").MemoryFragment }>(`/sessions/${encodeURIComponent(sessionId)}/memory`, data),
+  consolidateMemory: (sessionId: string) =>
+    post<{ consolidated: import("./types.js").ConsolidatedKnowledge[]; count: number }>(
+      `/sessions/${encodeURIComponent(sessionId)}/memory/consolidate`,
+    ),
+  getGlobalMemory: (tag?: string) =>
+    get<{ knowledge: import("./types.js").ConsolidatedKnowledge[] }>(
+      `/memory/global${tag ? `?tag=${encodeURIComponent(tag)}` : ""}`,
+    ),
+
+  // Collective Intelligence - Layer 2: Deliberation
+  getDeliberations: (sessionId: string) =>
+    get<{ active: import("./types.js").DeliberationProposal[]; resolved: import("./types.js").DeliberationResolution[] }>(
+      `/sessions/${encodeURIComponent(sessionId)}/deliberations`,
+    ),
+  getDeliberation: (sessionId: string, proposalId: string) =>
+    get<{ proposal: import("./types.js").DeliberationProposal; responses: import("./types.js").DeliberationResponse[]; resolution?: import("./types.js").DeliberationResolution }>(
+      `/sessions/${encodeURIComponent(sessionId)}/deliberations/${encodeURIComponent(proposalId)}`,
+    ),
+  respondToDeliberation: (sessionId: string, proposalId: string, data: { stance: string; reasoning: string; suggestedAlternative?: string }) =>
+    post<{ response: import("./types.js").DeliberationResponse }>(
+      `/sessions/${encodeURIComponent(sessionId)}/deliberations/${encodeURIComponent(proposalId)}/respond`,
+      data,
+    ),
+  resolveDeliberation: (sessionId: string, proposalId: string) =>
+    post<{ resolution: import("./types.js").DeliberationResolution }>(
+      `/sessions/${encodeURIComponent(sessionId)}/deliberations/${encodeURIComponent(proposalId)}/resolve`,
+    ),
+
+  // Collective Intelligence - Layer 3: Capability Discovery
+  routeTask: (data: import("./types.js").RouteTaskRequest) =>
+    post<import("./types.js").RouteTaskResult>("/sessions/route-task", data),
+  getCapabilities: () =>
+    get<{ sessions: import("./types.js").AgentCapabilities[] }>("/capabilities"),
+  getCapabilityHistory: (filters?: { backendType?: string; taskType?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.backendType) params.set("backendType", filters.backendType);
+    if (filters?.taskType) params.set("taskType", filters.taskType);
+    const qs = params.toString();
+    return get<{ executions: unknown[]; successRate: number; avgCostUsd: number }>(
+      `/capabilities/history${qs ? `?${qs}` : ""}`,
+    );
+  },
+  submitCapabilityFeedback: (sessionId: string, taskId: string, feedback: "positive" | "negative" | "neutral") =>
+    post<{ ok: boolean }>("/capabilities/feedback", { sessionId, taskId, feedback }),
+
+  // Collective Intelligence - Layer 4: Shared Context
+  getContextStream: (sessionId: string) =>
+    get<{ fragments: import("./types.js").ContextFragment[] }>(
+      `/sessions/${encodeURIComponent(sessionId)}/context/stream`,
+    ),
+  getConsensusState: (sessionId: string) =>
+    get<import("./types.js").ConsensusState>(
+      `/sessions/${encodeURIComponent(sessionId)}/context/consensus`,
+    ),
+  getContextThread: (sessionId: string, fragmentId: string) =>
+    get<{ thread: import("./types.js").ContextFragment[] }>(
+      `/sessions/${encodeURIComponent(sessionId)}/context/thread/${encodeURIComponent(fragmentId)}`,
+    ),
 };
