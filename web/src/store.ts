@@ -186,6 +186,14 @@ interface AppState {
   openTerminal: (cwd: string) => void;
   closeTerminal: () => void;
 
+  // Container session creation progress
+  sessionCreating: boolean;
+  creationProgress: { step: string; message: string; percent?: number } | null;
+  creationError: string | null;
+  setSessionCreating: (creating: boolean) => void;
+  setCreationProgress: (progress: { step: string; message: string; percent?: number } | null) => void;
+  setCreationError: (error: string | null) => void;
+
   reset: () => void;
 }
 
@@ -281,6 +289,9 @@ export const useStore = create<AppState>((set) => ({
   terminalOpen: false,
   terminalCwd: null,
   terminalId: null,
+  sessionCreating: false,
+  creationProgress: null,
+  creationError: null,
 
   setDarkMode: (v) => {
     localStorage.setItem("cc-dark-mode", String(v));
@@ -742,6 +753,10 @@ export const useStore = create<AppState>((set) => ({
   openTerminal: (cwd) => set({ terminalOpen: true, terminalCwd: cwd }),
   closeTerminal: () => set({ terminalOpen: false, terminalCwd: null, terminalId: null }),
 
+  setSessionCreating: (creating) => set({ sessionCreating: creating }),
+  setCreationProgress: (progress) => set({ creationProgress: progress }),
+  setCreationError: (error) => set({ creationError: error }),
+
   reset: () =>
     set({
       sessions: new Map(),
@@ -768,5 +783,8 @@ export const useStore = create<AppState>((set) => ({
       terminalOpen: false,
       terminalCwd: null,
       terminalId: null,
+      sessionCreating: false,
+      creationProgress: null,
+      creationError: null,
     }),
 }));
