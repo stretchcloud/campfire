@@ -1,0 +1,18 @@
+services:
+  campfire:
+    build: .
+    ports:
+      - "3456:3456"
+    volumes:
+      # Persistent data (envs, cron, gallery, webhooks, adapters, settings, recordings)
+      - campfire-data:/home/campfire/.companion
+      # Session state (survives container restarts)
+      - campfire-sessions:/tmp/vibe-sessions
+    environment:
+      - NODE_ENV=production
+      - PORT=3456
+    restart: unless-stopped
+
+volumes:
+  campfire-data:
+  campfire-sessions:

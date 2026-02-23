@@ -1,0 +1,19 @@
+{
+  "name": "@campfire/openclaw-channel",
+  "version": "1.0.0",
+  "description": "Campfire web UI channel plugin for OpenClaw",
+  "type": "module",
+  "main": "index.ts",
+  "openclaw": {
+    "extensions": ["./index.ts"],
+    "channel": {
+      "id": "campfire",
+      "label": "Campfire",
+      "docsPath": "/channels/campfire",
+      "blurb": "Rich web UI with cost tracking, session replay, and collaboration",
+      "order": 100
+    }
+  },
+  "keywords": ["openclaw", "channel", "campfire", "ai-assistant"],
+  "license": "MIT"
+}
