@@ -2,7 +2,11 @@ import { useState, useSyncExternalStore } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
-import type { SessionRole } from "../types.js";
+import type { SessionRole, PresenceViewer } from "../types.js";
+
+// Stable empty references to avoid infinite re-renders from Zustand selectors
+// (Object.is([], []) is false, so returning new [] on every selector call triggers re-renders)
+const EMPTY_VIEWERS: PresenceViewer[] = [];
 
 export function TopBar() {
   const hash = useSyncExternalStore(
@@ -55,8 +59,8 @@ export function TopBar() {
   });
 
   const viewers = useStore((s) => {
-    if (!currentSessionId) return [];
-    return s.sessionViewers.get(currentSessionId) ?? [];
+    if (!currentSessionId) return EMPTY_VIEWERS;
+    return s.sessionViewers.get(currentSessionId) ?? EMPTY_VIEWERS;
   });
 
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
