@@ -133,17 +133,21 @@ export function Composer({ sessionId }: { sessionId: string }) {
     );
   }, [atMenuOpen, atQuery, allPrompts]);
 
+  // Clear cached prompts when session cwd changes
+  const sessionCwd = sessionData?.cwd;
+  useEffect(() => { setAllPrompts([]); }, [sessionCwd]);
+
   // Load prompts once when @ is typed; open/close menu
   useEffect(() => {
     const hasAt = atQuery !== null;
     if (hasAt && !atMenuOpen) {
       setAtMenuOpen(true);
       setAtMenuIndex(0);
-      api.listPrompts().then(setAllPrompts).catch(() => {});
+      api.listPrompts(sessionCwd ? { cwd: sessionCwd } : undefined).then(setAllPrompts).catch(() => {});
     } else if (!hasAt && atMenuOpen) {
       setAtMenuOpen(false);
     }
-  }, [atQuery, atMenuOpen]);
+  }, [atQuery, atMenuOpen, sessionCwd]);
 
   // Keep @-menu index in bounds
   useEffect(() => {

@@ -8,7 +8,9 @@ import { getRecentDirs, addRecentDir } from "../utils/recent-dirs.js";
 import { getModelsForBackend, getModesForBackend, getDefaultModel, getDefaultMode, toModelOptions, type ModelOption } from "../utils/backends.js";
 import type { BackendType } from "../types.js";
 import { EnvManager } from "./EnvManager.js";
+import { LinearSection } from "./LinearSection.js";
 import { FolderPicker } from "./FolderPicker.js";
+import { SessionLaunchOverlay } from "./SessionLaunchOverlay.js";
 
 interface ImageAttachment {
   name: string;
@@ -81,6 +83,10 @@ export function HomePage() {
   const [pullPrompt, setPullPrompt] = useState<{ behind: number; branchName: string } | null>(null);
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState("");
+
+  // Container mode state
+  const [useContainer, setUseContainer] = useState(false);
+  const [containerImage, setContainerImage] = useState("companion-dev:latest");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -282,9 +288,8 @@ export function HomePage() {
         disconnectSession(currentSessionId);
       }
 
-      // Create session (with optional worktree)
       const branchName = worktreeBranch.trim() || undefined;
-      const result = await api.createSession({
+      const baseOpts = {
         model,
         permissionMode: mode,
         cwd: cwd || undefined,
@@ -294,8 +299,43 @@ export function HomePage() {
         useWorktree: useWorktree || undefined,
         backend,
         codexInternetAccess: backend === "codex" ? codexInternetAccess : undefined,
-      });
-      const sessionId = result.sessionId;
+      };
+
+      let sessionId: string;
+
+      if (useContainer) {
+        // Container mode: use SSE creation with progress overlay
+        const store = useStore.getState();
+        store.setSessionCreating(true);
+        store.setCreationProgress(null);
+        store.setCreationError(null);
+
+        try {
+          const result = await api.createSessionWithProgress(
+            { ...baseOpts, container: { image: containerImage } },
+            ({ type, data }) => {
+              if (type === "step") {
+                useStore.getState().setCreationProgress({
+                  step: data.step as string,
+                  message: data.message as string,
+                  percent: data.percent as number | undefined,
+                });
+              }
+            },
+          );
+          if (!result) throw new Error("Session creation returned no result");
+          sessionId = result.sessionId;
+          useStore.getState().setSessionCreating(false);
+        } catch (e) {
+          useStore.getState().setCreationError(e instanceof Error ? e.message : String(e));
+          setSending(false);
+          return;
+        }
+      } else {
+        // Standard session creation
+        const result = await api.createSession(baseOpts);
+        sessionId = result.sessionId;
+      }
 
       // Assign a random session name
       const existingNames = new Set(useStore.getState().sessionNames.values());
@@ -426,6 +466,19 @@ export function HomePage() {
           onChange={handleFileSelect}
           className="hidden"
         />
+
+        {/* Linear Integration (only shown when connected + git repo detected) */}
+        {gitRepoInfo && (
+          <LinearSection
+            cwd={cwd}
+            repoRoot={gitRepoInfo.repoRoot}
+            onBranchFromIssue={(branch) => {
+              setWorktreeBranch(branch);
+              setIsNewBranch(true);
+              setUseWorktree(true);
+            }}
+          />
+        )}
 
         {/* Input card */}
         <div className="bg-cc-card border border-cc-border rounded-[14px] shadow-sm overflow-hidden">
@@ -746,6 +799,34 @@ export function HomePage() {
             </button>
           )}
 
+          {/* Container toggle */}
+          <button
+            onClick={() => setUseContainer(!useContainer)}
+            className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+              useContainer
+                ? "bg-cc-primary/15 text-cc-primary font-medium"
+                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+            }`}
+            title="Run session in a Docker container"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 opacity-70">
+              <path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.186.186 0 00-.185.186v1.887c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.888c0 .102.082.185.185.186m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.887c0 .102.082.186.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.186.186 0 00-.185.185v1.887c0 .102.083.186.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.186.186 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.186.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.186v1.887c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.186v1.887c0 .102.083.185.185.185m-2.964 0h2.119a.186.186 0 00.185-.185V9.006a.186.186 0 00-.185-.186H5.136a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.687 11.687 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.228 12.228 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288z" />
+            </svg>
+            <span>Container</span>
+          </button>
+
+          {/* Container image picker (shown when container mode active) */}
+          {useContainer && (
+            <input
+              type="text"
+              value={containerImage}
+              onChange={(e) => setContainerImage(e.target.value)}
+              placeholder="Docker image"
+              className="px-2 py-1 text-xs rounded-md border border-cc-border bg-cc-bg text-cc-fg w-40 focus:outline-none focus:ring-1 focus:ring-cc-primary"
+              title="Docker image to use for the container"
+            />
+          )}
+
           {/* Environment selector */}
           <div className="relative" ref={envDropdownRef}>
             <button
@@ -918,6 +999,20 @@ export function HomePage() {
           }}
         />
       )}
+
+      {/* Container session creation progress overlay */}
+      <SessionLaunchOverlay
+        onRetry={() => {
+          useStore.getState().setCreationError(null);
+          useStore.getState().setSessionCreating(false);
+          setSending(false);
+        }}
+        onCancel={() => {
+          useStore.getState().setCreationError(null);
+          useStore.getState().setSessionCreating(false);
+          setSending(false);
+        }}
+      />
     </div>
   );
 }

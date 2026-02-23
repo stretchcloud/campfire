@@ -759,4 +759,83 @@ export const api = {
     get<{ thread: import("./types.js").ContextFragment[] }>(
       `/sessions/${encodeURIComponent(sessionId)}/context/thread/${encodeURIComponent(fragmentId)}`,
     ),
+
+  // ─── Linear Integration ──────────────────────────────────────────
+  getLinearTeams: () =>
+    get<{ teams: Array<{ id: string; key: string; name: string }> }>("/linear/teams"),
+  getLinearTeamStates: (teamId: string) =>
+    get<{ states: Array<{ id: string; name: string; type: string; position: number }> }>(
+      `/linear/team/${encodeURIComponent(teamId)}/states`,
+    ),
+  getLinearProjectMapping: (repoRoot?: string) =>
+    get<{ mapping?: { teamId: string; teamKey: string; teamName: string; projectId?: string; projectName?: string; repoRoot: string }; mappings?: Array<{ teamId: string; teamKey: string; teamName: string; repoRoot: string }> }>(
+      `/linear/project-mapping${repoRoot ? `?repoRoot=${encodeURIComponent(repoRoot)}` : ""}`,
+    ),
+  setLinearProjectMapping: (body: { repoRoot: string; teamId: string; teamKey: string; teamName: string; projectId?: string; projectName?: string }) =>
+    post<{ mapping: unknown }>("/linear/project-mapping", body),
+  linkLinearIssue: (sessionId: string, issue: { issueId: string; identifier: string; title: string; url: string; state: string; teamKey: string }) =>
+    post<{ linked: unknown }>(`/linear/session/${encodeURIComponent(sessionId)}/link-issue`, issue),
+  getLinkedIssue: (sessionId: string) =>
+    get<{ issue: { issueId: string; identifier: string; title: string; url: string; state: string } | null }>(
+      `/linear/session/${encodeURIComponent(sessionId)}/issue`,
+    ),
+  transitionLinearIssue: (issueId: string, stateId: string) =>
+    post<{ ok: boolean; issue?: unknown }>(`/linear/issues/${encodeURIComponent(issueId)}/transition`, { stateId }),
+
+  // ─── Docker Container Session Creation (SSE) ─────────────────────
+  createSessionWithProgress: async (
+    body: CreateSessionOpts & { container: ContainerCreateOpts },
+    onProgress: (event: { type: string; data: Record<string, unknown> }) => void,
+  ): Promise<{ sessionId: string; session: unknown } | null> => {
+    const res = await fetch(`${BASE}/sessions/create-with-progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || res.statusText);
+    }
+    if (!res.body) throw new Error("No response body");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let result: { sessionId: string; session: unknown } | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      let eventType = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            onProgress({ type: eventType, data });
+            if (eventType === "done" && data.sessionId) {
+              result = { sessionId: data.sessionId, session: data.session };
+            }
+            if (eventType === "error") {
+              throw new Error(data.error || "Session creation failed");
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message !== "Session creation failed") {
+              // JSON parse error, skip
+            } else {
+              throw e;
+            }
+          }
+        }
+      }
+    }
+
+    return result;
+  },
 };
