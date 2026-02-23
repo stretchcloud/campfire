@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+web/node_modules/
+landing/node_modules/
+
+# Build outputs
+web/dist/
+landing/dist/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Session data
+vibe-sessions/
+
+# Campfire data
+.companion/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+# Recordings
+recordings/

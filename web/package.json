@@ -1,0 +1,74 @@
+{
+  "name": "the-companion",
+  "version": "0.42.0",
+  "type": "module",
+  "description": "Web UI for launching and interacting with Claude Code agents",
+  "license": "MIT",
+  "author": "The Vibe Company",
+  "bin": {
+    "the-companion": "./bin/cli.ts"
+  },
+  "files": [
+    "bin/",
+    "server/",
+    "dist/"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ai",
+    "agent",
+    "web-ui",
+    "vibe-coding"
+  ],
+  "scripts": {
+    "dev": "bun dev.ts",
+    "dev:api": "bun --watch server/index.ts",
+    "dev:vite": "vite",
+    "build": "vite build",
+    "start": "NODE_ENV=production bun server/index.ts",
+    "prepublishOnly": "bun run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:codex-contract": "vitest run server/codex-protocol-*.test.ts"
+  },
+  "dependencies": {
+    "@lancedb/lancedb": "^0.26.2",
+    "croner": "^10.0.1",
+    "diff": "^8.0.3",
+    "hono": "^4.7.0",
+    "posthog-js": "^1.347.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/bun": "^1.2.5",
+    "@types/diff": "^8.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "autoprefixer": "^10.4.21",
+    "jsdom": "^28.0.0",
+    "postcss": "^8.5.3",
+    "react": "^19.0.0",
+    "react-arborist": "^3.4.3",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^4.6.2",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.3.0",
+    "vitest": "^4.0.18",
+    "zustand": "^5.0.0"
+  }
+}

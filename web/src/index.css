@@ -1,0 +1,243 @@
+@import "tailwindcss";
+
+@theme {
+  /* Light Mode (default) */
+  --color-cc-bg: #F5F5F0;
+  --color-cc-fg: #1a1a18;
+  --color-cc-card: #FFFFFF;
+  --color-cc-primary: #ae5630;
+  --color-cc-primary-hover: #c4643a;
+  --color-cc-user-bubble: #DDD9CE;
+  --color-cc-border: rgba(0,0,0,0.15);
+  --color-cc-muted: #7d796e;
+  --color-cc-sidebar: #EDEAE2;
+  --color-cc-input-bg: #FFFFFF;
+  --color-cc-code-bg: #1e1e1e;
+  --color-cc-code-fg: #d4d4d4;
+  --color-cc-hover: rgba(0,0,0,0.07);
+  --color-cc-active: rgba(0,0,0,0.12);
+  --color-cc-success: #2d7d46;
+  --color-cc-error: #c53030;
+  --color-cc-warning: #b7791f;
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes name-appear {
+  0% {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(-2px);
+  }
+  50% {
+    opacity: 0.8;
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+.animate-name-appear {
+  animation: name-appear 0.5s ease-out;
+}
+
+/* Dark mode overrides */
+.dark {
+  --color-cc-bg: #2b2a27;
+  --color-cc-fg: #eeeeee;
+  --color-cc-card: #1f1e1b;
+  --color-cc-primary: #ae5630;
+  --color-cc-primary-hover: #c4643a;
+  --color-cc-user-bubble: #393937;
+  --color-cc-border: rgba(255,255,255,0.08);
+  --color-cc-muted: #8a8780;
+  --color-cc-sidebar: #252422;
+  --color-cc-input-bg: #1f1e1b;
+  --color-cc-code-bg: #141413;
+  --color-cc-code-fg: #d4d4d4;
+  --color-cc-hover: rgba(255,255,255,0.04);
+  --color-cc-active: rgba(255,255,255,0.07);
+  --color-cc-success: #48bb78;
+  --color-cc-error: #fc8181;
+  --color-cc-warning: #f6e05e;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-cc-muted);
+  border-radius: 3px;
+  opacity: 0.4;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  opacity: 0.6;
+}
+
+/* Typography families */
+.font-serif-assistant {
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+}
+
+.font-sans-ui {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.font-mono-code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Eliminate 300ms tap delay on interactive elements */
+button,
+[role="button"],
+a,
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
+
+/* ─── DiffViewer ──────────────────────────────────────────────────────────── */
+.diff-viewer {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--color-cc-border);
+  background: var(--color-cc-code-bg);
+  color: var(--color-cc-code-fg);
+}
+.diff-compact {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.diff-full {
+  overflow-y: auto;
+}
+.diff-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--color-cc-card);
+}
+.diff-file + .diff-file {
+  border-top: 1px solid var(--color-cc-border);
+}
+.diff-file-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0,0,0,0.15);
+  font-size: 11px;
+  border-bottom: 1px solid var(--color-cc-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.dark .diff-file-header {
+  background: rgba(255,255,255,0.04);
+}
+.diff-hunk-header {
+  padding: 4px 12px;
+  color: var(--color-cc-primary);
+  font-size: 11px;
+  background: rgba(174, 86, 48, 0.06);
+}
+.diff-line {
+  display: flex;
+  min-height: 20px;
+}
+.diff-gutter {
+  flex-shrink: 0;
+  width: 44px;
+  text-align: right;
+  padding: 0 6px;
+  color: var(--color-cc-muted);
+  opacity: 0.5;
+  user-select: none;
+  font-size: 11px;
+}
+.diff-marker {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  user-select: none;
+}
+.diff-content {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding-right: 12px;
+}
+.diff-line-add {
+  background: rgba(45, 125, 70, 0.1);
+}
+.diff-line-add .diff-marker {
+  color: var(--color-cc-success);
+}
+.diff-line-del {
+  background: rgba(197, 48, 48, 0.1);
+}
+.diff-line-del .diff-marker {
+  color: var(--color-cc-error);
+}
+.dark .diff-line-add {
+  background: rgba(72, 187, 120, 0.08);
+}
+.dark .diff-line-del {
+  background: rgba(252, 129, 129, 0.08);
+}
+.diff-word-add {
+  background: rgba(45, 125, 70, 0.25);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.diff-word-del {
+  background: rgba(197, 48, 48, 0.25);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.dark .diff-word-add {
+  background: rgba(72, 187, 120, 0.2);
+}
+.dark .diff-word-del {
+  background: rgba(252, 129, 129, 0.2);
+}

@@ -1,0 +1,602 @@
+import { useState, useEffect, useCallback, useRef, useMemo, type MouseEvent } from "react";
+import { useStore } from "../store.js";
+import { api } from "../api.js";
+import { connectSession, connectAllSessions, disconnectSession } from "../ws.js";
+import { ProjectGroup } from "./ProjectGroup.js";
+import { SessionItem } from "./SessionItem.js";
+import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
+
+export function Sidebar() {
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+  const [showRecordings, setShowRecordings] = useState(false);
+  const [recordings, setRecordings] = useState<Array<{ filename: string; sessionId: string; backendType: string; startedAt: string; lines: number }>>([]);
+  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const [hash, setHash] = useState(() => (typeof window !== "undefined" ? window.location.hash : ""));
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const sessions = useStore((s) => s.sessions);
+  const sdkSessions = useStore((s) => s.sdkSessions);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const setCurrentSession = useStore((s) => s.setCurrentSession);
+  const cliConnected = useStore((s) => s.cliConnected);
+  const sessionStatus = useStore((s) => s.sessionStatus);
+  const removeSession = useStore((s) => s.removeSession);
+  const sessionNames = useStore((s) => s.sessionNames);
+  const recentlyRenamed = useStore((s) => s.recentlyRenamed);
+  const clearRecentlyRenamed = useStore((s) => s.clearRecentlyRenamed);
+  const pendingPermissions = useStore((s) => s.pendingPermissions);
+  const collapsedProjects = useStore((s) => s.collapsedProjects);
+  const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
+  const isSettingsPage = hash === "#/settings";
+  const isTerminalPage = hash === "#/terminal";
+  const isEnvironmentsPage = hash === "#/environments";
+  const isScheduledPage = hash === "#/scheduled";
+  const isGalleryPage = hash === "#/gallery";
+  const isWebhooksPage = hash === "#/webhooks";
+  const isAdaptersPage = hash === "#/adapters";
+  const isClawHubPage = hash === "#/clawhub";
+  const isAgentProfilesPage = hash === "#/agents";
+  const isPromptsPage = hash === "#/prompts";
+  const isIntegrationsPage = hash.startsWith("#/integrations");
+
+  // Poll for SDK sessions on mount
+  useEffect(() => {
+    let active = true;
+    async function poll() {
+      try {
+        const list = await api.listSessions();
+        if (active) {
+          useStore.getState().setSdkSessions(list);
+          // Connect all active sessions so we receive notifications for all of them
+          connectAllSessions(list);
+          // Hydrate session names from server (server is source of truth for auto-generated names)
+          const store = useStore.getState();
+          for (const s of list) {
+            if (s.name && (!store.sessionNames.has(s.sessionId) || /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(store.sessionNames.get(s.sessionId)!))) {
+              const currentStoreName = store.sessionNames.get(s.sessionId);
+              const hadRandomName = !!currentStoreName && /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(currentStoreName);
+              if (currentStoreName !== s.name) {
+                store.setSessionName(s.sessionId, s.name);
+                if (hadRandomName) {
+                  store.markRecentlyRenamed(s.sessionId);
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // server not ready
+      }
+    }
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Fetch recordings when section is expanded
+  useEffect(() => {
+    if (!showRecordings) return;
+    api.listRecordings().then((data) => {
+      setRecordings(data.recordings || []);
+    }).catch(() => {});
+  }, [showRecordings]);
+
+  function handleSelectSession(sessionId: string) {
+    useStore.getState().closeTerminal();
+    window.location.hash = "";
+    if (currentSessionId === sessionId) return;
+    setCurrentSession(sessionId);
+    // Ensure connected (idempotent — no-op if already connected)
+    connectSession(sessionId);
+    // Close sidebar on mobile
+    if (window.innerWidth < 768) {
+      useStore.getState().setSidebarOpen(false);
+    }
+  }
+
+  function handleNewSession() {
+    useStore.getState().closeTerminal();
+    window.location.hash = "";
+    useStore.getState().newSession();
+    if (window.innerWidth < 768) {
+      useStore.getState().setSidebarOpen(false);
+    }
+  }
+
+  // Focus edit input when entering edit mode
+  useEffect(() => {
+    if (editingSessionId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingSessionId]);
+
+  function confirmRename() {
+    if (editingSessionId && editingName.trim()) {
+      useStore.getState().setSessionName(editingSessionId, editingName.trim());
+      api.renameSession(editingSessionId, editingName.trim()).catch(() => {});
+    }
+    setEditingSessionId(null);
+    setEditingName("");
+  }
+
+  function cancelRename() {
+    setEditingSessionId(null);
+    setEditingName("");
+  }
+
+  function handleStartRename(id: string, currentName: string) {
+    setEditingSessionId(id);
+    setEditingName(currentName);
+  }
+
+  const handleDeleteSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    try {
+      disconnectSession(sessionId);
+      await api.deleteSession(sessionId);
+    } catch {
+      // best-effort
+    }
+    removeSession(sessionId);
+  }, [removeSession]);
+
+  const handleArchiveSession = useCallback((e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    // Check if session uses a worktree — if so, ask for confirmation
+    const sdkInfo = sdkSessions.find((s) => s.sessionId === sessionId);
+    const bridgeState = sessions.get(sessionId);
+    const isWorktree = bridgeState?.is_worktree || sdkInfo?.isWorktree || false;
+    if (isWorktree) {
+      setConfirmArchiveId(sessionId);
+      return;
+    }
+    doArchive(sessionId);
+  }, [sdkSessions, sessions]);
+
+  const doArchive = useCallback(async (sessionId: string, force?: boolean) => {
+    try {
+      disconnectSession(sessionId);
+      await api.archiveSession(sessionId, force ? { force: true } : undefined);
+    } catch {
+      // best-effort
+    }
+    if (useStore.getState().currentSessionId === sessionId) {
+      useStore.getState().newSession();
+    }
+    try {
+      const list = await api.listSessions();
+      useStore.getState().setSdkSessions(list);
+    } catch {
+      // best-effort
+    }
+  }, []);
+
+  const confirmArchive = useCallback(() => {
+    if (confirmArchiveId) {
+      doArchive(confirmArchiveId, true);
+      setConfirmArchiveId(null);
+    }
+  }, [confirmArchiveId, doArchive]);
+
+  const cancelArchive = useCallback(() => {
+    setConfirmArchiveId(null);
+  }, []);
+
+  const handleUnarchiveSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    try {
+      await api.unarchiveSession(sessionId);
+    } catch {
+      // best-effort
+    }
+    try {
+      const list = await api.listSessions();
+      useStore.getState().setSdkSessions(list);
+    } catch {
+      // best-effort
+    }
+  }, []);
+
+  // Combine sessions from WsBridge state + SDK sessions list
+  const allSessionIds = new Set<string>();
+  for (const id of sessions.keys()) allSessionIds.add(id);
+  for (const s of sdkSessions) allSessionIds.add(s.sessionId);
+
+  const allSessionList: SessionItemType[] = Array.from(allSessionIds).map((id) => {
+    const bridgeState = sessions.get(id);
+    const sdkInfo = sdkSessions.find((s) => s.sessionId === id);
+    return {
+      id,
+      model: bridgeState?.model || sdkInfo?.model || "",
+      cwd: bridgeState?.cwd || sdkInfo?.cwd || "",
+      gitBranch: bridgeState?.git_branch || sdkInfo?.gitBranch || "",
+      isWorktree: bridgeState?.is_worktree || sdkInfo?.isWorktree || false,
+      gitAhead: bridgeState?.git_ahead || sdkInfo?.gitAhead || 0,
+      gitBehind: bridgeState?.git_behind || sdkInfo?.gitBehind || 0,
+      linesAdded: bridgeState?.total_lines_added || sdkInfo?.totalLinesAdded || 0,
+      linesRemoved: bridgeState?.total_lines_removed || sdkInfo?.totalLinesRemoved || 0,
+      isConnected: cliConnected.get(id) ?? false,
+      status: sessionStatus.get(id) ?? null,
+      sdkState: sdkInfo?.state ?? null,
+      createdAt: sdkInfo?.createdAt ?? 0,
+      archived: sdkInfo?.archived ?? false,
+      backendType: bridgeState?.backend_type || sdkInfo?.backendType || "claude",
+      repoRoot: bridgeState?.repo_root || sdkInfo?.repoRoot || "",
+      permCount: pendingPermissions.get(id)?.size ?? 0,
+      cronJobId: bridgeState?.cronJobId || sdkInfo?.cronJobId,
+      cronJobName: bridgeState?.cronJobName || sdkInfo?.cronJobName,
+    };
+  }).sort((a, b) => b.createdAt - a.createdAt);
+
+  const activeSessions = allSessionList.filter((s) => !s.archived);
+  const archivedSessions = allSessionList.filter((s) => s.archived);
+  const currentSession = currentSessionId ? allSessionList.find((s) => s.id === currentSessionId) : null;
+  const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
+
+  // Group active sessions by project
+  const projectGroups = useMemo(
+    () => groupSessionsByProject(activeSessions),
+    [activeSessions],
+  );
+
+  // Shared props for SessionItem / ProjectGroup
+  const sessionItemProps = {
+    onSelect: handleSelectSession,
+    onStartRename: handleStartRename,
+    onArchive: handleArchiveSession,
+    onUnarchive: handleUnarchiveSession,
+    onDelete: handleDeleteSession,
+    onClearRecentlyRenamed: clearRecentlyRenamed,
+    editingSessionId,
+    editingName,
+    setEditingName,
+    onConfirmRename: confirmRename,
+    onCancelRename: cancelRename,
+    editInputRef,
+  };
+
+  return (
+    <aside className="w-[260px] h-full flex flex-col bg-cc-sidebar border-r border-cc-border">
+      {/* Header */}
+      <div className="p-4 pb-3">
+        <div className="flex items-center gap-2 mb-4">
+          <img src={logoSrc} alt="" className="w-7 h-7" />
+          <span className="text-sm font-semibold text-cc-fg tracking-tight">The Companion</span>
+        </div>
+
+        <button
+          onClick={handleNewSession}
+          className="w-full py-2 px-3 text-sm font-medium rounded-[10px] bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+            <path d="M8 3v10M3 8h10" />
+          </svg>
+          New Session
+        </button>
+      </div>
+
+      {/* Worktree archive confirmation */}
+      {confirmArchiveId && (
+        <div className="mx-2 mb-1 p-2.5 rounded-[10px] bg-amber-500/10 border border-amber-500/20">
+          <div className="flex items-start gap-2">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-amber-500 shrink-0 mt-0.5">
+              <path d="M8.982 1.566a1.13 1.13 0 00-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-cc-fg leading-snug">
+                Archiving will <strong>delete the worktree</strong> and any uncommitted changes.
+              </p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={cancelArchive}
+                  className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmArchive}
+                  className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors cursor-pointer"
+                >
+                  Archive
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Session list */}
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {activeSessions.length === 0 && archivedSessions.length === 0 ? (
+          <p className="px-3 py-8 text-xs text-cc-muted text-center leading-relaxed">
+            No sessions yet.
+          </p>
+        ) : (
+          <>
+            {projectGroups.map((group, i) => (
+              <ProjectGroup
+                key={group.key}
+                group={group}
+                isCollapsed={collapsedProjects.has(group.key)}
+                onToggleCollapse={toggleProjectCollapse}
+                currentSessionId={currentSessionId}
+                sessionNames={sessionNames}
+                pendingPermissions={pendingPermissions}
+                recentlyRenamed={recentlyRenamed}
+                isFirst={i === 0}
+                {...sessionItemProps}
+              />
+            ))}
+
+            {archivedSessions.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-cc-border">
+                <button
+                  onClick={() => setShowArchived(!showArchived)}
+                  className="w-full px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showArchived ? "rotate-90" : ""}`}>
+                    <path d="M6 4l4 4-4 4" />
+                  </svg>
+                  Archived ({archivedSessions.length})
+                </button>
+                {showArchived && (
+                  <div className="space-y-0.5 mt-1">
+                    {archivedSessions.map((s) => (
+                      <SessionItem
+                        key={s.id}
+                        session={s}
+                        isActive={currentSessionId === s.id}
+                        isArchived
+                        sessionName={sessionNames.get(s.id)}
+                        permCount={pendingPermissions.get(s.id)?.size ?? 0}
+                        isRecentlyRenamed={recentlyRenamed.has(s.id)}
+                        {...sessionItemProps}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Recordings section */}
+            <div className="mt-2 pt-2 border-t border-cc-border">
+              <button
+                onClick={() => setShowRecordings(!showRecordings)}
+                className="w-full px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showRecordings ? "rotate-90" : ""}`}>
+                  <path d="M6 4l4 4-4 4" />
+                </svg>
+                Recordings
+              </button>
+              {showRecordings && (
+                <div className="space-y-0.5 mt-1">
+                  {recordings.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-cc-muted">No recordings found.</p>
+                  ) : (
+                    recordings.map((rec) => (
+                      <button
+                        key={rec.filename}
+                        onClick={() => {
+                          window.location.hash = `#/replay/${rec.filename}`;
+                          if (window.innerWidth < 768) useStore.getState().setSidebarOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-left text-xs hover:bg-cc-hover transition-colors cursor-pointer"
+                      >
+                        <svg className="w-3.5 h-3.5 text-cc-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-cc-fg">{rec.sessionId.slice(0, 8)}</div>
+                          <div className="text-[10px] text-cc-muted flex items-center gap-1.5">
+                            <span className="px-1 py-0.5 rounded bg-cc-bg-hover">{rec.backendType}</span>
+                            <span>{rec.lines} lines</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="p-3 border-t border-cc-border space-y-0.5">
+        <button
+          onClick={() => {
+            window.location.hash = "#/terminal";
+            if (window.innerWidth < 768) {
+              useStore.getState().setSidebarOpen(false);
+            }
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isTerminalPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm2 1.5l3 2.5-3 2.5V4.5zM8.5 10h3v1h-3v-1z" />
+          </svg>
+          <span>Terminal</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/environments";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isEnvironmentsPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M8 1a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h2V3a2 2 0 012-2zm0 1.5a.5.5 0 00-.5.5v1h1V3a.5.5 0 00-.5-.5zM4 5.5a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V6a.5.5 0 00-.5-.5H4z" />
+          </svg>
+          <span>Environments</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/scheduled";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isScheduledPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 10-2 0v3a1 1 0 00.293.707l2 2a1 1 0 001.414-1.414L9 7.586V5z" />
+          </svg>
+          <span>Scheduled</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/gallery";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isGalleryPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v1H2V3zm0 2.5h12v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7zM4 7v3h3V7H4zm5 0v1h3V7H9zm3 2.5H9V11h3V9.5z" />
+          </svg>
+          <span>Gallery</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/agents";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isAgentProfilesPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3z" />
+          </svg>
+          <span>Agents</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/webhooks";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isWebhooksPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M5.5 1a.5.5 0 01.5.5v2a2.5 2.5 0 005 0v-2a.5.5 0 011 0v2a3.5 3.5 0 01-3 3.465V8.5h2a.5.5 0 010 1H9v2.035A3.5 3.5 0 0112 15a.5.5 0 010-1 2.5 2.5 0 01-2.5-2.5V9.5h-3v2A2.5 2.5 0 014 14a.5.5 0 010 1 3.5 3.5 0 003-3.465V9.5H5a.5.5 0 010-1h2V6.965A3.5 3.5 0 014 3.5v-2a.5.5 0 01.5-.5 .5.5 0 01.5.5v2a2.5 2.5 0 005 0v-2a.5.5 0 01.5-.5z" />
+          </svg>
+          <span>Webhooks</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/adapters";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isAdaptersPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M2 4a2 2 0 012-2h1.5a.5.5 0 010 1H4a1 1 0 00-1 1v2.5a.5.5 0 01-1 0V4zm0 8a2 2 0 002 2h1.5a.5.5 0 000-1H4a1 1 0 01-1-1V9.5a.5.5 0 00-1 0V12zm12-8a2 2 0 00-2-2h-1.5a.5.5 0 000 1H12a1 1 0 011 1v2.5a.5.5 0 001 0V4zm0 8a2 2 0 01-2 2h-1.5a.5.5 0 010-1H12a1 1 0 001-1V9.5a.5.5 0 011 0V12zM6 8a2 2 0 114 0 2 2 0 01-4 0z" />
+          </svg>
+          <span>Adapters</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/clawhub";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isClawHubPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M8 0a8 8 0 100 16A8 8 0 008 0zm3.5 4.5a1 1 0 11-2 0 1 1 0 012 0zM8 13a5 5 0 01-4.33-2.5.5.5 0 01.87-.5A4 4 0 008 12a4 4 0 003.46-2 .5.5 0 01.87.5A5 5 0 018 13zm-3.5-8.5a1 1 0 110 2 1 1 0 010-2z" />
+          </svg>
+          <span>ClawHub</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/prompts";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isPromptsPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+            <rect x="2" y="2" width="12" height="12" rx="2" />
+            <path d="M5 5h6M5 8h6M5 11h4" strokeLinecap="round" />
+          </svg>
+          <span>Prompts</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/integrations";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isIntegrationsPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M4.5 2a2.5 2.5 0 100 5 2.5 2.5 0 000-5zm0 1.5a1 1 0 110 2 1 1 0 010-2zM11.5 9a2.5 2.5 0 100 5 2.5 2.5 0 000-5zm0 1.5a1 1 0 110 2 1 1 0 010-2zM7.5 4.5a.5.5 0 01.5.5v2.5h1a.5.5 0 010 1H8V11a.5.5 0 01-1 0V8.5H5.5a.5.5 0 010-1H7V5a.5.5 0 01.5-.5z" />
+          </svg>
+          <span>Integrations</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/settings";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isSettingsPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.53 1.53 0 01-2.29.95c-1.35-.8-2.92.77-2.12 2.12.54.9.07 2.04-.95 2.29-1.56.38-1.56 2.6 0 2.98 1.02.25 1.49 1.39.95 2.29-.8 1.35.77 2.92 2.12 2.12.9-.54 2.04-.07 2.29.95.38 1.56 2.6 1.56 2.98 0 .25-1.02 1.39-1.49 2.29-.95 1.35.8 2.92-.77 2.12-2.12-.54-.9-.07-2.04.95-2.29 1.56-.38 1.56-2.6 0-2.98-1.02-.25-1.49-1.39-.95-2.29.8-1.35-.77-2.92-2.12-2.12-.9.54-2.04.07-2.29-.95zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+          </svg>
+          <span>Settings</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
