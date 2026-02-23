@@ -1143,6 +1143,118 @@ export function Playground() {
           </div>
         </Section>
 
+        {/* ─── Session Item Variants ──────────────────────────────── */}
+        <Section title="Session Items" description="Sidebar session items with status-first layout, model badges, and hover-revealed git stats">
+          <div className="max-w-xs space-y-1 bg-cc-bg p-2 rounded-lg border border-cc-border">
+            {/* Running session */}
+            <div className="relative group">
+              <div className="w-full pl-3.5 pr-8 py-2.5 sm:py-2 text-left rounded-lg bg-cc-active">
+                <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-cc-success animate-[pulse-dot_1.5s_ease-in-out_infinite] opacity-100" />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-medium truncate text-cc-fg leading-snug">Refactor auth module</span>
+                    <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-[#5BA8A0] bg-[#5BA8A0]/10">Sonnet</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10.5px] text-cc-muted leading-tight truncate">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 shrink-0 opacity-50"><path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" /></svg>
+                    <span className="truncate">feat/auth-jwt</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-cc-muted">
+                    <span className="flex items-center gap-0.5"><span className="text-green-500">2&#8593;</span></span>
+                    <span className="flex items-center gap-1 shrink-0"><span className="text-green-500">+48</span><span className="text-red-400">-12</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Idle session */}
+            <div className="relative group">
+              <div className="w-full pl-3.5 pr-8 py-2.5 sm:py-2 text-left rounded-lg hover:bg-cc-hover">
+                <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-cc-success/60 opacity-60" />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-medium truncate text-cc-fg leading-snug">Fix CI pipeline</span>
+                    <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-blue-400 bg-blue-500/10">Codex</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10.5px] text-cc-muted leading-tight truncate">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 shrink-0 opacity-50"><path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" /></svg>
+                    <span className="truncate">main</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Permission pending */}
+            <div className="relative group">
+              <div className="w-full pl-3.5 pr-8 py-2.5 sm:py-2 text-left rounded-lg hover:bg-cc-hover">
+                <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-cc-warning animate-[pulse-dot_1.5s_ease-in-out_infinite] opacity-100" />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-medium truncate text-cc-fg leading-snug">Update dependencies</span>
+                    <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-[#5BA8A0] bg-[#5BA8A0]/10">Opus</span>
+                  </div>
+                </div>
+              </div>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-cc-warning text-white text-[10px] font-bold leading-none px-1">2</span>
+            </div>
+            {/* Exited session */}
+            <div className="relative group">
+              <div className="w-full pl-3.5 pr-8 py-2.5 sm:py-2 text-left rounded-lg hover:bg-cc-hover">
+                <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-cc-muted/30 opacity-60" />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-medium truncate text-cc-fg leading-snug">Add dark mode toggle</span>
+                    <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-[#5BA8A0] bg-[#5BA8A0]/10">Haiku</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {/* ─── Session Launch Overlay ──────────────────────────────── */}
+        <Section title="Session Launch Overlay" description="Container session creation progress with step indicators and progress bar">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Card label="In progress — pulling image">
+              <div className="relative rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-700 dark:bg-neutral-900">
+                <h3 className="mb-4 text-lg font-semibold text-neutral-900 dark:text-neutral-100">Launching Container Session</h3>
+                <div className="mb-4 space-y-2">
+                  {["Checking image", "Pulling image", "Creating container", "Seeding authentication", "Launching agent"].map((step, i) => (
+                    <div key={step} className={`flex items-center gap-2 text-sm ${i < 1 ? "text-green-600 dark:text-green-400" : i === 1 ? "font-medium text-blue-600 dark:text-blue-400" : "text-neutral-400 dark:text-neutral-600"}`}>
+                      {i < 1 ? (
+                        <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      ) : i === 1 ? (
+                        <svg className="h-4 w-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      ) : (
+                        <div className="h-4 w-4 flex-shrink-0 rounded-full border border-neutral-300 dark:border-neutral-600" />
+                      )}
+                      <span>{step}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mb-3">
+                  <div className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+                    <div className="h-full rounded-full bg-blue-600 transition-all duration-300" style={{ width: "63%" }} />
+                  </div>
+                  <p className="mt-1 text-xs text-neutral-500">63%</p>
+                </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate">Downloading layer sha256:a1b2c3d4...</p>
+              </div>
+            </Card>
+            <Card label="Error state">
+              <div className="relative rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-700 dark:bg-neutral-900">
+                <div className="mb-4 flex items-center gap-2 text-red-600 dark:text-red-400">
+                  <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                  <h3 className="text-lg font-semibold">Container Launch Failed</h3>
+                </div>
+                <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">Failed to pull image companion-dev:latest — connection timed out</p>
+                <div className="flex gap-2">
+                  <button className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Retry</button>
+                  <button className="flex-1 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">Cancel</button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </Section>
+
         {/* ─── Composer ──────────────────────────────── */}
         <Section title="Composer" description="Message input bar with mode toggle, image upload, and send/stop buttons">
           <div className="max-w-3xl">

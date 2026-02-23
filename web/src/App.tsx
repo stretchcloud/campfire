@@ -10,7 +10,7 @@ import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
 import { DiffPanel } from "./components/DiffPanel.js";
 import { Playground } from "./components/Playground.js";
-import { UpdateBanner } from "./components/UpdateBanner.js";
+// UpdateBanner removed — not relevant for the Campfire fork
 import { SettingsPage } from "./components/SettingsPage.js";
 import { EnvManager } from "./components/EnvManager.js";
 import { CronManager } from "./components/CronManager.js";
@@ -101,16 +101,9 @@ export default function App() {
     }
   }, []);
 
-  // Poll for updates
+  // Update polling disabled for Campfire fork
   useEffect(() => {
-    const check = () => {
-      api.checkForUpdate().then((info) => {
-        useStore.getState().setUpdateInfo(info);
-      }).catch(() => {});
-    };
-    check();
-    const interval = setInterval(check, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => {};
   }, []);
 
   if (hash === "#/playground") {
@@ -142,7 +135,6 @@ export default function App() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar />
-        <UpdateBanner />
         <div className="flex-1 overflow-hidden relative">
           {isSettingsPage && (
             <div className="absolute inset-0">
