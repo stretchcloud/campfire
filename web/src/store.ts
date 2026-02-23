@@ -445,9 +445,28 @@ export const useStore = create<AppState>((set) => ({
   appendMessage: (sessionId, msg) =>
     set((s) => {
       const existing = s.messages.get(sessionId) || [];
-      // Deduplicate: skip if a message with same ID already exists
-      if (msg.id && existing.some((m) => m.id === msg.id)) {
-        return s;
+      // Claude Code sends the same message ID in multiple parts (thinking, text, tool_use).
+      // When a message with the same ID exists, merge content blocks instead of dropping.
+      const existingIdx = msg.id ? existing.findIndex((m) => m.id === msg.id) : -1;
+      if (existingIdx >= 0) {
+        const prev = existing[existingIdx];
+        const mergedBlocks = [
+          ...(prev.contentBlocks || []),
+          ...(msg.contentBlocks || []),
+        ];
+        const mergedText = [prev.content, msg.content].filter(Boolean).join("\n");
+        const updated = [...existing];
+        updated[existingIdx] = {
+          ...prev,
+          content: mergedText,
+          contentBlocks: mergedBlocks,
+          // Keep latest stop_reason and model
+          stopReason: msg.stopReason || prev.stopReason,
+          model: msg.model || prev.model,
+        };
+        const messages = new Map(s.messages);
+        messages.set(sessionId, updated);
+        return { messages };
       }
       const messages = new Map(s.messages);
       messages.set(sessionId, [...existing, msg]);
