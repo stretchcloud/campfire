@@ -95,10 +95,33 @@ export function TopBar() {
     if (!currentSessionId || shareCopied) return;
     try {
       const { url } = await api.createInviteLink(currentSessionId, role);
-      await navigator.clipboard.writeText(url);
-      setShareCopied(true);
-      setShareMenuOpen(false);
-      setTimeout(() => setShareCopied(false), 2000);
+      // Try clipboard API first, fall back to execCommand, then prompt
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      } catch {
+        // Clipboard API fails on non-HTTPS — try legacy fallback
+        try {
+          const textarea = document.createElement("textarea");
+          textarea.value = url;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          copied = document.execCommand("copy");
+          document.body.removeChild(textarea);
+        } catch { /* fallback also failed */ }
+      }
+      if (copied) {
+        setShareCopied(true);
+        setShareMenuOpen(false);
+        setTimeout(() => setShareCopied(false), 2000);
+      } else {
+        // Last resort: show the URL in a prompt so user can manually copy
+        setShareMenuOpen(false);
+        window.prompt("Copy this invite link:", url);
+      }
     } catch (err) {
       console.error("[TopBar] Failed to create invite link:", err);
     }
