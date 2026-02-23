@@ -25,6 +25,9 @@ import { PublicReplayPage } from "./components/PublicReplayPage.js";
 import { PromptsPage } from "./components/PromptsPage.js";
 import { IntegrationsPage } from "./components/IntegrationsPage.js";
 import { LinearSettingsPage } from "./components/LinearSettingsPage.js";
+import { MemoryPanel } from "./components/MemoryPanel.js";
+import { TaskRouterPage } from "./components/TaskRouterPage.js";
+import { CollectiveMindPanel } from "./components/CollectiveMindPanel.js";
 
 function useHash() {
   return useSyncExternalStore(
@@ -53,6 +56,9 @@ export default function App() {
   const isPromptsPage = hash === "#/prompts";
   const isIntegrationsPage = hash === "#/integrations";
   const isLinearSettingsPage = hash === "#/integrations/linear";
+  const isMemoryPage = hash === "#/memory";
+  const isRouterPage = hash === "#/router";
+  const isCollectiveMindPage = hash === "#/collective";
   // Replay routes: #/replay/:filename or #/replay/session/:id
   const replayFileMatch = hash.match(/^#\/replay\/(?!session\/)(.+)$/);
   const replaySessionMatch = hash.match(/^#\/replay\/session\/(.+)$/);
@@ -61,7 +67,7 @@ export default function App() {
   const publicReplayMatch = hash.match(/^#\/public-replay\/(.+)$/);
   const isPublicReplayPage = !!publicReplayMatch;
 
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isReplayPage && !isPublicReplayPage;
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isReplayPage && !isPublicReplayPage;
 
   useEffect(() => {
     capturePageView(hash || "#/");
@@ -207,6 +213,24 @@ export default function App() {
           {isLinearSettingsPage && (
             <div className="absolute inset-0">
               <LinearSettingsPage embedded />
+            </div>
+          )}
+
+          {isMemoryPage && (
+            <div className="absolute inset-0">
+              <MemoryPanel />
+            </div>
+          )}
+
+          {isRouterPage && (
+            <div className="absolute inset-0">
+              <TaskRouterPage />
+            </div>
+          )}
+
+          {isCollectiveMindPage && (
+            <div className="absolute inset-0">
+              <CollectiveMindPanel />
             </div>
           )}
 
