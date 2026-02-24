@@ -32,9 +32,11 @@ pub async fn run_ws_task(
     app_tx: mpsc::Sender<WsEvent>,
     mut out_rx: mpsc::Receiver<String>,
 ) {
+    eprintln!("[ws] Connecting to {ws_url}");
     let conn = match connect_async(&ws_url).await {
         Ok((stream, _)) => stream,
         Err(e) => {
+            eprintln!("[ws] Connect failed: {e}");
             let _ = app_tx
                 .send(WsEvent::Disconnected(format!("connect failed: {e}")))
                 .await;
@@ -42,16 +44,18 @@ pub async fn run_ws_task(
         }
     };
 
+    eprintln!("[ws] Connected!");
     let _ = app_tx.send(WsEvent::Connected).await;
 
     let (mut write, mut read) = conn.split();
 
     // Send session_subscribe immediately
     let subscribe = OutgoingMessage::SessionSubscribe {
-        session_id: session_id.clone(),
+        last_seq: 0,
         client_msg_id: Uuid::new_v4().to_string(),
     };
     if let Ok(json) = serde_json::to_string(&subscribe) {
+        eprintln!("[ws] Sending subscribe: {json}");
         let _ = write.send(Message::text(json)).await;
     }
 
@@ -61,18 +65,23 @@ pub async fn run_ws_task(
             frame = read.next() => {
                 match frame {
                     Some(Ok(Message::Text(text))) => {
-                        let event = decode(text.as_str());
+                        let raw = text.to_string();
+                        let preview: String = raw.chars().take(200).collect();
+                        eprintln!("[ws] ← {preview}");
+                        let event = decode(&raw);
                         if app_tx.send(WsEvent::Incoming(event)).await.is_err() {
                             break; // app dropped receiver
                         }
                     }
                     Some(Ok(Message::Close(_))) | None => {
+                        eprintln!("[ws] Connection closed");
                         let _ = app_tx
                             .send(WsEvent::Disconnected("connection closed".to_string()))
                             .await;
                         break;
                     }
                     Some(Err(e)) => {
+                        eprintln!("[ws] Error: {e}");
                         let _ = app_tx
                             .send(WsEvent::Disconnected(format!("ws error: {e}")))
                             .await;
@@ -84,6 +93,7 @@ pub async fn run_ws_task(
 
             // Outgoing message from app
             Some(msg) = out_rx.recv() => {
+                eprintln!("[ws] → {msg}");
                 if write.send(Message::text(msg)).await.is_err() {
                     break;
                 }

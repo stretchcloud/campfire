@@ -302,6 +302,37 @@ class JsonRpcTransport {
 
 // ─── Codex Adapter ────────────────────────────────────────────────────────────
 
+// ─── Codex Model Pricing (USD per token) ─────────────────────────────────────
+// Source: https://openai.com/api/pricing/
+// Prices are per-token (not per million). Cached input uses reduced rates.
+const CODEX_MODEL_PRICING: Record<string, { input: number; cachedInput: number; output: number }> = {
+  "o3":                   { input: 2.00 / 1e6, cachedInput: 0.50 / 1e6, output: 8.00 / 1e6 },
+  "o3-pro":               { input: 20.00 / 1e6, cachedInput: 20.00 / 1e6, output: 80.00 / 1e6 },
+  "o4-mini":              { input: 1.10 / 1e6, cachedInput: 0.275 / 1e6, output: 4.40 / 1e6 },
+  "gpt-5":                { input: 1.25 / 1e6, cachedInput: 0.125 / 1e6, output: 10.00 / 1e6 },
+  "gpt-5-codex":          { input: 1.25 / 1e6, cachedInput: 0.125 / 1e6, output: 10.00 / 1e6 },
+  "gpt-5.2-codex":        { input: 1.25 / 1e6, cachedInput: 0.125 / 1e6, output: 10.00 / 1e6 },
+  "gpt-5-mini":           { input: 0.30 / 1e6, cachedInput: 0.03 / 1e6, output: 1.25 / 1e6 },
+  "gpt-4.1":              { input: 2.00 / 1e6, cachedInput: 0.50 / 1e6, output: 8.00 / 1e6 },
+  "gpt-4.1-mini":         { input: 0.40 / 1e6, cachedInput: 0.10 / 1e6, output: 1.60 / 1e6 },
+  "gpt-4.1-nano":         { input: 0.10 / 1e6, cachedInput: 0.025 / 1e6, output: 0.40 / 1e6 },
+  "gpt-4o":               { input: 2.50 / 1e6, cachedInput: 1.25 / 1e6, output: 10.00 / 1e6 },
+  "gpt-4o-mini":          { input: 0.15 / 1e6, cachedInput: 0.075 / 1e6, output: 0.60 / 1e6 },
+};
+
+/** Look up pricing for a model, falling back to prefix matching then a default. */
+function getCodexPricing(model: string): { input: number; cachedInput: number; output: number } {
+  const lower = model.toLowerCase();
+  // Exact match
+  if (CODEX_MODEL_PRICING[lower]) return CODEX_MODEL_PRICING[lower];
+  // Prefix match (handles dated versions like "gpt-5-codex-2025-09-23")
+  for (const [key, pricing] of Object.entries(CODEX_MODEL_PRICING)) {
+    if (lower.startsWith(key)) return pricing;
+  }
+  // Default: gpt-5-codex pricing as a reasonable fallback
+  return CODEX_MODEL_PRICING["gpt-5-codex"];
+}
+
 export class CodexAdapter implements AgentAdapter {
   private transport: JsonRpcTransport;
   private proc: Subprocess;
@@ -350,6 +381,11 @@ export class CodexAdapter implements AgentAdapter {
     toolName: string;
     timeout: ReturnType<typeof setTimeout>;
   }>(); // request_id -> pending dynamic tool call metadata
+
+  // Cumulative cost tracking (calculated from token usage + model pricing)
+  private cumulativeCostUsd = 0;
+  private cumulativeTurns = 0;
+  private lastTotalTokens: { input: number; output: number } = { input: 0, output: 0 };
 
   // Codex account rate limits (fetched after init, updated via notification)
   private _rateLimits: {
@@ -1532,6 +1568,7 @@ export class CodexAdapter implements AgentAdapter {
 
   private handleTurnCompleted(params: Record<string, unknown>): void {
     const turn = params.turn as { id: string; status: string; error?: { message: string } } | undefined;
+    this.cumulativeTurns++;
 
     // Synthesize a CLIResultMessage-like structure
     const result: CLIResultMessage = {
@@ -1541,10 +1578,15 @@ export class CodexAdapter implements AgentAdapter {
       result: turn?.error?.message,
       duration_ms: 0,
       duration_api_ms: 0,
-      num_turns: 1,
-      total_cost_usd: 0,
+      num_turns: this.cumulativeTurns,
+      total_cost_usd: this.cumulativeCostUsd,
       stop_reason: turn?.status || "end_turn",
-      usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      usage: {
+        input_tokens: this.lastTotalTokens.input,
+        output_tokens: this.lastTotalTokens.output,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
       uuid: randomUUID(),
       session_id: this.sessionId,
     };
@@ -1605,6 +1647,30 @@ export class CodexAdapter implements AgentAdapter {
         reasoningOutputTokens: total.reasoningOutputTokens || 0,
         modelContextWindow: contextWindow || 0,
       };
+
+      // Calculate cost from cumulative token delta
+      const pricing = getCodexPricing(this.options.model || "");
+      const totalInput = total.inputTokens || 0;
+      const totalOutput = total.outputTokens || 0;
+      const totalCached = total.cachedInputTokens || 0;
+
+      // Compute delta tokens since last update (Codex sends cumulative totals)
+      const deltaInput = Math.max(0, totalInput - this.lastTotalTokens.input);
+      const deltaOutput = Math.max(0, totalOutput - this.lastTotalTokens.output);
+      this.lastTotalTokens = { input: totalInput, output: totalOutput };
+
+      // For the delta: split input into cached vs non-cached proportionally
+      const cachedRatio = totalInput > 0 ? totalCached / totalInput : 0;
+      const deltaCachedInput = Math.round(deltaInput * cachedRatio);
+      const deltaFreshInput = deltaInput - deltaCachedInput;
+
+      const deltaCost =
+        deltaFreshInput * pricing.input +
+        deltaCachedInput * pricing.cachedInput +
+        deltaOutput * pricing.output;
+
+      this.cumulativeCostUsd += deltaCost;
+      updates.total_cost_usd = this.cumulativeCostUsd;
     }
 
     if (Object.keys(updates).length > 0) {

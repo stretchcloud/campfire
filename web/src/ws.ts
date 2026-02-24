@@ -1,5 +1,5 @@
 import { useStore } from "./store.js";
-import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig } from "./types.js";
+import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig, SessionState } from "./types.js";
 import { generateUniqueSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 
@@ -361,7 +361,7 @@ function handleParsedMessage(
 
     case "result": {
       const r = data.data;
-      const sessionUpdates: Partial<{ total_cost_usd: number; num_turns: number; context_used_percent: number; total_lines_added: number; total_lines_removed: number }> = {
+      const sessionUpdates: Partial<SessionState> = {
         total_cost_usd: r.total_cost_usd,
         num_turns: r.num_turns,
       };
@@ -372,16 +372,32 @@ function handleParsedMessage(
       if (typeof r.total_lines_removed === "number") {
         sessionUpdates.total_lines_removed = r.total_lines_removed;
       }
-      // Compute context % from modelUsage if available
+      // Compute context % and extract Claude token details from modelUsage
       if (r.modelUsage) {
+        let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreation = 0;
+        let contextWindow = 0, totalCostUsd = 0;
         for (const usage of Object.values(r.modelUsage)) {
+          totalInput += usage.inputTokens;
+          totalOutput += usage.outputTokens;
+          totalCacheRead += usage.cacheReadInputTokens;
+          totalCacheCreation += usage.cacheCreationInputTokens;
+          totalCostUsd += usage.costUSD ?? 0;
           if (usage.contextWindow > 0) {
+            contextWindow = usage.contextWindow;
             const pct = Math.round(
               ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
             );
             sessionUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
           }
         }
+        sessionUpdates.claude_token_details = {
+          inputTokens: totalInput,
+          outputTokens: totalOutput,
+          cacheReadInputTokens: totalCacheRead,
+          cacheCreationInputTokens: totalCacheCreation,
+          contextWindow,
+          costUsd: totalCostUsd,
+        };
       }
       store.updateSession(sessionId, sessionUpdates);
       store.setStreaming(sessionId, null);

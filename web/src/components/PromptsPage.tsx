@@ -128,13 +128,13 @@ export function PromptsPage({ embedded }: { embedded?: boolean }) {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-semibold text-cc-fg">Prompt Library</h2>
-            <p className="text-sm text-cc-fg-muted mt-0.5">
+            <p className="text-sm text-cc-muted mt-0.5">
               Save reusable prompts and insert them with @ in the composer.
             </p>
           </div>
           <button
             onClick={startCreate}
-            className="px-3 py-1.5 rounded-md bg-cc-accent text-white text-sm font-medium hover:bg-cc-accent/90 transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-cc-primary text-white text-sm font-medium hover:bg-cc-primary-hover transition-colors cursor-pointer"
           >
             + New Prompt
           </button>
@@ -146,45 +146,45 @@ export function PromptsPage({ embedded }: { embedded?: boolean }) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search prompts…"
-            className="w-full px-3 py-2 rounded-md border border-cc-border bg-cc-input text-cc-fg text-sm focus:outline-none focus:ring-1 focus:ring-cc-accent"
+            placeholder="Search prompts..."
+            className="w-full px-3 py-2 rounded-lg border border-cc-border bg-cc-input-bg text-cc-fg text-sm focus:outline-none focus:border-cc-primary/50"
           />
         </div>
 
         {/* Inline form */}
         {showForm && (
-          <div className="mb-6 p-4 rounded-lg border border-cc-border bg-cc-bg-subtle">
+          <div className="mb-6 p-4 rounded-lg border border-cc-border bg-cc-card">
             <h3 className="text-sm font-medium text-cc-fg mb-3">
               {editingId ? "Edit Prompt" : "New Prompt"}
             </h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-cc-fg-muted mb-1">Name</label>
+                <label className="block text-xs text-cc-muted mb-1">Name</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder="e.g. Code review checklist"
-                  className="w-full px-3 py-1.5 rounded-md border border-cc-border bg-cc-input text-cc-fg text-sm focus:outline-none focus:ring-1 focus:ring-cc-accent"
+                  className="w-full px-3 py-1.5 rounded-lg border border-cc-border bg-cc-input-bg text-cc-fg text-sm focus:outline-none focus:border-cc-primary/50"
                 />
               </div>
               <div>
-                <label className="block text-xs text-cc-fg-muted mb-1">Content</label>
+                <label className="block text-xs text-cc-muted mb-1">Content</label>
                 <textarea
                   value={form.content}
                   onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-                  placeholder="The prompt text…"
+                  placeholder="The prompt text..."
                   rows={5}
-                  className="w-full px-3 py-1.5 rounded-md border border-cc-border bg-cc-input text-cc-fg text-sm font-mono resize-y focus:outline-none focus:ring-1 focus:ring-cc-accent"
+                  className="w-full px-3 py-1.5 rounded-lg border border-cc-border bg-cc-input-bg text-cc-fg text-sm font-mono-code resize-y focus:outline-none focus:border-cc-primary/50"
                 />
               </div>
               <div className="flex gap-4">
                 <div>
-                  <label className="block text-xs text-cc-fg-muted mb-1">Scope</label>
+                  <label className="block text-xs text-cc-muted mb-1">Scope</label>
                   <select
                     value={form.scope}
                     onChange={(e) => setForm((f) => ({ ...f, scope: e.target.value as "global" | "project" }))}
-                    className="px-2 py-1.5 rounded-md border border-cc-border bg-cc-input text-cc-fg text-sm focus:outline-none"
+                    className="px-2 py-1.5 rounded-lg border border-cc-border bg-cc-input-bg text-cc-fg text-sm focus:outline-none focus:border-cc-primary/50"
                   >
                     <option value="global">Global</option>
                     <option value="project">Project</option>
@@ -192,33 +192,37 @@ export function PromptsPage({ embedded }: { embedded?: boolean }) {
                 </div>
                 {form.scope === "project" && (
                   <div className="flex-1">
-                    <label className="block text-xs text-cc-fg-muted mb-1">Project path</label>
+                    <label className="block text-xs text-cc-muted mb-1">Project path</label>
                     <input
                       type="text"
                       value={form.projectPath}
                       onChange={(e) => setForm((f) => ({ ...f, projectPath: e.target.value }))}
                       placeholder="/home/user/my-project"
-                      className="w-full px-3 py-1.5 rounded-md border border-cc-border bg-cc-input text-cc-fg text-sm font-mono focus:outline-none focus:ring-1 focus:ring-cc-accent"
+                      className="w-full px-3 py-1.5 rounded-lg border border-cc-border bg-cc-input-bg text-cc-fg text-sm font-mono-code focus:outline-none focus:border-cc-primary/50"
                     />
                   </div>
                 )}
               </div>
               {formError && (
-                <p className="text-xs text-red-400">{formError}</p>
+                <p className="text-xs text-cc-error">{formError}</p>
               )}
               <div className="flex gap-2 justify-end">
                 <button
                   onClick={cancelForm}
-                  className="px-3 py-1.5 rounded-md border border-cc-border text-cc-fg-muted text-sm hover:text-cc-fg transition-colors"
+                  className="px-3 py-1.5 rounded-lg border border-cc-border text-cc-muted text-sm hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="px-3 py-1.5 rounded-md bg-cc-accent text-white text-sm hover:bg-cc-accent/90 disabled:opacity-50 transition-colors"
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                    saving
+                      ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                      : "bg-cc-primary text-white hover:bg-cc-primary-hover"
+                  }`}
                 >
-                  {saving ? "Saving…" : "Save"}
+                  {saving ? "Saving..." : "Save"}
                 </button>
               </div>
             </div>
@@ -227,11 +231,11 @@ export function PromptsPage({ embedded }: { embedded?: boolean }) {
 
         {/* List */}
         {loading ? (
-          <div className="text-sm text-cc-fg-muted">Loading…</div>
+          <div className="text-sm text-cc-muted">Loading...</div>
         ) : error ? (
-          <div className="text-sm text-red-400">{error}</div>
+          <div className="text-sm text-cc-error">{error}</div>
         ) : filteredPrompts.length === 0 ? (
-          <div className="text-center py-12 text-cc-fg-muted">
+          <div className="text-center py-12 text-cc-muted">
             {search ? (
               <p className="text-sm">No prompts match "{search}"</p>
             ) : (
@@ -239,7 +243,7 @@ export function PromptsPage({ embedded }: { embedded?: boolean }) {
                 <p className="text-sm mb-2">No prompts yet.</p>
                 <button
                   onClick={startCreate}
-                  className="text-sm text-cc-accent hover:text-cc-accent/80 transition-colors"
+                  className="text-sm text-cc-primary hover:text-cc-primary-hover transition-colors cursor-pointer"
                 >
                   Create your first prompt
                 </button>
@@ -251,33 +255,33 @@ export function PromptsPage({ embedded }: { embedded?: boolean }) {
             {filteredPrompts.map((prompt) => (
               <div
                 key={prompt.id}
-                className="p-4 rounded-lg border border-cc-border bg-cc-bg-subtle group"
+                className="p-4 rounded-lg border border-cc-border bg-cc-card group"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-cc-fg">{prompt.name}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-cc-fg-muted/10 text-cc-fg-muted border border-cc-border capitalize">
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-cc-hover text-cc-muted border border-cc-border capitalize">
                         {prompt.scope}
                       </span>
                     </div>
                     {prompt.scope === "project" && prompt.projectPath && (
-                      <p className="text-xs text-cc-fg-muted font-mono mt-0.5">{prompt.projectPath}</p>
+                      <p className="text-xs text-cc-muted font-mono-code mt-0.5">{prompt.projectPath}</p>
                     )}
-                    <p className="text-xs text-cc-fg-muted mt-1 line-clamp-2 whitespace-pre-line">
+                    <p className="text-xs text-cc-muted mt-1 line-clamp-2 whitespace-pre-line">
                       {prompt.content}
                     </p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
                       onClick={() => startEdit(prompt)}
-                      className="px-2 py-1 rounded text-xs text-cc-fg-muted hover:text-cc-fg transition-colors"
+                      className="px-2 py-1 rounded text-xs text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDelete(prompt.id)}
-                      className="px-2 py-1 rounded text-xs text-red-400 hover:text-red-300 transition-colors"
+                      className="px-2 py-1 rounded text-xs text-cc-error hover:text-cc-error/80 transition-colors cursor-pointer"
                     >
                       Delete
                     </button>

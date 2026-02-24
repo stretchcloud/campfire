@@ -9,8 +9,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OutgoingMessage {
     SessionSubscribe {
-        #[serde(rename = "sessionId")]
-        session_id: String,
+        last_seq: i64,
         client_msg_id: String,
     },
     UserMessage {
@@ -19,10 +18,12 @@ pub enum OutgoingMessage {
     },
     PermissionResponse {
         request_id: String,
-        behavior: String,          // "allow_once" | "reject_once" | "allow_always"
-        tool_name: Option<String>,
+        behavior: String,          // "allow" | "deny"
+        client_msg_id: String,
     },
-    Interrupt {},
+    Interrupt {
+        client_msg_id: String,
+    },
 }
 
 // ─── Incoming (server → TUI) ─────────────────────────────────────────────────
@@ -39,6 +40,7 @@ pub struct RawIncoming {
 /// A session returned by GET /api/sessions
 #[derive(Debug, Clone, Deserialize)]
 pub struct SessionInfo {
+    #[serde(alias = "sessionId", alias = "id")]
     pub id: String,
     pub name: Option<String>,
     pub state: Option<String>,    // "connected" | "disconnected" | "pending" | etc.
@@ -47,6 +49,8 @@ pub struct SessionInfo {
     pub model: Option<String>,
     #[serde(rename = "contextUsedPercent")]
     pub context_used_percent: Option<f64>,
+    pub cwd: Option<String>,
+    pub archived: Option<bool>,
 }
 
 impl SessionInfo {
@@ -262,16 +266,47 @@ pub fn decode(raw: &str) -> IncomingEvent {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn decode_history_msg(v: &serde_json::Value) -> Option<ChatMessage> {
+    // History messages use "type" (e.g. "user_message", "assistant", "result")
+    // rather than "role". Try both.
+    let msg_type = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
     let role_str = v.get("role").and_then(|r| r.as_str()).unwrap_or("");
-    let content = extract_text_from_message(v);
+
+    let role = match msg_type {
+        "user_message" => MessageRole::User,
+        "assistant" => MessageRole::Assistant,
+        "result" => {
+            let is_error = v.get("data")
+                .and_then(|d| d.get("is_error"))
+                .and_then(|b| b.as_bool())
+                .unwrap_or(false);
+            if is_error { MessageRole::Error } else { return None; }
+        }
+        _ => match role_str {
+            "assistant" => MessageRole::Assistant,
+            "user" => MessageRole::User,
+            _ => return None,
+        },
+    };
+
+    // For "assistant" type, content is under message.content (array of blocks)
+    // For "user_message", content is a top-level string field
+    let content = if msg_type == "assistant" {
+        extract_text_from_message(v)
+    } else if msg_type == "user_message" {
+        v.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string()
+    } else if msg_type == "result" {
+        v.get("data")
+            .and_then(|d| d.get("errors"))
+            .and_then(|e| e.as_array())
+            .map(|arr| arr.iter().filter_map(|e| e.as_str()).collect::<Vec<_>>().join(", "))
+            .unwrap_or_else(|| "Error".to_string())
+    } else {
+        extract_text_from_message(v)
+    };
+
     if content.is_empty() {
         return None;
     }
-    let role = match role_str {
-        "assistant" => MessageRole::Assistant,
-        "user" => MessageRole::User,
-        _ => return None,
-    };
     Some(ChatMessage { role, content })
 }
 
