@@ -11,7 +11,7 @@ import { api } from "../api.js";
 import type { PermissionRequest, ChatMessage, ContentBlock, SessionState, McpServerDetail, PresenceViewer, PermissionVote } from "../types.js";
 import type { TaskItem } from "../types.js";
 import type { UpdateInfo, GitHubPRInfo } from "../api.js";
-import { GitHubPRDisplay, CodexRateLimitsSection, CodexTokenDetailsSection } from "./TaskPanel.js";
+import { GitHubPRDisplay, CodexRateLimitsSection, CodexTokenDetailsSection, ClaudeTokenDetailsSection } from "./TaskPanel.js";
 import { CostCard } from "./CostCard.js";
 import { GalleryCard } from "./GalleryCard.js";
 import type { GalleryEntryInfo } from "../api.js";
@@ -1069,6 +1069,15 @@ export function Playground() {
           </div>
         </Section>
 
+        {/* ─── Claude Token Details ───────────────────────── */}
+        <Section title="Claude Session Details" description="Token usage and cost for Claude Code sessions — updated at turn end from modelUsage">
+          <div className="space-y-4">
+            <Card label="Token breakdown with cost">
+              <ClaudePlaygroundDemo />
+            </Card>
+          </div>
+        </Section>
+
         {/* ─── Update Banner ──────────────────────────────── */}
         <Section title="Update Banner" description="Notification banner for available updates">
           <div className="space-y-4 max-w-3xl">
@@ -1802,6 +1811,66 @@ function CodexPlaygroundDemo() {
     <div className="w-[280px] border border-cc-border rounded-xl overflow-hidden bg-cc-card">
       <CodexRateLimitsSection sessionId={CODEX_DEMO_SESSION} />
       <CodexTokenDetailsSection sessionId={CODEX_DEMO_SESSION} />
+    </div>
+  );
+}
+
+// ─── Claude Session Demo (injects mock Claude data into a temp session) ──────
+
+const CLAUDE_DEMO_SESSION = "claude-playground-demo";
+
+function ClaudePlaygroundDemo() {
+  useEffect(() => {
+    const store = useStore.getState();
+    const prev = store.sessions.get(CLAUDE_DEMO_SESSION);
+
+    // Create a fake Claude session with token details and cost
+    store.addSession({
+      session_id: CLAUDE_DEMO_SESSION,
+      backend_type: "claude",
+      model: "claude-sonnet-4-20250514",
+      cwd: "/Users/demo/project",
+      tools: [],
+      permissionMode: "default",
+      claude_code_version: "1.0.0",
+      mcp_servers: [],
+      agents: [],
+      slash_commands: [],
+      skills: [],
+      total_cost_usd: 0.87,
+      num_turns: 5,
+      context_used_percent: 38,
+      is_compacting: false,
+      git_branch: "feat/auth",
+      is_worktree: false,
+      repo_root: "/Users/demo/project",
+      git_ahead: 2,
+      git_behind: 0,
+      total_lines_added: 142,
+      total_lines_removed: 23,
+      claude_token_details: {
+        inputTokens: 125_400,
+        outputTokens: 18_200,
+        cacheReadInputTokens: 98_300,
+        cacheCreationInputTokens: 12_600,
+        contextWindow: 200_000,
+        costUsd: 0.87,
+      },
+    });
+
+    return () => {
+      useStore.setState((s) => {
+        const sessions = new Map(s.sessions);
+        if (prev) sessions.set(CLAUDE_DEMO_SESSION, prev);
+        else sessions.delete(CLAUDE_DEMO_SESSION);
+        return { sessions };
+      });
+    };
+  }, []);
+
+  return (
+    <div className="w-[280px] border border-cc-border rounded-xl overflow-hidden bg-cc-card">
+      <ClaudeTokenDetailsSection sessionId={CLAUDE_DEMO_SESSION} />
     </div>
   );
 }

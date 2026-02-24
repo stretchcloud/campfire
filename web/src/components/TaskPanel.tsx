@@ -301,6 +301,69 @@ function CodexTokenDetailsSection({ sessionId }: { sessionId: string }) {
   );
 }
 
+// ─── Claude Token Details ────────────────────────────────────────────────────
+
+function formatCostUsd(usd: number): string {
+  if (usd === 0) return "$0";
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+function ClaudeTokenDetailsSection({ sessionId }: { sessionId: string }) {
+  const details = useStore((s) => s.sessions.get(sessionId)?.claude_token_details);
+  const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
+
+  if (!details) return null;
+
+  return (
+    <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2">
+      <span className="text-[11px] text-cc-muted uppercase tracking-wider">Tokens</span>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-cc-muted">Input</span>
+          <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.inputTokens)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-cc-muted">Output</span>
+          <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.outputTokens)}</span>
+        </div>
+        {details.cacheReadInputTokens > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-cc-muted">Cache Read</span>
+            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.cacheReadInputTokens)}</span>
+          </div>
+        )}
+        {details.cacheCreationInputTokens > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-cc-muted">Cache Write</span>
+            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.cacheCreationInputTokens)}</span>
+          </div>
+        )}
+        {details.costUsd > 0 && (
+          <div className="flex items-center justify-between col-span-2 pt-1 border-t border-cc-border/50">
+            <span className="text-[11px] text-cc-muted">Cost</span>
+            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatCostUsd(details.costUsd)}</span>
+          </div>
+        )}
+      </div>
+      {details.contextWindow > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-cc-muted">Context</span>
+            <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
+              style={{ width: `${Math.min(contextPct, 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Session Stats ───────────────────────────────────────────────────────────
 
 function SessionStatsSection({ sessionId }: { sessionId: string }) {
@@ -533,7 +596,7 @@ function CostCardSection({ sessionId }: { sessionId: string }) {
 
 // ─── Task Panel ──────────────────────────────────────────────────────────────
 
-export { CodexRateLimitsSection, CodexTokenDetailsSection };
+export { CodexRateLimitsSection, CodexTokenDetailsSection, ClaudeTokenDetailsSection };
 
 export function TaskPanel({ sessionId }: { sessionId: string }) {
   const tasks = useStore((s) => s.sessionTasks.get(sessionId) || EMPTY_TASKS);
@@ -572,14 +635,17 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
       </div>
 
       <div data-testid="task-panel-content" className="min-h-0 flex-1 overflow-y-auto">
-        {/* Usage limits — Claude Code uses REST-polled limits, Codex uses streamed rate limits */}
+        {/* Usage limits & token details — varies by backend */}
         {isCodex ? (
           <>
             <CodexRateLimitsSection sessionId={sessionId} />
             <CodexTokenDetailsSection sessionId={sessionId} />
           </>
         ) : (
-          <UsageLimitsSection sessionId={sessionId} />
+          <>
+            <UsageLimitsSection sessionId={sessionId} />
+            <ClaudeTokenDetailsSection sessionId={sessionId} />
+          </>
         )}
 
         {/* Session stats */}

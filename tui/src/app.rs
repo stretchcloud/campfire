@@ -6,9 +6,8 @@ use crate::{
     ui,
     ws::{run_ws_task, WsEvent},
 };
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyModifiers, MouseEventKind};
 use ratatui::{backend::CrosstermBackend, Terminal};
-use serde_json;
 use std::io::Stdout;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -181,13 +180,13 @@ impl App {
 
     // ─── Permission handling ──────────────────────────────────────────────────
 
-    pub fn approve_permission(&mut self, behavior: &str) {
+    pub fn approve_permission(&mut self, allow: bool) {
         if let Some(perm) = self.pending_permission.take() {
             if let Some(tx) = &self.ws_tx {
                 let msg = OutgoingMessage::PermissionResponse {
                     request_id: perm.request_id,
-                    behavior: behavior.to_string(),
-                    tool_name: Some(perm.tool_name),
+                    behavior: if allow { "allow".to_string() } else { "deny".to_string() },
+                    client_msg_id: Uuid::new_v4().to_string(),
                 };
                 if let Ok(json) = serde_json::to_string(&msg) {
                     let _ = tx.try_send(json);
@@ -392,6 +391,37 @@ async fn handle_key_event(
     event: AppEvent,
     ws_event_tx: &mpsc::Sender<WsEvent>,
 ) -> anyhow::Result<()> {
+    // Handle mouse events
+    if let AppEvent::Mouse(mouse) = &event {
+        if let MouseEventKind::Down(crossterm::event::MouseButton::Left) = mouse.kind {
+            let sidebar_width = 25u16;
+            if mouse.column < sidebar_width && app.mode == Mode::Normal {
+                // Clicked in sidebar — figure out which session row
+                // Session list starts at row 1 (inside border), header is row 0
+                let row = mouse.row as usize;
+                if row >= 1 && row < app.sessions.len() + 1 {
+                    let idx = row - 1;
+                    app.session_cursor = idx;
+                    if let Some(id) = app.selected_session_id().map(|s| s.to_string()) {
+                        connect_to_session(app, id, ws_event_tx).await?;
+                    }
+                }
+            }
+        }
+        // Scroll wheel in chat area
+        if let MouseEventKind::ScrollUp = mouse.kind {
+            if app.active_session.is_some() {
+                app.scroll_up();
+            }
+        }
+        if let MouseEventKind::ScrollDown = mouse.kind {
+            if app.active_session.is_some() {
+                app.scroll_down();
+            }
+        }
+        return Ok(());
+    }
+
     let AppEvent::Key(key) = event else { return Ok(()); };
 
     // Ctrl+C always quits
@@ -490,9 +520,9 @@ async fn handle_key_event(
 
 fn handle_permission_keys(app: &mut App, key: crossterm::event::KeyEvent) {
     match key.code {
-        KeyCode::Char('y') | KeyCode::Enter => app.approve_permission("allow_once"),
-        KeyCode::Char('a') => app.approve_permission("allow_always"),
-        KeyCode::Char('n') | KeyCode::Esc => app.approve_permission("reject_once"),
+        KeyCode::Char('y') | KeyCode::Enter => app.approve_permission(true),
+        KeyCode::Char('a') => app.approve_permission(true),
+        KeyCode::Char('n') | KeyCode::Esc => app.approve_permission(false),
         _ => {}
     }
 }
