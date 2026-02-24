@@ -256,7 +256,11 @@ export function TopBar() {
           {/* Add to Gallery */}
           <button
             onClick={() => {
-              window.location.hash = "#/gallery";
+              if (currentSessionId) {
+                window.location.hash = `#/gallery?session=${encodeURIComponent(currentSessionId)}`;
+              } else {
+                window.location.hash = "#/gallery";
+              }
             }}
             className="flex items-center justify-center w-7 h-7 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
             title="Add to Gallery"

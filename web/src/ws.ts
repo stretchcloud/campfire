@@ -152,19 +152,41 @@ const IDEMPOTENT_OUTGOING_TYPES = new Set<BrowserOutgoingMessage["type"]>([
   "mcp_set_servers",
 ]);
 
-/** Token for the next connectSession call, consumed once */
-let pendingInviteToken: string | null = null;
+/** Per-session invite tokens — used on connect and persisted for reconnects */
+const sessionInviteTokens = new Map<string, string>();
+/**
+ * Global flag: true while an invite join flow is in progress.
+ * While set, connectAllSessions() is blocked to prevent racing
+ * (connecting without the invite token before the join API returns).
+ */
+let inviteJoinInProgress = false;
 
-export function setInviteToken(token: string): void {
-  pendingInviteToken = token;
+export function setInviteJoinInProgress(inProgress: boolean): void {
+  inviteJoinInProgress = inProgress;
+}
+
+export function setInviteToken(token: string, sessionId?: string): void {
+  if (sessionId) {
+    sessionInviteTokens.set(sessionId, token);
+  } else {
+    sessionInviteTokens.set("__pending__", token);
+  }
 }
 
 function getWsUrl(sessionId: string): string {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   let url = `${proto}//${location.host}/ws/browser/${sessionId}`;
-  if (pendingInviteToken) {
-    url += `?token=${encodeURIComponent(pendingInviteToken)}`;
-    pendingInviteToken = null;
+  // Check for a token stored for this session, or a pending token
+  let token = sessionInviteTokens.get(sessionId);
+  if (!token) {
+    token = sessionInviteTokens.get("__pending__") || undefined;
+    if (token) {
+      sessionInviteTokens.delete("__pending__");
+      sessionInviteTokens.set(sessionId, token);
+    }
+  }
+  if (token) {
+    url += `?token=${encodeURIComponent(token)}`;
   }
   return url;
 }
@@ -666,6 +688,9 @@ export function disconnectSession(sessionId: string) {
   }
   const ws = sockets.get(sessionId);
   if (ws) {
+    // Remove from map immediately so connectSession() can create a new socket
+    // right away (ws.close() is async — onclose fires later).
+    sockets.delete(sessionId);
     ws.close();
     sockets.delete(sessionId);
   }
@@ -680,6 +705,9 @@ export function disconnectAll() {
 }
 
 export function connectAllSessions(sessions: SdkSessionInfo[]) {
+  // Block all auto-connections while an invite join is in progress.
+  // The join flow will connect the right session with the invite token.
+  if (inviteJoinInProgress) return;
   for (const s of sessions) {
     if (!s.archived) {
       connectSession(s.sessionId);

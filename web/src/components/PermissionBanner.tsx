@@ -32,9 +32,13 @@ export function PermissionBanner({
 }) {
   const [loading, setLoading] = useState(false);
   const removePermission = useStore((s) => s.removePermission);
-  const myRole = useStore((s) => s.myRole.get(sessionId) ?? "owner");
+  // Default to "spectator" until role_assigned arrives — this prevents
+  // spectators from acting as owners during the brief window before the
+  // server sends their role.  Owners always receive role_assigned promptly.
+  const myRole = useStore((s) => s.myRole.get(sessionId) ?? "spectator");
 
   function handleAllow(updatedInput?: Record<string, unknown>, updatedPermissions?: PermissionUpdate[]) {
+    if (myRole === "spectator") return; // guard: spectators cannot vote
     setLoading(true);
     sendToSession(sessionId, {
       type: "permission_response",
@@ -47,6 +51,7 @@ export function PermissionBanner({
   }
 
   function handleDeny() {
+    if (myRole === "spectator") return; // guard: spectators cannot vote
     setLoading(true);
     sendToSession(sessionId, {
       type: "permission_response",
@@ -93,11 +98,19 @@ export function PermissionBanner({
             </div>
 
             {isAskUser ? (
-              <AskUserQuestionDisplay
-                input={permission.input}
-                onSelect={(answers) => handleAllow({ ...permission.input, answers })}
-                disabled={loading}
-              />
+              <>
+                <AskUserQuestionDisplay
+                  input={permission.input}
+                  onSelect={(answers) => handleAllow({ ...permission.input, answers })}
+                  disabled={loading || myRole === "spectator"}
+                />
+                <div className="mt-2 space-y-1">
+                  <VoteProgress sessionId={sessionId} requestId={permission.request_id} />
+                  {myRole === "spectator" && (
+                    <span className="text-[10px] text-cc-muted italic">Spectators cannot vote</span>
+                  )}
+                </div>
+              </>
             ) : (
               <ToolInputDisplay toolName={permission.tool_name} input={permission.input} description={permission.description} />
             )}

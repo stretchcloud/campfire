@@ -4,11 +4,13 @@ import { GalleryCard } from "./GalleryCard.js";
 
 interface Props {
   embedded?: boolean;
+  prefillSessionId?: string;
+  prefillName?: string;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function GalleryPage({ embedded = false }: Props) {
+export function GalleryPage({ embedded = false, prefillSessionId, prefillName }: Props) {
   const [entries, setEntries] = useState<GalleryEntryInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -28,8 +30,13 @@ export function GalleryPage({ embedded = false }: Props) {
   const [moltbookAvailable, setMoltbookAvailable] = useState(false);
 
   // Create form state
-  const [createCollapsed, setCreateCollapsed] = useState(true);
-  const [createForm, setCreateForm] = useState({ sessionId: "", name: "", description: "", tags: "" });
+  const [createCollapsed, setCreateCollapsed] = useState(!prefillSessionId);
+  const [createForm, setCreateForm] = useState({
+    sessionId: prefillSessionId || "",
+    name: prefillName || "",
+    description: "",
+    tags: "",
+  });
   const [creating, setCreating] = useState(false);
 
   const refresh = useCallback(() => {
@@ -137,8 +144,21 @@ export function GalleryPage({ embedded = false }: Props) {
     try {
       const result = await api.createPublicReplayLink(id);
       const fullUrl = `${window.location.origin}/${result.url}`;
-      await navigator.clipboard.writeText(fullUrl);
-      setError(`Public replay link copied to clipboard`);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(fullUrl);
+        setError(`Public replay link copied to clipboard`);
+      } else {
+        // Fallback for non-secure contexts (HTTP)
+        const textarea = document.createElement("textarea");
+        textarea.value = fullUrl;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        setError(`Public replay link copied to clipboard`);
+      }
       setTimeout(() => setError(""), 3000);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

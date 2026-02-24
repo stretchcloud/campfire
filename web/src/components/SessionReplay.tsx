@@ -98,6 +98,7 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
   // Loading state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   // Header info
   const [header, setHeader] = useState<RecordingHeader | null>(null);
   // Total message count (for timeline)
@@ -107,7 +108,7 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
 
   // Create a stable replay session ID on mount
   useEffect(() => {
-    const rid = `replay-${crypto.randomUUID().slice(0, 8)}`;
+    const rid = `replay-${Math.random().toString(36).slice(2, 10)}`;
     setReplaySessionId(rid);
     setMessages(rid, []);
     setReplayState("idle");
@@ -281,7 +282,21 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
   // Share: copy link
   const shareLink = useCallback(() => {
     const path = filename ? `#/replay/${filename}` : `#/replay/session/${sessionId}`;
-    navigator.clipboard.writeText(`${window.location.origin}/${path}`);
+    const url = `${window.location.origin}/${path}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = url;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2000);
   }, [filename, sessionId]);
 
   // Close: navigate back
@@ -315,18 +330,18 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-cc-bg">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-cc-border bg-cc-bg-sidebar">
-        <div className="flex items-center gap-3 text-sm text-cc-text-secondary">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-cc-border bg-cc-card">
+        <div className="flex items-center gap-3 text-sm text-cc-muted">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="font-medium text-cc-text-primary">Session Replay</span>
+          <span className="font-medium text-cc-fg">Session Replay</span>
           {header && (
             <>
-              <span className="text-xs px-2 py-0.5 rounded bg-cc-bg-hover text-cc-text-secondary">
+              <span className="text-xs px-2 py-0.5 rounded bg-cc-hover text-cc-muted">
                 {header.backend_type}
               </span>
               <span className="text-xs">{header.session_id.slice(0, 8)}...</span>
@@ -336,16 +351,22 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={shareLink}
-            className="p-1.5 rounded hover:bg-cc-hover transition-colors text-cc-text-secondary"
-            title="Copy replay link"
+            className={`p-1.5 rounded hover:bg-cc-hover transition-colors ${shareCopied ? "text-cc-success" : "text-cc-muted"}`}
+            title={shareCopied ? "Copied!" : "Copy replay link"}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
+            {shareCopied ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            )}
           </button>
           <button
             onClick={close}
-            className="p-1.5 rounded hover:bg-cc-hover transition-colors text-cc-text-secondary"
+            className="p-1.5 rounded hover:bg-cc-hover transition-colors text-cc-muted"
             title="Close replay"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -355,86 +376,90 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
         </div>
       </div>
 
-      {/* MessageFeed (reuses existing component) */}
-      <div className="flex-1 overflow-hidden">
-        {replaySessionId && <MessageFeed sessionId={replaySessionId} />}
-      </div>
+      {/* Replay controls */}
+      <div className="border-b border-cc-border bg-cc-card px-4 py-2">
+        <div className="flex items-center gap-3">
+          {/* Play/Pause */}
+          <button
+            onClick={replayState === "playing" ? pause : play}
+            className="w-8 h-8 flex items-center justify-center rounded-lg bg-cc-primary text-white hover:bg-cc-primary-hover transition-colors cursor-pointer"
+            title={replayState === "playing" ? "Pause" : "Play"}
+          >
+            {replayState === "playing" ? (
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                <path d="M5.5 3.5A1.5 1.5 0 017 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5zm5 0A1.5 1.5 0 0112 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                <path d="M4.5 3.5A.5.5 0 015.22 3l7 4.5a.5.5 0 010 .86l-7 4.5A.5.5 0 014.5 12.5v-9z" />
+              </svg>
+            )}
+          </button>
 
-      {/* Controls bar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-t border-cc-border bg-cc-bg-sidebar">
-        {/* Play/Pause */}
-        <button
-          onClick={replayState === "playing" ? pause : play}
-          className="p-2 rounded-full bg-cc-accent hover:bg-cc-accent/80 text-white transition-colors"
-          title={replayState === "playing" ? "Pause" : "Play"}
-        >
-          {replayState === "playing" ? (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <rect x="6" y="4" width="4" height="16" />
-              <rect x="14" y="4" width="4" height="16" />
+          {/* Reset */}
+          <button
+            onClick={reset}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+            title="Reset"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
+          </button>
 
-        {/* Reset */}
-        <button
-          onClick={reset}
-          className="p-2 rounded hover:bg-cc-hover transition-colors text-cc-text-secondary"
-          title="Reset"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
+          {/* Progress bar */}
+          <div className="flex-1 h-1.5 bg-cc-hover rounded-full overflow-hidden cursor-pointer"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pct = (e.clientX - rect.left) / rect.width;
+              scrubTo(Math.round(pct * totalMessages));
+            }}
+          >
+            <div
+              className="h-full bg-cc-primary rounded-full transition-all"
+              style={{ width: `${totalMessages > 0 ? (currentPosition / totalMessages) * 100 : 0}%` }}
+            />
+          </div>
 
-        {/* Speed selector */}
-        <div className="flex items-center gap-1 text-xs">
-          {SPEEDS.map((s) => (
-            <button
-              key={s}
-              onClick={() => setReplaySpeed(s)}
-              className={`px-2 py-1 rounded transition-colors ${
-                replaySpeed === s
-                  ? "bg-cc-accent text-white"
-                  : "bg-cc-bg-hover text-cc-text-secondary hover:bg-cc-hover"
-              }`}
-            >
-              {s}x
-            </button>
-          ))}
-        </div>
+          <span className="text-[10px] text-cc-muted tabular-nums">
+            {currentPosition}/{totalMessages}
+          </span>
 
-        {/* Timeline scrubber */}
-        <div className="flex-1 flex items-center gap-2">
-          <input
-            type="range"
-            min={0}
-            max={totalMessages}
-            value={currentPosition}
-            onChange={(e) => scrubTo(Number(e.target.value))}
-            className="flex-1 h-1.5 accent-cc-accent cursor-pointer"
-          />
-          <span className="text-xs text-cc-text-secondary min-w-[4rem] text-right">
-            {currentPosition} / {totalMessages}
+          {/* Speed selector */}
+          <div className="flex items-center gap-1">
+            {SPEEDS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setReplaySpeed(s)}
+                className={`px-2 py-1 text-[10px] font-medium rounded transition-colors cursor-pointer ${
+                  replaySpeed === s
+                    ? "bg-cc-primary text-white"
+                    : "bg-cc-hover text-cc-muted hover:text-cc-fg"
+                }`}
+              >
+                {s}x
+              </button>
+            ))}
+          </div>
+
+          {/* State badge */}
+          <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+            replayState === "playing" ? "bg-green-500/20 text-green-400" :
+            replayState === "paused" ? "bg-yellow-500/20 text-yellow-400" :
+            replayState === "ended" ? "bg-cc-hover text-cc-muted" :
+            "bg-cc-hover text-cc-muted"
+          }`}>
+            {replayState === "playing" ? "Playing" :
+             replayState === "paused" ? "Paused" :
+             replayState === "ended" ? "Ended" :
+             "Ready"}
           </span>
         </div>
+      </div>
 
-        {/* State badge */}
-        <span className={`text-xs px-2 py-0.5 rounded ${
-          replayState === "playing" ? "bg-green-500/20 text-green-400" :
-          replayState === "paused" ? "bg-yellow-500/20 text-yellow-400" :
-          replayState === "ended" ? "bg-cc-bg-hover text-cc-text-secondary" :
-          "bg-cc-bg-hover text-cc-text-secondary"
-        }`}>
-          {replayState === "playing" ? "Playing" :
-           replayState === "paused" ? "Paused" :
-           replayState === "ended" ? "Ended" :
-           "Ready"}
-        </span>
+      {/* MessageFeed (reuses existing component) */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {replaySessionId && <MessageFeed sessionId={replaySessionId} />}
       </div>
     </div>
   );
