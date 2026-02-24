@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../api.js";
 import { useStore } from "../store.js";
 import { MessageFeed } from "./MessageFeed.js";
-import type { ChatMessage } from "../types.js";
+import type { ChatMessage, ContentBlock } from "../types.js";
 
 interface Props {
   token: string;
@@ -36,6 +36,61 @@ function formatDuration(ms: number): string {
   return `${hours}h ${mins % 60}m`;
 }
 
+// ─── Message Conversion ──────────────────────────────────────────────────────
+
+let idCounter = 0;
+function nextId(): string {
+  return `public-replay-${++idCounter}`;
+}
+
+function extractTextFromBlocks(blocks: ContentBlock[]): string {
+  return blocks
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join("");
+}
+
+/**
+ * Convert a raw BrowserIncomingMessage to a ChatMessage.
+ * Same logic as SessionReplay's convertToChat / ws.ts message_history handler.
+ */
+function convertToChat(msg: any, index: number): ChatMessage | null {
+  if (msg.type === "user_message") {
+    return {
+      id: msg.id || nextId(),
+      role: "user",
+      content: msg.content || "",
+      timestamp: msg.timestamp || 0,
+    };
+  }
+  if (msg.type === "assistant") {
+    const m = msg.message;
+    if (!m) return null;
+    return {
+      id: m.id || nextId(),
+      role: "assistant",
+      content: extractTextFromBlocks(m.content || []),
+      contentBlocks: m.content,
+      timestamp: msg.timestamp || 0,
+      parentToolUseId: msg.parent_tool_use_id,
+      model: m.model,
+      stopReason: m.stop_reason,
+    };
+  }
+  if (msg.type === "result") {
+    const r = msg.data;
+    if (r?.is_error && r.errors?.length) {
+      return {
+        id: `replay-error-${index}`,
+        role: "system",
+        content: `Error: ${r.errors.join(", ")}`,
+        timestamp: 0,
+      };
+    }
+  }
+  return null;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PublicReplayPage({ token }: Props) {
@@ -54,8 +109,13 @@ export function PublicReplayPage({ token }: Props) {
   useEffect(() => {
     api.getPublicReplay(token)
       .then((result) => {
+        // Convert raw BrowserIncomingMessages to ChatMessages
+        const rawMessages = result.messages as any[];
+        const converted = rawMessages
+          .map((msg, i) => convertToChat(msg, i))
+          .filter((m): m is ChatMessage => m !== null);
         setData({
-          messages: result.messages as ChatMessage[],
+          messages: converted,
           gallery: result.gallery as PublicReplayData["gallery"],
         });
       })
@@ -209,7 +269,7 @@ export function PublicReplayPage({ token }: Props) {
       </div>
 
       {/* Message feed */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <MessageFeed sessionId={sessionId} />
       </div>
     </div>

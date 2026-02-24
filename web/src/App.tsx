@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useStore } from "./store.js";
-import { connectSession, setInviteToken } from "./ws.js";
+import { connectSession, disconnectSession, setInviteToken, setInviteJoinInProgress } from "./ws.js";
 import { api } from "./api.js";
 import { capturePageView } from "./analytics.js";
 import { Sidebar } from "./components/Sidebar.js";
@@ -48,7 +48,16 @@ export default function App() {
   const isTerminalPage = hash === "#/terminal";
   const isEnvironmentsPage = hash === "#/environments";
   const isScheduledPage = hash === "#/scheduled";
-  const isGalleryPage = hash === "#/gallery";
+  const isGalleryPage = hash === "#/gallery" || hash.startsWith("#/gallery?");
+  const gallerySessionId = isGalleryPage
+    ? new URLSearchParams(hash.replace(/^#\/gallery\??/, "")).get("session") || undefined
+    : undefined;
+  const gallerySessionName = useStore((s) => {
+    if (!gallerySessionId) return undefined;
+    return s.sessionNames?.get(gallerySessionId) ||
+      s.sdkSessions.find((sdk) => sdk.sessionId === gallerySessionId)?.name ||
+      undefined;
+  });
   const isWebhooksPage = hash === "#/webhooks";
   const isAdaptersPage = hash === "#/adapters";
   const isClawHubPage = hash === "#/clawhub";
@@ -77,18 +86,30 @@ export default function App() {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
+  // Block connectAllSessions synchronously while an invite join hash is present,
+  // so Sidebar's poll can't race and connect without the invite token.
+  const isJoinHash = hash.startsWith("#/join/");
+  if (isJoinHash) {
+    setInviteJoinInProgress(true);
+  }
+
   // Handle invite join links: #/join/:token
   useEffect(() => {
     const match = hash.match(/^#\/join\/(.+)$/);
     if (!match) return;
     const token = match[1];
     api.joinSession(token).then((res) => {
+      if (res.token) setInviteToken(res.token, res.session_id);
+      // Disconnect any existing socket so we reconnect with the invite token.
+      disconnectSession(res.session_id);
       useStore.getState().setCurrentSession(res.session_id);
-      if (res.token) setInviteToken(res.token);
       connectSession(res.session_id);
+      // Unblock connectAllSessions now that the invite socket is established
+      setInviteJoinInProgress(false);
       window.location.hash = "";
     }).catch(() => {
       console.warn(`[App] Invalid invite token: ${token}`);
+      setInviteJoinInProgress(false);
       window.location.hash = "";
     });
   }, [hash]);
@@ -162,7 +183,7 @@ export default function App() {
 
           {isGalleryPage && (
             <div className="absolute inset-0">
-              <GalleryPage embedded />
+              <GalleryPage embedded prefillSessionId={gallerySessionId} prefillName={gallerySessionName} />
             </div>
           )}
 
