@@ -24,10 +24,10 @@ impl ApiClient {
             anyhow::bail!("list_sessions: HTTP {}", resp.status());
         }
         let sessions: Vec<SessionInfo> = resp.json().await?;
-        // Filter out archived sessions (state = "archived")
+        // Filter out archived sessions
         let active: Vec<SessionInfo> = sessions
             .into_iter()
-            .filter(|s| s.state.as_deref() != Some("archived"))
+            .filter(|s| s.state.as_deref() != Some("archived") && s.archived != Some(true))
             .collect();
         Ok(active)
     }

@@ -1,5 +1,5 @@
 /// Converts crossterm events into AppEvent values for the main loop.
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -7,6 +7,8 @@ use tokio::sync::mpsc;
 pub enum AppEvent {
     /// A key was pressed
     Key(KeyEvent),
+    /// A mouse event occurred
+    Mouse(MouseEvent),
     /// Terminal was resized
     Resize(u16, u16),
     /// Tick for periodic redraws
@@ -23,6 +25,11 @@ pub fn spawn_event_task(tx: mpsc::Sender<AppEvent>, tick_ms: u64) {
                 match event::read() {
                     Ok(Event::Key(key)) => {
                         if tx.blocking_send(AppEvent::Key(key)).is_err() {
+                            break;
+                        }
+                    }
+                    Ok(Event::Mouse(mouse)) => {
+                        if tx.blocking_send(AppEvent::Mouse(mouse)).is_err() {
                             break;
                         }
                     }

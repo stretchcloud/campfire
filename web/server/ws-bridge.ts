@@ -992,16 +992,32 @@ export class WsBridge {
       session.state.total_lines_removed = msg.total_lines_removed;
     }
 
-    // Compute context usage from modelUsage
+    // Compute context usage from modelUsage and store Claude token details
     if (msg.modelUsage) {
+      let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreation = 0;
+      let contextWindow = 0, totalCostUsd = 0;
       for (const usage of Object.values(msg.modelUsage)) {
+        totalInput += usage.inputTokens;
+        totalOutput += usage.outputTokens;
+        totalCacheRead += usage.cacheReadInputTokens;
+        totalCacheCreation += usage.cacheCreationInputTokens;
+        totalCostUsd += usage.costUSD ?? 0;
         if (usage.contextWindow > 0) {
+          contextWindow = usage.contextWindow;
           const pct = Math.round(
             ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
           );
           session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
         }
       }
+      session.state.claude_token_details = {
+        inputTokens: totalInput,
+        outputTokens: totalOutput,
+        cacheReadInputTokens: totalCacheRead,
+        cacheCreationInputTokens: totalCacheCreation,
+        contextWindow,
+        costUsd: totalCostUsd,
+      };
     }
 
     // Re-check git state after each turn in case branch moved during the session.
