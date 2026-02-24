@@ -21,6 +21,8 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[AppErrorBoundary] Runtime error:", error);
+    console.error("[AppErrorBoundary] Component stack:", info.componentStack);
     captureException(error, {
       source: "react_error_boundary",
       componentStack: info.componentStack,

@@ -761,6 +761,14 @@ export class WsBridge {
       });
     }
 
+    // Tell this browser its assigned role BEFORE sending permissions,
+    // so the frontend knows whether to enable/disable voting controls.
+    this.sendToBrowser(ws, {
+      type: "role_assigned",
+      role: browserData.role!,
+      viewerId: browserData.viewerId!,
+    });
+
     // Send any pending permission requests
     for (const perm of session.pendingPermissions.values()) {
       this.sendToBrowser(ws, { type: "permission_request", request: perm });
@@ -781,13 +789,6 @@ export class WsBridge {
         this.onCLIRelaunchNeeded(sessionId);
       }
     }
-
-    // Tell this browser its assigned role
-    this.sendToBrowser(ws, {
-      type: "role_assigned",
-      role: browserData.role!,
-      viewerId: browserData.viewerId!,
-    });
 
     // Broadcast updated presence to all browsers
     this.broadcastPresence(session);
