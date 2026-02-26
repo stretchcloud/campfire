@@ -35,6 +35,8 @@ export interface RecordingFileMeta {
   startedAt: string;
   /** Number of lines in the file (header + entries). */
   lines: number;
+  /** Whether the recording contains playable conversation content. */
+  hasContent: boolean;
 }
 
 // ─── SessionRecorder ─────────────────────────────────────────────────────────
@@ -220,16 +222,17 @@ export class RecorderManager {
           const firstUnderscore = withoutExt.indexOf("_");
           const secondUnderscore = withoutExt.indexOf("_", firstUnderscore + 1);
           if (firstUnderscore === -1 || secondUnderscore === -1) {
-            return { filename, sessionId: "", backendType: "", startedAt: "", lines: 0 };
+            return { filename, sessionId: "", backendType: "", startedAt: "", lines: 0, hasContent: false };
           }
-          // Count lines — fast: just count newlines
-          const lines = countFileLines(join(this.recordingsDir, filename));
+          const filePath = join(this.recordingsDir, filename);
+          const { lines, hasContent } = countFileLinesAndContent(filePath);
           return {
             filename,
             sessionId: withoutExt.substring(0, firstUnderscore),
             backendType: withoutExt.substring(firstUnderscore + 1, secondUnderscore),
             startedAt: withoutExt.substring(secondUnderscore + 1),
             lines,
+            hasContent,
           };
         });
     } catch {
@@ -269,7 +272,7 @@ export class RecorderManager {
 
       for (const filename of files) {
         const fullPath = join(this.recordingsDir, filename);
-        const lines = countFileLines(fullPath);
+        const { lines } = countFileLinesAndContent(fullPath);
         let mtimeMs = 0;
         try {
           mtimeMs = statSync(fullPath).mtimeMs;
@@ -317,16 +320,34 @@ export class RecorderManager {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Count newlines in a file. Fast: reads raw buffer, counts 0x0A bytes. */
-function countFileLines(path: string): number {
+/**
+ * Count newlines and detect playable content in a recording file.
+ * Scans the raw buffer for line count AND checks for assistant/user_message
+ * type markers to determine if the recording has conversation content.
+ * This avoids full JSON parsing for the listing endpoint.
+ */
+function countFileLinesAndContent(path: string): { lines: number; hasContent: boolean } {
   try {
     const buf = readFileSync(path);
-    let count = 0;
+    let lines = 0;
+    let hasContent = false;
+    // In JSONL recordings, the raw field contains escaped JSON, so type markers
+    // appear as \"type\":\"assistant\" (backslash-escaped quotes inside the outer JSON string).
+    const assistantMarker = Buffer.from('\\"type\\":\\"assistant\\"');
+    const userMsgMarker = Buffer.from('\\"type\\":\\"user_message\\"');
     for (let i = 0; i < buf.length; i++) {
-      if (buf[i] === 0x0a) count++;
+      if (buf[i] === 0x0a) lines++;
+      if (!hasContent && i + assistantMarker.length <= buf.length) {
+        if (buf.subarray(i, i + assistantMarker.length).equals(assistantMarker)) {
+          hasContent = true;
+        } else if (i + userMsgMarker.length <= buf.length &&
+                   buf.subarray(i, i + userMsgMarker.length).equals(userMsgMarker)) {
+          hasContent = true;
+        }
+      }
     }
-    return count;
+    return { lines, hasContent };
   } catch {
-    return 0;
+    return { lines: 0, hasContent: false };
   }
 }

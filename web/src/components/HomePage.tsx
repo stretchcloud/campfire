@@ -428,9 +428,9 @@ export function HomePage() {
       <div className="w-full max-w-2xl">
         {/* Logo + Title */}
         <div className="flex flex-col items-center justify-center mb-4 sm:mb-6">
-          <img src={logoSrc} alt="The Companion" className="w-24 h-24 sm:w-32 sm:h-32 mb-3" />
-          <h1 className="text-xl sm:text-2xl font-semibold text-cc-fg">
-            The Companion
+          <img src={logoSrc} alt="Campfire" className="w-16 h-16 sm:w-20 sm:h-20 mb-2 opacity-70" />
+          <h1 className="text-base sm:text-lg font-mono-code font-medium text-cc-fg tracking-wide uppercase">
+            Campfire
           </h1>
         </div>
 
@@ -481,7 +481,7 @@ export function HomePage() {
         )}
 
         {/* Input card */}
-        <div className="bg-cc-card border border-cc-border rounded-[14px] shadow-sm overflow-hidden">
+        <div className="bg-cc-card border border-cc-border rounded-xl shadow-sm overflow-hidden">
           <textarea
             ref={textareaRef}
             value={text}
@@ -511,7 +511,7 @@ export function HomePage() {
                 </svg>
               </button>
               {showModeDropdown && (
-                <div className="absolute left-0 bottom-full mb-1 w-40 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1 overflow-hidden">
+                <div className="absolute left-0 bottom-full mb-1 w-40 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1 overflow-hidden">
                   {MODES.map((m) => (
                     <button
                       key={m.value}
@@ -665,7 +665,7 @@ export function HomePage() {
                 </svg>
               </button>
               {showBranchDropdown && (
-                <div className="absolute left-0 bottom-full mb-1 w-72 max-w-[calc(100vw-2rem)] bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 overflow-hidden">
+                <div className="absolute left-0 bottom-full mb-1 w-72 max-w-[calc(100vw-2rem)] bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 overflow-hidden">
                   {/* Search/filter input */}
                   <div className="px-2 py-2 border-b border-cc-border">
                     <input
@@ -849,7 +849,7 @@ export function HomePage() {
               </svg>
             </button>
             {showEnvDropdown && (
-              <div className="absolute left-0 bottom-full mb-1 w-56 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1 overflow-hidden">
+              <div className="absolute left-0 bottom-full mb-1 w-56 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1 overflow-hidden">
                 <button
                   onClick={() => {
                     setSelectedEnv("");
@@ -908,7 +908,7 @@ export function HomePage() {
               </svg>
             </button>
             {showModelDropdown && (
-              <div className="absolute left-0 bottom-full mb-1 w-48 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1">
+              <div className="absolute left-0 bottom-full mb-1 w-48 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1">
                 {MODELS.map((m) => (
                   <button
                     key={m.value}
@@ -928,7 +928,7 @@ export function HomePage() {
 
         {/* Branch behind remote warning */}
         {pullPrompt && (
-          <div className="mt-3 p-3 rounded-[10px] bg-amber-500/10 border border-amber-500/20">
+          <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <div className="flex items-start gap-2.5">
               <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-amber-500 shrink-0 mt-0.5">
                 <path d="M8.982 1.566a1.13 1.13 0 00-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z" />

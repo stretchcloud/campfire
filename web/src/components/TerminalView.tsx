@@ -114,7 +114,7 @@ export function TerminalView({ cwd, onClose, embedded = false }: TerminalViewPro
 
   const terminalFrame = (
     <div
-      className={`flex flex-col rounded-[14px] shadow-2xl overflow-hidden border border-cc-border ${
+      className={`flex flex-col rounded-xl shadow-2xl overflow-hidden border border-cc-border ${
         embedded ? "h-full" : "w-[90vw] max-w-4xl h-[70vh]"
       }`}
       style={{ background: darkMode ? "#141413" : "#1e1e1e" }}

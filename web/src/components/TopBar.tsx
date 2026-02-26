@@ -128,42 +128,45 @@ export function TopBar() {
   }
 
   return (
-    <header className="shrink-0 flex items-center justify-between px-2 sm:px-4 py-2 sm:py-2.5 bg-cc-card border-b border-cc-border">
-      <div className="flex items-center gap-3">
+    <header className="shrink-0 flex items-center justify-between px-3 h-10 bg-cc-bg border-b border-cc-border">
+      <div className="flex items-center gap-2">
         {/* Sidebar toggle */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex items-center justify-center w-7 h-7 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+          className="flex items-center justify-center w-6 h-6 rounded text-cc-muted/60 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
         >
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+            <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
           </svg>
         </button>
 
-        {/* Connection status */}
+        {/* Session breadcrumb */}
         {currentSessionId && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 text-[11px] font-mono-code">
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isConnected ? "bg-cc-success" : "bg-cc-muted opacity-40"
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                isConnected ? "bg-cc-success" : "bg-cc-muted/30"
               }`}
             />
             {sessionName && (
-              <span className="text-[11px] font-medium text-cc-fg max-w-[9rem] sm:max-w-none truncate" title={sessionName}>
+              <span className="font-medium text-cc-fg max-w-[10rem] sm:max-w-none truncate" title={sessionName}>
                 {sessionName}
               </span>
             )}
             {totalCost > 0 && (
-              <span className="text-[10px] text-cc-muted font-mono" title={`Session cost: $${totalCost.toFixed(4)}`}>
-                ${totalCost < 0.01 ? totalCost.toFixed(4) : totalCost.toFixed(2)}
-              </span>
+              <>
+                <span className="text-cc-muted/25">|</span>
+                <span className="text-cc-muted/60 tabular-nums" title={`Session cost: $${totalCost.toFixed(4)}`}>
+                  ${totalCost < 0.01 ? totalCost.toFixed(4) : totalCost.toFixed(2)}
+                </span>
+              </>
             )}
             {!isConnected && (
               <button
                 onClick={() => currentSessionId && api.relaunchSession(currentSessionId).catch(console.error)}
-                className="text-[11px] text-cc-warning hover:text-cc-warning/80 font-medium cursor-pointer hidden sm:inline"
+                className="text-cc-warning/80 hover:text-cc-warning font-medium cursor-pointer hidden sm:inline ml-1"
               >
-                Reconnect
+                reconnect
               </button>
             )}
           </div>
@@ -172,67 +175,65 @@ export function TopBar() {
 
       {/* Right side */}
       {currentSessionId && isSessionView && (
-        <div className="flex items-center gap-2 sm:gap-3 text-[12px] text-cc-muted">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] text-cc-muted font-mono-code">
           {status === "compacting" && (
-            <span className="text-cc-warning font-medium animate-pulse">Compacting...</span>
+            <span className="text-cc-warning/80 animate-pulse">compacting</span>
           )}
 
           {status === "running" && (
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-cc-primary animate-[pulse-dot_1s_ease-in-out_infinite]" />
-              <span className="text-cc-primary font-medium">Thinking</span>
+            <div className="flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-cc-primary/70 animate-breathing" />
+              <span className="text-cc-primary/80">running</span>
             </div>
           )}
 
-          {/* Presence avatars */}
+          {/* Presence */}
           {viewers.length > 1 && (
-            <div className="flex items-center -space-x-1.5" title={`${viewers.length} viewers connected`}>
-              {viewers.slice(0, 4).map((v) => (
-                <div
+            <div className="flex items-center gap-0.5" title={`${viewers.length} viewers`}>
+              {viewers.slice(0, 3).map((v) => (
+                <span
                   key={v.id}
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold border-2 border-cc-card ${
+                  className={`w-4 h-4 rounded flex items-center justify-center text-[8px] font-bold ${
                     v.role === "owner"
-                      ? "bg-cc-primary text-white"
-                      : v.role === "spectator"
-                        ? "bg-cc-hover text-cc-muted"
-                        : "bg-cc-warning/20 text-cc-warning"
+                      ? "bg-cc-primary/15 text-cc-primary"
+                      : "bg-cc-hover text-cc-muted/60"
                   }`}
                   title={`${v.name} (${v.role})`}
                 >
                   {v.name.charAt(0).toUpperCase()}
-                </div>
+                </span>
               ))}
-              {viewers.length > 4 && (
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold bg-cc-hover text-cc-muted border-2 border-cc-card">
-                  +{viewers.length - 4}
-                </div>
+              {viewers.length > 3 && (
+                <span className="text-[9px] text-cc-muted/40">+{viewers.length - 3}</span>
               )}
             </div>
           )}
 
-          {/* Chat / Editor tab toggle */}
-          <div className="flex items-center bg-cc-hover rounded-lg p-0.5">
+          <span className="text-cc-muted/15">|</span>
+
+          {/* Tab toggle */}
+          <div className="flex items-center gap-0.5">
             <button
               onClick={() => setActiveTab("chat")}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer ${
                 activeTab === "chat"
-                  ? "bg-cc-card text-cc-fg shadow-sm"
-                  : "text-cc-muted hover:text-cc-fg"
+                  ? "text-cc-fg bg-cc-active"
+                  : "text-cc-muted/50 hover:text-cc-fg"
               }`}
             >
-              Chat
+              log
             </button>
             <button
               onClick={() => setActiveTab("diff")}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer flex items-center gap-1 ${
                 activeTab === "diff"
-                  ? "bg-cc-card text-cc-fg shadow-sm"
-                  : "text-cc-muted hover:text-cc-fg"
+                  ? "text-cc-fg bg-cc-active"
+                  : "text-cc-muted/50 hover:text-cc-fg"
               }`}
             >
-              Diffs
+              diff
               {changedFilesCount > 0 && (
-                <span className="text-[9px] bg-cc-warning text-white rounded-full w-4 h-4 flex items-center justify-center font-semibold leading-none">
+                <span className="text-[8px] text-cc-warning tabular-nums">
                   {changedFilesCount}
                 </span>
               )}
@@ -244,10 +245,10 @@ export function TopBar() {
             <button
               onClick={handleFork}
               disabled={forking}
-              className="flex items-center justify-center w-7 h-7 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-50"
+              className="flex items-center justify-center w-6 h-6 rounded text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-40"
               title={forking ? "Forking..." : "Fork session onto new worktree"}
             >
-              <svg viewBox="0 0 16 16" fill="currentColor" className={`w-4 h-4 ${forking ? "animate-pulse" : ""}`}>
+              <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3.5 h-3.5 ${forking ? "animate-pulse" : ""}`}>
                 <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
               </svg>
             </button>
@@ -262,10 +263,10 @@ export function TopBar() {
                 window.location.hash = "#/gallery";
               }
             }}
-            className="flex items-center justify-center w-7 h-7 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+            className="flex items-center justify-center w-6 h-6 rounded text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
             title="Add to Gallery"
           >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
               <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v1H2V3zm0 2.5h12v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7zM4 7v3h3V7H4zm5 0v1h3V7H9zm3 2.5H9V11h3V9.5z" />
             </svg>
           </button>
@@ -277,15 +278,15 @@ export function TopBar() {
                 if (shareCopied) return;
                 setShareMenuOpen(!shareMenuOpen);
               }}
-              className="flex items-center justify-center w-7 h-7 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer relative"
+              className="flex items-center justify-center w-6 h-6 rounded text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer relative"
               title={shareCopied ? "Copied!" : "Share session link"}
             >
               {shareCopied ? (
-                <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-cc-success">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-cc-success">
+                  <path d="M3 8.5l3 3 6.5-7" />
                 </svg>
               ) : (
-                <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                   <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
                 </svg>
               )}
@@ -293,20 +294,20 @@ export function TopBar() {
             {shareMenuOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShareMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 bg-cc-card border border-cc-border rounded-lg shadow-lg py-1 min-w-[160px]">
+                <div className="absolute right-0 top-full mt-1 z-50 bg-cc-card border border-cc-border rounded-md shadow-panel py-1 min-w-[140px]">
                   <button
                     onClick={() => handleShare("collaborator")}
-                    className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                    className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code"
                   >
-                    <span className="font-medium">Collaborator</span>
-                    <span className="block text-cc-muted text-[10px]">Can approve & send messages</span>
+                    <span className="font-medium">collaborator</span>
+                    <span className="block text-cc-muted/60 text-[9px]">approve & send</span>
                   </button>
                   <button
                     onClick={() => handleShare("spectator")}
-                    className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                    className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code"
                   >
-                    <span className="font-medium">Spectator</span>
-                    <span className="block text-cc-muted text-[10px]">Watch only</span>
+                    <span className="font-medium">spectator</span>
+                    <span className="block text-cc-muted/60 text-[9px]">watch only</span>
                   </button>
                 </div>
               </>
@@ -317,14 +318,14 @@ export function TopBar() {
           {cwd && (
             <button
               onClick={() => setClaudeMdOpen(true)}
-              className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${
+              className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
                 claudeMdOpen
                   ? "text-cc-primary bg-cc-active"
-                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                  : "text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover"
               }`}
               title="Edit CLAUDE.md"
             >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                 <path d="M4 1.5a.5.5 0 01.5-.5h7a.5.5 0 01.354.146l2 2A.5.5 0 0114 3.5v11a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5v-13zm1 .5v12h8V4h-1.5a.5.5 0 01-.5-.5V2H5zm6 0v1h1l-1-1zM6.5 7a.5.5 0 000 1h5a.5.5 0 000-1h-5zm0 2a.5.5 0 000 1h5a.5.5 0 000-1h-5zm0 2a.5.5 0 000 1h3a.5.5 0 000-1h-3z" />
               </svg>
             </button>
@@ -332,15 +333,15 @@ export function TopBar() {
 
           <button
             onClick={() => setTaskPanelOpen(!taskPanelOpen)}
-            className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${
+            className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
               taskPanelOpen
                 ? "text-cc-primary bg-cc-active"
-                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                : "text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover"
             }`}
             title="Toggle session panel"
           >
-            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 3a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 000 2h4a1 1 0 100-2H7z" clipRule="evenodd" />
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm1 2v2h3V4H4zm5 0v1h3V4H9zm-5 3v2h3V7H4zm5 0v1h3V7H9zm-5 3v2h2V10H4z" />
             </svg>
           </button>
         </div>

@@ -264,7 +264,7 @@ export function GalleryPage({ embedded = false, prefillSessionId, prefillName }:
   );
 
   const createSection = (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+    <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
       <button
         onClick={() => setCreateCollapsed(!createCollapsed)}
         className="w-full flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border cursor-pointer hover:bg-cc-hover transition-colors"

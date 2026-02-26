@@ -84,35 +84,29 @@ export function SessionItem({
   );
 
   // Model badge colors per backend
-  const badgeColors = s.backendType === "codex"
-    ? "text-blue-400 bg-blue-500/10"
-    : s.backendType === "goose"
-    ? "text-orange-400 bg-orange-500/10"
-    : s.backendType === "aider"
-    ? "text-purple-400 bg-purple-500/10"
-    : "text-[#5BA8A0] bg-[#5BA8A0]/10";
+  const badgeColors = "text-cc-muted bg-cc-hover";
 
   const hasGitStats = s.gitAhead > 0 || s.gitBehind > 0 || s.linesAdded > 0 || s.linesRemoved > 0;
 
   return (
-    <div className={`relative group ${archived ? "opacity-50" : ""}`}>
+    <div className={`relative group ${archived ? "opacity-40" : ""}`}>
       <button
         onClick={() => onSelect(s.id)}
         onDoubleClick={(e) => {
           e.preventDefault();
           onStartRename(s.id, label);
         }}
-        className={`w-full pl-3.5 pr-8 py-2.5 sm:py-2 ${archived ? "pr-14" : ""} text-left rounded-lg transition-all duration-100 cursor-pointer ${
+        className={`w-full pl-3 pr-7 py-1.5 ${archived ? "pr-14" : ""} text-left rounded transition-all duration-100 cursor-pointer ${
           isActive
             ? "bg-cc-active"
             : "hover:bg-cc-hover"
         }`}
       >
-        {/* Full-height left status border (3px) */}
+        {/* Left status indicator */}
         <span
-          className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full ${borderColor} transition-colors ${
+          className={`absolute left-0 top-2 bottom-2 w-[2px] rounded-full ${borderColor} transition-colors ${
             showPulse ? "animate-[pulse-dot_1.5s_ease-in-out_infinite]" : ""
-          } ${isActive ? "opacity-100" : "opacity-60 group-hover:opacity-90"}`}
+          } ${isActive ? "opacity-100" : "opacity-50 group-hover:opacity-80"}`}
         />
 
         <div className="flex flex-col gap-0.5 min-w-0">
@@ -141,15 +135,15 @@ export function SessionItem({
             ) : (
               <>
                 <span
-                  className={`text-[13px] font-medium truncate text-cc-fg leading-snug ${
+                  className={`text-[12px] font-medium truncate text-cc-fg leading-snug ${
                     isRecentlyRenamed ? "animate-name-appear" : ""
                   }`}
                   onAnimationEnd={() => onClearRecentlyRenamed(s.id)}
                 >
                   {label}
                 </span>
-                <span className={`text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 ${badgeColors}`}>
-                  {modelBadge(s.model, s.backendType)}
+                <span className="text-[9px] font-mono-code text-cc-muted/50 shrink-0">
+                  {modelBadge(s.model, s.backendType).toLowerCase()}
                 </span>
                 {s.cronJobId && (
                   <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-violet-500 bg-violet-500/10">
@@ -174,7 +168,7 @@ export function SessionItem({
               )}
               <span className="truncate">{s.gitBranch}</span>
               {s.isWorktree && (
-                <span className="text-[8px] bg-cc-primary/10 text-cc-primary px-0.5 rounded shrink-0">wt</span>
+                <span className="text-[8px] bg-cc-hover text-cc-muted px-0.5 rounded shrink-0">wt</span>
               )}
             </div>
           )}
