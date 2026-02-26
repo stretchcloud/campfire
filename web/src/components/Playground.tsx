@@ -1254,7 +1254,7 @@ export function Playground() {
                   <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
                   <h3 className="text-lg font-semibold">Container Launch Failed</h3>
                 </div>
-                <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">Failed to pull image companion-dev:latest — connection timed out</p>
+                <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">Failed to pull image campfire-dev:latest — connection timed out</p>
                 <div className="flex gap-2">
                   <button className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Retry</button>
                   <button className="flex-1 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">Cancel</button>
@@ -1269,7 +1269,7 @@ export function Playground() {
           <div className="max-w-3xl">
             <Card label="Connected — code mode">
               <div className="border-t border-cc-border bg-cc-card px-4 py-3">
-                <div className="bg-cc-input-bg border border-cc-border rounded-[14px] overflow-hidden">
+                <div className="bg-cc-input-bg border border-cc-border rounded-xl overflow-hidden">
                   <textarea
                     readOnly
                     value="Can you refactor the auth module to use JWT?"
@@ -1306,7 +1306,7 @@ export function Playground() {
             <div className="mt-4" />
             <Card label="Plan mode active">
               <div className="border-t border-cc-border bg-cc-card px-4 py-3">
-                <div className="bg-cc-input-bg border border-cc-primary/40 rounded-[14px] overflow-hidden">
+                <div className="bg-cc-input-bg border border-cc-primary/40 rounded-xl overflow-hidden">
                   <textarea
                     readOnly
                     value=""
@@ -1344,7 +1344,7 @@ export function Playground() {
             <div className="mt-4" />
             <Card label="Running — stop button visible">
               <div className="border-t border-cc-border bg-cc-card px-4 py-3">
-                <div className="bg-cc-input-bg border border-cc-border rounded-[14px] overflow-hidden">
+                <div className="bg-cc-input-bg border border-cc-border rounded-xl overflow-hidden">
                   <textarea
                     readOnly
                     value=""
@@ -1360,7 +1360,7 @@ export function Playground() {
                         <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
                       </svg>
                       <span className="truncate">feat/jwt-auth</span>
-                      <span className="text-[10px] bg-cc-primary/10 text-cc-primary px-1 rounded">worktree</span>
+                      <span className="text-[10px] bg-cc-hover text-cc-muted px-1 rounded">worktree</span>
                     </span>
                     <span className="flex items-center gap-0.5 text-[10px]">
                       <span className="text-green-500">3&#8593;</span>
@@ -1410,7 +1410,7 @@ export function Playground() {
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <pre className="font-serif-assistant text-[15px] text-cc-fg whitespace-pre-wrap break-words leading-relaxed">
+                  <pre className="font-sans-ui text-[15px] text-cc-fg whitespace-pre-wrap break-words leading-relaxed">
                     I'll start by creating the JWT utility module with sign and verify helpers. Let me first check what dependencies are already installed...
                     <span className="inline-block w-0.5 h-4 bg-cc-primary ml-0.5 align-middle animate-[pulse-dot_0.8s_ease-in-out_infinite]" />
                   </pre>
@@ -1550,7 +1550,7 @@ export function Playground() {
         <Section title="Webhook & Adapter Pages" description="Management UIs for webhooks and community adapters (navigate to #/webhooks or #/adapters)">
           <div className="space-y-4 max-w-3xl">
             <Card label="Webhook card with delivery stats">
-              <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+              <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border">
                   <span className="text-sm font-medium text-cc-fg flex-1 truncate">Slack Notifications</span>
                   <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-cc-success bg-cc-success/10">47/50</span>
@@ -1576,7 +1576,7 @@ export function Playground() {
               </div>
             </Card>
             <Card label="Adapter card with models">
-              <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+              <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border">
                   <span className="text-sm font-medium text-cc-fg flex-1 truncate">My Custom Agent</span>
                   <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-cc-muted bg-cc-hover">v1.2.0</span>
@@ -1648,7 +1648,7 @@ function PlaygroundToolGroup({ toolName, items }: { toolName: string; items: Too
           <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-primary"><circle cx="8" cy="8" r="3" /></svg>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+          <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
             <button
               onClick={() => setOpen(!open)}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-cc-hover transition-colors cursor-pointer"
@@ -1681,7 +1681,7 @@ function PlaygroundToolGroup({ toolName, items }: { toolName: string; items: Too
         <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-primary"><circle cx="8" cy="8" r="3" /></svg>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+        <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
           <button
             onClick={() => setOpen(!open)}
             className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-cc-hover transition-colors cursor-pointer"
@@ -1720,7 +1720,7 @@ function PlaygroundSubagentGroup({ description, agentType, items }: { descriptio
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="ml-9 border-l-2 border-cc-primary/20 pl-4">
+    <div className="ml-9 border-l-2 border-cc-border pl-4">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center gap-2 py-1.5 text-left cursor-pointer mb-1"

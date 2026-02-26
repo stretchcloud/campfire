@@ -109,7 +109,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
   ) : (
     <div className="space-y-3">
       {envs.map((env) => (
-        <div key={env.slug} className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+        <div key={env.slug} className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
           {/* Env header row */}
           <div className="flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border">
             <span className="text-sm font-medium text-cc-fg flex-1">{env.name}</span>
@@ -179,7 +179,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
   );
 
   const createForm = (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+    <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
       <div className="px-3 py-2.5 bg-cc-card border-b border-cc-border">
         <span className="text-sm font-medium text-cc-fg">New Environment</span>
       </div>
@@ -238,7 +238,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
 
   const panel = (
     <div
-      className="w-full max-w-lg max-h-[90dvh] sm:max-h-[80dvh] mx-0 sm:mx-4 flex flex-col bg-cc-bg border border-cc-border rounded-t-[14px] sm:rounded-[14px] shadow-2xl overflow-hidden"
+      className="w-full max-w-lg max-h-[90dvh] sm:max-h-[80dvh] mx-0 sm:mx-4 flex flex-col bg-cc-bg border border-cc-border rounded-t-xl sm:rounded-xl shadow-2xl overflow-hidden"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-cc-border">

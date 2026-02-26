@@ -301,7 +301,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               </button>
             ) : (
               <p className="text-xs text-cc-muted self-center">
-                Install service mode with <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">the-companion install</code> to enable one-click updates.
+                Install service mode with <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">campfire install</code> to enable one-click updates.
               </p>
             )}
           </div>

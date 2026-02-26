@@ -274,7 +274,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
   ) : (
     <div className="space-y-3">
       {jobs.map((job) => (
-        <div key={job.id} className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+        <div key={job.id} className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
           {/* Job header */}
           <div className="flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border">
             <span className="text-sm font-medium text-cc-fg flex-1 truncate">{job.name}</span>
@@ -426,7 +426,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
   );
 
   const createSection = (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+    <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
       <button
         onClick={() => setCreateCollapsed(!createCollapsed)}
         className="w-full flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border cursor-pointer hover:bg-cc-hover transition-colors"
@@ -493,7 +493,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
 
   const panel = (
     <div
-      className="w-full max-w-2xl max-h-[90dvh] sm:max-h-[80dvh] mx-0 sm:mx-4 flex flex-col bg-cc-bg border border-cc-border rounded-t-[14px] sm:rounded-[14px] shadow-2xl overflow-hidden"
+      className="w-full max-w-2xl max-h-[90dvh] sm:max-h-[80dvh] mx-0 sm:mx-4 flex flex-col bg-cc-bg border border-cc-border rounded-t-xl sm:rounded-xl shadow-2xl overflow-hidden"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-cc-border">
@@ -710,7 +710,7 @@ function JobForm({
             </svg>
           </button>
           {showModelDropdown && (
-            <div className="absolute left-0 bottom-full mb-1 w-52 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1">
+            <div className="absolute left-0 bottom-full mb-1 w-52 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1">
               {models.map((m) => (
                 <button
                   key={m.value}

@@ -335,8 +335,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const canSend = text.trim().length > 0 && isConnected;
 
   return (
-    <div className="shrink-0 border-t border-cc-border bg-cc-card px-2 sm:px-4 py-2 sm:py-3">
-      <div className="max-w-3xl mx-auto">
+    <div className="shrink-0 px-4 sm:px-6 pb-3 pt-1">
+      <div className="max-w-4xl mx-auto">
         {/* Image thumbnails */}
         {images.length > 0 && (
           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -345,13 +345,13 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 <img
                   src={`data:${img.mediaType};base64,${img.base64}`}
                   alt={img.name}
-                  className="w-12 h-12 rounded-lg object-cover border border-cc-border"
+                  className="w-10 h-10 rounded-md object-cover border border-cc-border"
                 />
                 <button
                   onClick={() => removeImage(i)}
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-cc-error text-white flex items-center justify-center text-[8px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                 >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-2 h-2">
                     <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
                   </svg>
                 </button>
@@ -370,15 +370,15 @@ export function Composer({ sessionId }: { sessionId: string }) {
           className="hidden"
         />
 
-        {/* Unified input card */}
-        <div className={`relative bg-cc-input-bg border rounded-[14px] overflow-visible transition-colors ${
+        {/* Terminal-style input */}
+        <div className={`relative bg-cc-card rounded-lg overflow-visible transition-all border ${
           isPlan
-            ? "border-cc-primary/40"
-            : "border-cc-border focus-within:border-cc-primary/30"
+            ? "border-cc-primary/25"
+            : "border-cc-border focus-within:border-cc-muted/20"
         }`}>
           {/* @-mention prompt menu */}
           {atMenuOpen && filteredPrompts.length > 0 && (
-            <div className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-20 py-1">
+            <div className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto bg-cc-card border border-cc-border rounded-lg shadow-lg z-20 py-1">
               {filteredPrompts.map((prompt, i) => (
                 <button
                   key={prompt.id}
@@ -404,7 +404,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
           {slashMenuOpen && filteredCommands.length > 0 && (
             <div
               ref={menuRef}
-              className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-20 py-1"
+              className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto bg-cc-card border border-cc-border rounded-lg shadow-lg z-20 py-1"
             >
               {filteredCommands.map((cmd, i) => (
                 <button
@@ -443,23 +443,23 @@ export function Composer({ sessionId }: { sessionId: string }) {
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isConnected ? "Type a message... (/ for commands, @ for prompts)" : "Waiting for CLI connection..."}
+            placeholder={isConnected ? "Type a message... (/ for commands, @ for prompts)" : "Waiting for connection..."}
             disabled={!isConnected}
             rows={1}
-            className="w-full px-4 pt-3 pb-1 text-base sm:text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50"
-            style={{ minHeight: "36px", maxHeight: "200px" }}
+            className="w-full px-3.5 pt-2.5 pb-1 text-[13px] bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted/50 disabled:opacity-40"
+            style={{ minHeight: "34px", maxHeight: "200px" }}
           />
 
           {/* Git branch + lines info */}
           {sessionData?.git_branch && (
-            <div className="flex items-center gap-2 px-2 sm:px-4 pb-1 text-[11px] text-cc-muted overflow-hidden">
+            <div className="flex items-center gap-2 px-3.5 pb-1 text-[10px] text-cc-muted/60 font-mono-code overflow-hidden">
               <span className="flex items-center gap-1 truncate min-w-0">
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0 opacity-60">
                   <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
                 </svg>
                 <span className="truncate max-w-[100px] sm:max-w-[160px]">{sessionData.git_branch}</span>
                 {sessionData.is_worktree && (
-                  <span className="text-[10px] bg-cc-primary/10 text-cc-primary px-1 rounded">worktree</span>
+                  <span className="text-[10px] bg-cc-hover text-cc-muted px-1 rounded">worktree</span>
                 )}
               </span>
               {((sessionData.git_ahead || 0) > 0 || (sessionData.git_behind || 0) > 0) && (
@@ -496,17 +496,17 @@ export function Composer({ sessionId }: { sessionId: string }) {
           )}
 
           {/* Bottom toolbar */}
-          <div className="flex items-center justify-between px-2.5 pb-2.5">
+          <div className="flex items-center justify-between px-2.5 pb-2">
             {/* Left: mode indicator */}
             <button
               onClick={toggleMode}
               disabled={!isConnected || isCodex}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-medium transition-all select-none ${
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono-code transition-all select-none ${
                 !isConnected || isCodex
-                  ? "opacity-30 cursor-not-allowed text-cc-muted"
+                  ? "opacity-25 cursor-not-allowed text-cc-muted"
                   : isPlan
                   ? "text-cc-primary hover:bg-cc-primary/10 cursor-pointer"
-                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                  : "text-cc-muted/60 hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
               }`}
               title={isCodex ? "Mode is fixed for Codex sessions" : "Toggle mode (Shift+Tab)"}
             >
@@ -546,26 +546,26 @@ export function Composer({ sessionId }: { sessionId: string }) {
               {isRunning ? (
                 <button
                   onClick={handleInterrupt}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg bg-cc-error/10 hover:bg-cc-error/20 text-cc-error transition-colors cursor-pointer"
+                  className="flex items-center justify-center w-7 h-7 rounded-md bg-cc-error/10 hover:bg-cc-error/20 text-cc-error transition-colors cursor-pointer"
                   title="Stop generation"
                 >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                    <rect x="3" y="3" width="10" height="10" rx="1" />
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                    <rect x="4" y="4" width="8" height="8" rx="1" />
                   </svg>
                 </button>
               ) : (
                 <button
                   onClick={handleSend}
                   disabled={!canSend}
-                  className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${
+                  className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
                     canSend
-                      ? "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
-                      : "bg-cc-hover text-cc-muted cursor-not-allowed"
+                      ? "bg-cc-fg text-cc-bg hover:opacity-80 cursor-pointer"
+                      : "bg-cc-hover text-cc-muted/40 cursor-not-allowed"
                   }`}
-                  title="Send message"
+                  title="Send message (Enter)"
                 >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                    <path d="M3 2l11 6-11 6V9.5l7-1.5-7-1.5V2z" />
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                    <path d="M8 2v10M4 8l4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                   </svg>
                 </button>
               )}

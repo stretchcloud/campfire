@@ -132,7 +132,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-[100dvh] flex font-sans-ui bg-cc-bg text-cc-fg antialiased">
+    <div className="h-[100dvh] flex font-sans-ui bg-cc-bg text-cc-fg antialiased text-[12.5px] leading-normal">
       {/* Mobile overlay backdrop */}
       {sidebarOpen && (
         <div
@@ -145,8 +145,8 @@ export default function App() {
       <div
         className={`
           fixed md:relative z-40 md:z-auto
-          h-full shrink-0 transition-all duration-200
-          ${sidebarOpen ? "w-[260px] translate-x-0" : "w-0 -translate-x-full md:w-0 md:-translate-x-full"}
+          h-full shrink-0 transition-all duration-150 ease-out
+          ${sidebarOpen ? "w-[232px] translate-x-0" : "w-0 -translate-x-full md:w-0 md:-translate-x-full"}
           overflow-hidden
         `}
       >
@@ -256,9 +256,9 @@ export default function App() {
           {isReplayPage && (
             <div className="absolute inset-0">
               {replaySessionMatch ? (
-                <SessionReplay sessionId={replaySessionMatch[1]} />
+                <SessionReplay key={`session-${replaySessionMatch[1]}`} sessionId={replaySessionMatch[1]} />
               ) : replayFileMatch ? (
-                <SessionReplay filename={replayFileMatch[1]} />
+                <SessionReplay key={`file-${replayFileMatch[1]}`} filename={replayFileMatch[1]} />
               ) : null}
             </div>
           )}
@@ -291,7 +291,7 @@ export default function App() {
           {/* Mobile overlay backdrop */}
           {taskPanelOpen && (
             <div
-              className="fixed inset-0 bg-black/30 z-30 lg:hidden"
+              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden"
               onClick={() => useStore.getState().setTaskPanelOpen(false)}
             />
           )}
@@ -299,8 +299,8 @@ export default function App() {
           <div
             className={`
               fixed lg:relative z-40 lg:z-auto right-0 top-0
-              h-full shrink-0 transition-all duration-200
-              ${taskPanelOpen ? "w-[280px] translate-x-0" : "w-0 translate-x-full lg:w-0 lg:translate-x-full"}
+              h-full shrink-0 transition-all duration-150 ease-out
+              ${taskPanelOpen ? "w-[264px] translate-x-0" : "w-0 translate-x-full lg:w-0 lg:translate-x-full"}
               overflow-hidden
             `}
           >

@@ -192,7 +192,7 @@ export function PublicReplayPage({ token }: Props) {
             <span className="text-lg font-semibold text-cc-fg">
               {gallery?.name || "Session Replay"}
             </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-cc-primary/10 text-cc-primary font-medium">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-cc-hover text-cc-muted font-medium">
               Public Replay
             </span>
           </div>

@@ -128,7 +128,7 @@ export function ClawHubBrowser({ onClose, embedded = false }: Props) {
           {results.map((skill) => (
             <div
               key={skill.name}
-              className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card"
+              className="border border-cc-border rounded-lg overflow-hidden bg-cc-card"
             >
               <div className="flex items-center gap-3 px-4 py-3">
                 <div className="flex-1 min-w-0">
