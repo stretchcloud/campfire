@@ -148,7 +148,7 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
             <button
               key={abs}
               onClick={() => handleFileSelect(abs)}
-              className={`flex items-center gap-2 w-full mx-1 px-2 py-1.5 text-[13px] rounded-[10px] hover:bg-cc-hover transition-colors cursor-pointer whitespace-nowrap ${
+              className={`flex items-center gap-2 w-full mx-1 px-2 py-1.5 text-[13px] rounded-lg hover:bg-cc-hover transition-colors cursor-pointer whitespace-nowrap ${
                 abs === selectedFile ? "bg-cc-active text-cc-fg" : "text-cc-fg/70"
               }`}
               style={{ width: "calc(100% - 8px)" }}

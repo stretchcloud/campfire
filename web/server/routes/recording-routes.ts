@@ -44,11 +44,42 @@ export function registerRecordingRoutes(api: Hono, deps: RouteDeps): void {
     const filePath = join(recorder.getRecordingsDir(), filename);
     try {
       const recording = loadRecording(filePath);
-      const browserEntries = filterEntries(recording.entries, "out", "browser");
-      const messages = browserEntries.map((e) => {
-        try { return JSON.parse(e.raw); } catch { return null; }
-      }).filter(Boolean);
-      const timestamps = browserEntries.map((e) => e.ts);
+
+      // Playable message types for the replay UI
+      const PLAYABLE_TYPES = new Set([
+        "assistant", "result", "user_message", "stream_event",
+        "permission_request", "permission_cancelled", "status_change",
+      ]);
+
+      // Collect outgoing browser messages (server→browser)
+      const outEntries = filterEntries(recording.entries, "out", "browser");
+      // Collect incoming browser messages (browser→server) for user_message
+      const inEntries = filterEntries(recording.entries, "in", "browser");
+
+      // Merge both channels chronologically, filtering to playable types
+      const merged: { ts: number; parsed: unknown }[] = [];
+      for (const e of outEntries) {
+        try {
+          const parsed = JSON.parse(e.raw);
+          if (PLAYABLE_TYPES.has(parsed.type)) {
+            merged.push({ ts: e.ts, parsed });
+          }
+        } catch { /* skip malformed */ }
+      }
+      for (const e of inEntries) {
+        try {
+          const parsed = JSON.parse(e.raw);
+          if (parsed.type === "user_message") {
+            merged.push({ ts: e.ts, parsed });
+          }
+        } catch { /* skip malformed */ }
+      }
+
+      // Sort by timestamp
+      merged.sort((a, b) => a.ts - b.ts);
+
+      const messages = merged.map((m) => m.parsed);
+      const timestamps = merged.map((m) => m.ts);
       return c.json({ header: recording.header, messages, timestamps });
     } catch (err: any) {
       return c.json({ error: err?.message || "Failed to load recording" }, 404);
