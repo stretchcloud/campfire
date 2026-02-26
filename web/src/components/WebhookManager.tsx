@@ -210,7 +210,7 @@ export function WebhookManager({ onClose, embedded = false }: Props) {
   ) : (
     <div className="space-y-3">
       {webhooks.map((wh) => (
-        <div key={wh.id} className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+        <div key={wh.id} className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
           {/* Webhook header */}
           <div className="flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border">
             <span className="text-sm font-medium text-cc-fg flex-1 truncate">{wh.name}</span>
@@ -366,7 +366,7 @@ export function WebhookManager({ onClose, embedded = false }: Props) {
   );
 
   const createSection = (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+    <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
       <button
         onClick={() => setCreateCollapsed(!createCollapsed)}
         className="w-full flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border cursor-pointer hover:bg-cc-hover transition-colors"
