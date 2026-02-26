@@ -64,7 +64,7 @@ export function GalleryCard({ entry, onVote, onDelete, onFeature, onExportClawHu
   const backendColor = BACKEND_COLORS[entry.backendType] || "text-cc-muted bg-cc-hover";
 
   return (
-    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card hover:border-cc-border-hover transition-colors">
+    <div className="border border-cc-border rounded-lg overflow-hidden bg-cc-card hover:border-cc-border-hover transition-colors">
       {/* Header */}
       <div className="flex items-start gap-2 px-3 py-2.5">
         {/* Vote buttons */}

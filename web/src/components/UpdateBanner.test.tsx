@@ -98,7 +98,7 @@ describe("UpdateBanner service mode", () => {
   it("shows install hint in foreground mode", () => {
     storeState.updateInfo = makeUpdateInfo({ isServiceMode: false });
     render(<UpdateBanner />);
-    expect(screen.getByText("the-companion install")).toBeTruthy();
+    expect(screen.getByText("campfire install")).toBeTruthy();
   });
 
   it("shows Updating... when update is in progress", () => {

@@ -1,40 +1,51 @@
 @import "tailwindcss";
 
-@theme {
-  /* Light Mode (default) */
-  --color-cc-bg: #F5F5F0;
-  --color-cc-fg: #1a1a18;
-  --color-cc-card: #FFFFFF;
-  --color-cc-primary: #ae5630;
-  --color-cc-primary-hover: #c4643a;
-  --color-cc-user-bubble: #DDD9CE;
-  --color-cc-border: rgba(0,0,0,0.15);
-  --color-cc-muted: #7d796e;
-  --color-cc-sidebar: #EDEAE2;
-  --color-cc-input-bg: #FFFFFF;
-  --color-cc-code-bg: #1e1e1e;
-  --color-cc-code-fg: #d4d4d4;
-  --color-cc-hover: rgba(0,0,0,0.07);
-  --color-cc-active: rgba(0,0,0,0.12);
-  --color-cc-success: #2d7d46;
-  --color-cc-error: #c53030;
-  --color-cc-warning: #b7791f;
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
 }
 
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --color-cc-bg: #FAFAFA;
+  --color-cc-fg: #09090B;
+  --color-cc-card: #FFFFFF;
+  --color-cc-primary: #5B5FC7;
+  --color-cc-primary-hover: #4B4FB5;
+  --color-cc-user-bubble: #F4F4F5;
+  --color-cc-border: rgba(0,0,0,0.06);
+  --color-cc-muted: #71717A;
+  --color-cc-sidebar: #F4F4F5;
+  --color-cc-input-bg: #FFFFFF;
+  --color-cc-code-bg: #18181B;
+  --color-cc-code-fg: #D4D4D8;
+  --color-cc-hover: rgba(0,0,0,0.03);
+  --color-cc-active: rgba(0,0,0,0.06);
+  --color-cc-success: #22C55E;
+  --color-cc-error: #EF4444;
+  --color-cc-warning: #F59E0B;
+}
+
+/* ─── Animations ──────────────────────────────────────────────────────────── */
+
 @keyframes fadeSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.25; }
 }
 
 @keyframes spin {
@@ -47,51 +58,68 @@
 }
 
 @keyframes name-appear {
-  0% {
-    opacity: 0;
-    filter: blur(8px);
-    transform: translateY(-2px);
-  }
-  50% {
-    opacity: 0.8;
-    filter: blur(2px);
-  }
-  100% {
-    opacity: 1;
-    filter: blur(0);
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-name-appear {
-  animation: name-appear 0.5s ease-out;
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
-/* Dark mode overrides */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes entry-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes breathing {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.animate-name-appear { animation: name-appear 0.2s ease-out; }
+.animate-slide-up { animation: slide-up 0.15s ease-out; }
+.animate-slide-down { animation: slide-down 0.12s ease-out; }
+.animate-entry-in { animation: entry-in 0.2s ease-out; }
+.animate-breathing { animation: breathing 2s ease-in-out infinite; }
+
+/* ─── Dark Mode ───────────────────────────────────────────────────────────── */
+
 .dark {
-  --color-cc-bg: #2b2a27;
-  --color-cc-fg: #eeeeee;
-  --color-cc-card: #1f1e1b;
-  --color-cc-primary: #ae5630;
-  --color-cc-primary-hover: #c4643a;
-  --color-cc-user-bubble: #393937;
-  --color-cc-border: rgba(255,255,255,0.08);
-  --color-cc-muted: #8a8780;
-  --color-cc-sidebar: #252422;
-  --color-cc-input-bg: #1f1e1b;
-  --color-cc-code-bg: #141413;
-  --color-cc-code-fg: #d4d4d4;
+  --color-cc-bg: #09090B;
+  --color-cc-fg: #FAFAFA;
+  --color-cc-card: #18181B;
+  --color-cc-primary: #818CF8;
+  --color-cc-primary-hover: #6366F1;
+  --color-cc-user-bubble: #27272A;
+  --color-cc-border: rgba(255,255,255,0.06);
+  --color-cc-muted: #A1A1AA;
+  --color-cc-sidebar: #0C0C0F;
+  --color-cc-input-bg: #18181B;
+  --color-cc-code-bg: #09090B;
+  --color-cc-code-fg: #D4D4D8;
   --color-cc-hover: rgba(255,255,255,0.04);
   --color-cc-active: rgba(255,255,255,0.07);
-  --color-cc-success: #48bb78;
-  --color-cc-error: #fc8181;
-  --color-cc-warning: #f6e05e;
+  --color-cc-success: #4ADE80;
+  --color-cc-error: #F87171;
+  --color-cc-warning: #FBBF24;
 }
 
-/* Scrollbar styling */
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -100,28 +128,30 @@
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-cc-muted);
-  border-radius: 3px;
-  opacity: 0.4;
+  border-radius: 100px;
+  opacity: 0.15;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  opacity: 0.6;
+  opacity: 0.3;
 }
 
-/* Typography families */
+/* ─── Typography ──────────────────────────────────────────────────────────── */
+
 .font-serif-assistant {
-  font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  font-family: "Geist", system-ui, -apple-system, sans-serif;
 }
 
 .font-sans-ui {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: "Geist", system-ui, -apple-system, sans-serif;
 }
 
 .font-mono-code {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* Eliminate 300ms tap delay on interactive elements */
+/* ─── Interaction ─────────────────────────────────────────────────────────── */
+
 button,
 [role="button"],
 a,
@@ -131,12 +161,98 @@ select {
   touch-action: manipulation;
 }
 
+:focus-visible {
+  outline: 1.5px solid var(--color-cc-primary);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* ─── Utility Classes ─────────────────────────────────────────────────────── */
+
+.shadow-panel {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 2px 8px rgba(0, 0, 0, 0.03);
+}
+.dark .shadow-panel {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.shadow-float {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    0 12px 40px rgba(0, 0, 0, 0.06);
+}
+.dark .shadow-float {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Log-style entry indicator — left border accent for assistant messages */
+.log-accent {
+  position: relative;
+  padding-left: 12px;
+}
+.log-accent::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-cc-primary);
+  opacity: 0.35;
+}
+
+/* User entry accent — muted left border */
+.log-user {
+  position: relative;
+  padding-left: 12px;
+}
+.log-user::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-cc-muted);
+  opacity: 0.2;
+}
+
+/* Tool entry accent */
+.log-tool {
+  position: relative;
+  padding-left: 12px;
+}
+.log-tool::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-cc-muted);
+  opacity: 0.12;
+}
+
 /* ─── DiffViewer ──────────────────────────────────────────────────────────── */
+
 .diff-viewer {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
-  border-radius: 10px;
+  border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--color-cc-border);
   background: var(--color-cc-code-bg);
@@ -163,8 +279,8 @@ select {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  background: rgba(0,0,0,0.15);
+  padding: 4px 12px;
+  background: rgba(0,0,0,0.1);
   font-size: 11px;
   border-bottom: 1px solid var(--color-cc-border);
   position: sticky;
@@ -172,13 +288,13 @@ select {
   z-index: 1;
 }
 .dark .diff-file-header {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.03);
 }
 .diff-hunk-header {
-  padding: 4px 12px;
-  color: var(--color-cc-primary);
+  padding: 2px 12px;
+  color: var(--color-cc-muted);
   font-size: 11px;
-  background: rgba(174, 86, 48, 0.06);
+  background: rgba(91, 95, 199, 0.04);
 }
 .diff-line {
   display: flex;
@@ -190,7 +306,7 @@ select {
   text-align: right;
   padding: 0 6px;
   color: var(--color-cc-muted);
-  opacity: 0.5;
+  opacity: 0.35;
   user-select: none;
   font-size: 11px;
 }
@@ -208,36 +324,36 @@ select {
   padding-right: 12px;
 }
 .diff-line-add {
-  background: rgba(45, 125, 70, 0.1);
+  background: rgba(34, 197, 94, 0.06);
 }
 .diff-line-add .diff-marker {
   color: var(--color-cc-success);
 }
 .diff-line-del {
-  background: rgba(197, 48, 48, 0.1);
+  background: rgba(239, 68, 68, 0.06);
 }
 .diff-line-del .diff-marker {
   color: var(--color-cc-error);
 }
 .dark .diff-line-add {
-  background: rgba(72, 187, 120, 0.08);
+  background: rgba(74, 222, 128, 0.06);
 }
 .dark .diff-line-del {
-  background: rgba(252, 129, 129, 0.08);
+  background: rgba(248, 113, 113, 0.06);
 }
 .diff-word-add {
-  background: rgba(45, 125, 70, 0.25);
+  background: rgba(34, 197, 94, 0.18);
   border-radius: 2px;
   padding: 0 1px;
 }
 .diff-word-del {
-  background: rgba(197, 48, 48, 0.25);
+  background: rgba(239, 68, 68, 0.18);
   border-radius: 2px;
   padding: 0 1px;
 }
 .dark .diff-word-add {
-  background: rgba(72, 187, 120, 0.2);
+  background: rgba(74, 222, 128, 0.14);
 }
 .dark .diff-word-del {
-  background: rgba(252, 129, 129, 0.2);
+  background: rgba(248, 113, 113, 0.14);
 }

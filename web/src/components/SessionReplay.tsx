@@ -33,9 +33,9 @@ function extractTextFromBlocks(blocks: ContentBlock[]): string {
 }
 
 /**
- * Convert a raw BrowserIncomingMessage to a ChatMessage (same logic as ws.ts message_history handler).
+ * Convert a single raw BrowserIncomingMessage to a ChatMessage.
  */
-function convertToChat(msg: any, index: number): ChatMessage | null {
+function convertToChat(msg: any, _index: number): ChatMessage | null {
   if (msg.type === "user_message") {
     return {
       id: msg.id || nextId(),
@@ -62,7 +62,7 @@ function convertToChat(msg: any, index: number): ChatMessage | null {
     const r = msg.data;
     if (r?.is_error && r.errors?.length) {
       return {
-        id: `replay-error-${index}`,
+        id: `replay-error-${_index}`,
         role: "system",
         content: `Error: ${r.errors.join(", ")}`,
         timestamp: 0,
@@ -70,6 +70,83 @@ function convertToChat(msg: any, index: number): ChatMessage | null {
     }
   }
   return null;
+}
+
+/**
+ * Process an array of raw recording messages into ChatMessages.
+ * Handles stream_event accumulation: stream events between assistant messages
+ * are combined into the preceding assistant message's content, or synthesized
+ * as standalone messages if no assistant message precedes them.
+ */
+function convertAllToChat(messages: any[]): ChatMessage[] {
+  const result: ChatMessage[] = [];
+  let streamingText = "";
+  let streamingId: string | null = null;
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+
+    if (msg.type === "stream_event") {
+      // Accumulate streaming text from content_block_delta events
+      const evt = msg.event;
+      if (evt?.type === "message_start") {
+        // New message starting — flush any pending stream
+        if (streamingText && streamingId) {
+          const last = result.find((m) => m.id === streamingId);
+          if (last) {
+            last.content = streamingText;
+          }
+        }
+        streamingText = "";
+        streamingId = null;
+      } else if (evt?.type === "content_block_delta") {
+        const delta = evt.delta;
+        if (delta?.type === "text_delta" && delta.text) {
+          streamingText += delta.text;
+        }
+      }
+      continue;
+    }
+
+    // For assistant messages, attach any accumulated streaming text
+    if (msg.type === "assistant") {
+      const cm = convertToChat(msg, i);
+      if (cm) {
+        // If the assistant message has no text content but we accumulated stream text,
+        // use the streamed text as content
+        if (!cm.content && streamingText) {
+          cm.content = streamingText;
+        }
+        streamingId = cm.id;
+        result.push(cm);
+      }
+      streamingText = "";
+      continue;
+    }
+
+    // Flush pending stream text before non-stream messages
+    if (streamingText && streamingId) {
+      const last = result.find((m) => m.id === streamingId);
+      if (last && !last.content) {
+        last.content = streamingText;
+      }
+      streamingText = "";
+      streamingId = null;
+    }
+
+    const cm = convertToChat(msg, i);
+    if (cm) result.push(cm);
+  }
+
+  // Final flush
+  if (streamingText && streamingId) {
+    const last = result.find((m) => m.id === streamingId);
+    if (last && !last.content) {
+      last.content = streamingText;
+    }
+  }
+
+  return result;
 }
 
 // ─── Speed Options ──────────────────────────────────────────────────────────
@@ -133,14 +210,14 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
           const data = await api.getRecording(filename);
           if (cancelled) return;
           setHeader(data.header as unknown as RecordingHeader);
-          timestamps.current = data.timestamps;
 
-          // Convert all messages to ChatMessages
-          const chatMsgs: ChatMessage[] = [];
-          for (let i = 0; i < data.messages.length; i++) {
-            const cm = convertToChat(data.messages[i], i);
-            if (cm) chatMsgs.push(cm);
-          }
+          // Use stateful converter that handles stream_event accumulation
+          const chatMsgs = convertAllToChat(data.messages);
+          // Build timestamps: map each chat message to the timestamp of the
+          // closest raw message by matching indices proportionally
+          const rawTs = data.timestamps;
+          const step = rawTs.length > 1 ? rawTs.length / Math.max(chatMsgs.length, 1) : 1;
+          timestamps.current = chatMsgs.map((_, i) => rawTs[Math.min(Math.round(i * step), rawTs.length - 1)] || 0);
           allMessages.current = chatMsgs;
           setTotalMessages(chatMsgs.length);
         } else if (sessionId) {
@@ -155,11 +232,7 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
             });
           }
 
-          const chatMsgs: ChatMessage[] = [];
-          for (let i = 0; i < data.messages.length; i++) {
-            const cm = convertToChat(data.messages[i], i);
-            if (cm) chatMsgs.push(cm);
-          }
+          const chatMsgs = convertAllToChat(data.messages);
           allMessages.current = chatMsgs;
           setTotalMessages(chatMsgs.length);
         }
@@ -323,6 +396,20 @@ export function SessionReplay({ filename, sessionId }: SessionReplayProps) {
       <div className="flex flex-col items-center justify-center h-full gap-4 text-cc-text-secondary">
         <p className="text-red-400">Failed to load replay: {error}</p>
         <button onClick={close} className="px-4 py-2 bg-cc-border rounded hover:bg-cc-hover transition-colors">
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  if (!loading && totalMessages === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-cc-muted">
+        <p className="text-sm">This recording contains no playable messages.</p>
+        <p className="text-xs text-cc-muted/60">
+          It may be a reconnect or initialization-only recording.
+        </p>
+        <button onClick={close} className="px-4 py-2 bg-cc-border rounded hover:bg-cc-hover transition-colors text-sm">
           Go Back
         </button>
       </div>

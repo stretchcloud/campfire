@@ -100,7 +100,7 @@ export function AdapterManager({ embedded = false }: Props) {
       {adapters.map((adapter) => {
         const m = adapter.metadata;
         return (
-          <div key={m.name} className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+          <div key={m.name} className="border border-cc-border rounded-lg overflow-hidden bg-cc-card">
             {/* Header */}
             <div className="flex items-center gap-2 px-3 py-2.5 bg-cc-card border-b border-cc-border">
               <span className="text-sm font-medium text-cc-fg flex-1 truncate">{m.displayName}</span>
