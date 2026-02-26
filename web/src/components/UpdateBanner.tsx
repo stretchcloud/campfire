@@ -50,7 +50,7 @@ export function UpdateBanner() {
         <span className="text-xs text-cc-muted">
           Run{" "}
           <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">
-            the-companion install
+            campfire install
           </code>{" "}
           for auto-updates
         </span>

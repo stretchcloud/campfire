@@ -598,6 +598,17 @@ export class WsBridge {
         session.messageHistory.push({ ...msg, timestamp: msg.timestamp || Date.now() });
         this.persistSession(session);
       } else if (msg.type === "result") {
+        // For adapter-originated results, persist cost/turns into session.state
+        // so they survive reconnects (mirrors handleResultMessage for Claude CLI).
+        const resultData = (msg as { data?: CLIResultMessage }).data;
+        if (resultData) {
+          if (typeof resultData.total_cost_usd === "number") {
+            session.state.total_cost_usd = resultData.total_cost_usd;
+          }
+          if (typeof resultData.num_turns === "number") {
+            session.state.num_turns = resultData.num_turns;
+          }
+        }
         session.messageHistory.push(msg);
         this.persistSession(session);
       }
