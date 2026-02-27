@@ -572,6 +572,7 @@ export function Playground() {
       git_behind: 0,
       total_lines_added: 142,
       total_lines_removed: 38,
+      total_duration_api_ms: 0,
     };
 
     store.addSession(session);
@@ -1784,6 +1785,7 @@ function CodexPlaygroundDemo() {
       git_behind: 0,
       total_lines_added: 0,
       total_lines_removed: 0,
+      total_duration_api_ms: 0,
       codex_rate_limits: {
         primary: { usedPercent: 62, windowDurationMins: 300, resetsAt: Date.now() + 2 * 3_600_000 },
         secondary: { usedPercent: 18, windowDurationMins: 10080, resetsAt: Date.now() + 5 * 86_400_000 },
@@ -1848,6 +1850,7 @@ function ClaudePlaygroundDemo() {
       git_behind: 0,
       total_lines_added: 142,
       total_lines_removed: 23,
+      total_duration_api_ms: 45_000,
       claude_token_details: {
         inputTokens: 125_400,
         outputTokens: 18_200,
@@ -2031,6 +2034,7 @@ function PlaygroundSpectatorBanner() {
       git_behind: 0,
       total_lines_added: 0,
       total_lines_removed: 0,
+      total_duration_api_ms: 0,
     });
     store.setMyRole(SPECTATOR_SESSION, "spectator");
 

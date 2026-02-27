@@ -568,7 +568,6 @@ function CostCardSection({ sessionId }: { sessionId: string }) {
   const session = useStore((s) => s.sessions.get(sessionId));
   const sessionName = useStore((s) => s.sessionNames.get(sessionId) ?? `Session ${sessionId.slice(0, 8)}`);
   const status = useStore((s) => s.sessionStatus.get(sessionId));
-  const startTime = useStore((s) => s.sessionStartTimes.get(sessionId));
 
   if (!session) return null;
 
@@ -578,7 +577,8 @@ function CostCardSection({ sessionId }: { sessionId: string }) {
   // Only show when the session is idle and has completed at least one turn
   if (status !== "idle" || turns === 0) return null;
 
-  const durationMs = startTime ? Date.now() - startTime : 0;
+  // Use accumulated API duration from result messages (actual work time, not wall clock)
+  const durationMs = session.total_duration_api_ms ?? 0;
 
   return (
     <CostCard
