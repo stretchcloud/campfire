@@ -271,6 +271,8 @@ export interface SessionState {
   git_behind: number;
   total_lines_added: number;
   total_lines_removed: number;
+  /** Cumulative API duration across all turns (from result.duration_api_ms). */
+  total_duration_api_ms: number;
   // Codex-specific token details (forwarded from thread/tokenUsage/updated)
   codex_token_details?: {
     inputTokens: number;

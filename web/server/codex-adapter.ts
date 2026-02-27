@@ -619,6 +619,7 @@ export class CodexAdapter implements AgentAdapter {
         git_behind: 0,
         total_lines_added: 0,
         total_lines_removed: 0,
+      total_duration_api_ms: 0,
       };
 
       this.emit({ type: "session_init", session: state });

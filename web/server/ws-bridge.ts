@@ -137,6 +137,7 @@ function makeDefaultState(sessionId: string, backendType: BackendType = "claude"
     git_behind: 0,
     total_lines_added: 0,
     total_lines_removed: 0,
+    total_duration_api_ms: 0,
   };
 }
 
@@ -182,6 +183,62 @@ function resolveGitInfo(state: SessionState): void {
     } catch {
       state.git_ahead = 0;
       state.git_behind = 0;
+    }
+
+    // Compute lines added/removed: committed changes (vs upstream/main) + uncommitted
+    try {
+      let totalAdded = 0;
+      let totalRemoved = 0;
+
+      // 1) Committed changes: diff from merge-base with upstream or main/master
+      //    This captures all commits the session has made on this branch.
+      let baseRef = "";
+      try {
+        // Try upstream tracking branch first
+        baseRef = execSync("git rev-parse --abbrev-ref @{upstream}", {
+          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+        }).trim();
+      } catch {
+        // No upstream — try main or master
+        for (const candidate of ["main", "master"]) {
+          try {
+            execSync(`git rev-parse --verify ${candidate}`, {
+              cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+            });
+            baseRef = candidate;
+            break;
+          } catch { /* try next */ }
+        }
+      }
+
+      if (baseRef) {
+        try {
+          const mergeBase = execSync(`git merge-base ${baseRef} HEAD`, {
+            cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+          }).trim();
+          const committedStat = execSync(`git diff --shortstat ${mergeBase} HEAD`, {
+            cwd: state.cwd, encoding: "utf-8", timeout: 5000,
+          }).trim();
+          const cInsert = committedStat.match(/(\d+) insertion/);
+          const cDelete = committedStat.match(/(\d+) deletion/);
+          totalAdded += cInsert ? parseInt(cInsert[1], 10) : 0;
+          totalRemoved += cDelete ? parseInt(cDelete[1], 10) : 0;
+        } catch { /* merge-base can fail for unrelated histories */ }
+      }
+
+      // 2) Uncommitted changes (staged + unstaged) on top of HEAD
+      const uncommittedStat = execSync("git diff --shortstat HEAD", {
+        cwd: state.cwd, encoding: "utf-8", timeout: 5000,
+      }).trim();
+      const uInsert = uncommittedStat.match(/(\d+) insertion/);
+      const uDelete = uncommittedStat.match(/(\d+) deletion/);
+      totalAdded += uInsert ? parseInt(uInsert[1], 10) : 0;
+      totalRemoved += uDelete ? parseInt(uDelete[1], 10) : 0;
+
+      state.total_lines_added = totalAdded;
+      state.total_lines_removed = totalRemoved;
+    } catch {
+      // git diff can fail if there's no HEAD commit yet
     }
   } catch {
     // Not a git repo or git not available
@@ -419,6 +476,8 @@ export class WsBridge {
       repo_root: session.state.repo_root,
       git_ahead: session.state.git_ahead,
       git_behind: session.state.git_behind,
+      total_lines_added: session.state.total_lines_added,
+      total_lines_removed: session.state.total_lines_removed,
     };
 
     resolveGitInfo(session.state);
@@ -428,6 +487,12 @@ export class WsBridge {
       if (session.state[key] !== before[key]) {
         changed = true;
         break;
+      }
+    }
+    if (!changed) {
+      if (session.state.total_lines_added !== before.total_lines_added ||
+          session.state.total_lines_removed !== before.total_lines_removed) {
+        changed = true;
       }
     }
 
@@ -441,6 +506,9 @@ export class WsBridge {
             repo_root: session.state.repo_root,
             git_ahead: session.state.git_ahead,
             git_behind: session.state.git_behind,
+            total_lines_added: session.state.total_lines_added,
+            total_lines_removed: session.state.total_lines_removed,
+            total_duration_api_ms: session.state.total_duration_api_ms,
           },
         });
       }
@@ -581,7 +649,37 @@ export class WsBridge {
     // Forward translated messages to browsers
     adapter.onBrowserMessage((msg) => {
       if (msg.type === "session_init") {
+        // Preserve persisted cost/turns when adapter reinitializes with zero values
+        // (happens on server restart — fresh adapter has no cost history).
+        const preservedCost = session.state.total_cost_usd || 0;
+        const preservedTurns = session.state.num_turns || 0;
+        const preservedDuration = session.state.total_duration_api_ms || 0;
+        const preservedLinesAdded = session.state.total_lines_added || 0;
+        const preservedLinesRemoved = session.state.total_lines_removed || 0;
+        const preservedCodexDetails = session.state.codex_token_details;
+        const preservedClaudeDetails = session.state.claude_token_details;
         session.state = { ...session.state, ...msg.session, backend_type: backendType };
+        if (!session.state.total_cost_usd && preservedCost > 0) {
+          session.state.total_cost_usd = preservedCost;
+        }
+        if (!session.state.num_turns && preservedTurns > 0) {
+          session.state.num_turns = preservedTurns;
+        }
+        if (!session.state.total_duration_api_ms && preservedDuration > 0) {
+          session.state.total_duration_api_ms = preservedDuration;
+        }
+        if (!session.state.total_lines_added && preservedLinesAdded > 0) {
+          session.state.total_lines_added = preservedLinesAdded;
+        }
+        if (!session.state.total_lines_removed && preservedLinesRemoved > 0) {
+          session.state.total_lines_removed = preservedLinesRemoved;
+        }
+        if (!session.state.codex_token_details && preservedCodexDetails) {
+          session.state.codex_token_details = preservedCodexDetails;
+        }
+        if (!session.state.claude_token_details && preservedClaudeDetails) {
+          session.state.claude_token_details = preservedClaudeDetails;
+        }
         this.refreshGitInfo(session, { notifyPoller: true });
         this.persistSession(session);
       } else if (msg.type === "session_update") {
@@ -756,6 +854,16 @@ export class WsBridge {
 
     // Refresh git state on browser connect so branch changes made mid-session are reflected.
     this.refreshGitInfo(session, { notifyPoller: true });
+
+    // Fallback: if git didn't produce line counts, compute from tool blocks
+    if (!session.state.total_lines_added && !session.state.total_lines_removed) {
+      const { added, removed } = this.computeLinesFromToolBlocks(session);
+      if (added > 0 || removed > 0) {
+        session.state.total_lines_added = added;
+        session.state.total_lines_removed = removed;
+        this.persistSession(session);
+      }
+    }
 
     // Send current session state as snapshot
     const snapshot: BrowserIncomingMessage = {
@@ -990,10 +1098,68 @@ export class WsBridge {
     }
   }
 
+  /**
+   * Compute lines added/removed by scanning tool_use blocks in message history.
+   * Handles Claude (Write/Edit), Codex (Bash heredocs), and other backends.
+   * Used as fallback when git-based line counting isn't available (non-git repos).
+   */
+  private computeLinesFromToolBlocks(session: Session): { added: number; removed: number } {
+    let added = 0;
+    let removed = 0;
+
+    // Regex to extract heredoc content from: cat > file <<'EOF'\n...\nEOF
+    // Matches both <<'EOF' and <<EOF variants
+    const heredocRe = /cat\s+>\s+\S+\s+<<'?EOF'?\n([\s\S]*?)\nEOF/g;
+
+    for (const histMsg of session.messageHistory) {
+      if ((histMsg as any).type !== "assistant") continue;
+      const msg = histMsg as any;
+      const content = msg.message?.content;
+      if (!Array.isArray(content)) continue;
+
+      for (const block of content) {
+        if (block.type !== "tool_use") continue;
+        const input = block.input as Record<string, unknown>;
+
+        if (block.name === "Write" && typeof input.content === "string") {
+          // Write creates a new file — all lines are additions
+          const lines = (input.content as string).split("\n").length;
+          added += lines;
+        } else if (block.name === "Edit" && typeof input.old_string === "string" && typeof input.new_string === "string") {
+          // Claude Edit: replaces old_string with new_string
+          const oldLines = (input.old_string as string).split("\n").length;
+          const newLines = (input.new_string as string).split("\n").length;
+          if (newLines > oldLines) {
+            added += newLines - oldLines;
+          } else if (oldLines > newLines) {
+            removed += oldLines - newLines;
+          }
+        } else if (block.name === "Bash" && typeof input.command === "string") {
+          // Codex often creates files via: cat > file <<'EOF'\n...\nEOF
+          const cmd = input.command as string;
+          let match: RegExpExecArray | null;
+          heredocRe.lastIndex = 0;
+          while ((match = heredocRe.exec(cmd)) !== null) {
+            const heredocContent = match[1];
+            added += heredocContent.split("\n").length;
+          }
+        }
+      }
+    }
+
+    return { added, removed };
+  }
+
   private handleResultMessage(session: Session, msg: CLIResultMessage) {
     // Update session cost/turns
     session.state.total_cost_usd = msg.total_cost_usd;
     session.state.num_turns = msg.num_turns;
+
+    // Accumulate API duration across turns
+    if (typeof msg.duration_api_ms === "number" && msg.duration_api_ms > 0) {
+      session.state.total_duration_api_ms =
+        (session.state.total_duration_api_ms || 0) + msg.duration_api_ms;
+    }
 
     // Update lines changed (CLI may send these in result)
     if (typeof msg.total_lines_added === "number") {
@@ -1031,8 +1197,28 @@ export class WsBridge {
       };
     }
 
-    // Re-check git state after each turn in case branch moved during the session.
+    // Re-check git state after each turn (also computes lines added/removed).
     this.refreshGitInfo(session, { broadcastUpdate: true, notifyPoller: true });
+
+    // Fallback: if git didn't produce line counts (non-git repo or no commits),
+    // compute from Edit/Write tool blocks in message history.
+    if (!session.state.total_lines_added && !session.state.total_lines_removed) {
+      const { added, removed } = this.computeLinesFromToolBlocks(session);
+      if (added > 0 || removed > 0) {
+        session.state.total_lines_added = added;
+        session.state.total_lines_removed = removed;
+      }
+    }
+
+    // Always push updated stats to browsers (duration, lines may not trigger git change detection)
+    this.broadcastToBrowsers(session, {
+      type: "session_update",
+      session: {
+        total_duration_api_ms: session.state.total_duration_api_ms,
+        total_lines_added: session.state.total_lines_added,
+        total_lines_removed: session.state.total_lines_removed,
+      },
+    });
 
     const browserMsg: BrowserIncomingMessage = {
       type: "result",
