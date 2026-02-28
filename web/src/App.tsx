@@ -39,7 +39,16 @@ function useHash() {
 export default function App() {
   const darkMode = useStore((s) => s.darkMode);
   const currentSessionId = useStore((s) => s.currentSessionId);
-  const sidebarOpen = useStore((s) => s.sidebarOpen);
+  const isSpectator = useStore((s) => {
+    const sid = s.currentSessionId;
+    if (!sid) return false;
+    return (s.myRole.get(sid) ?? null) === "spectator";
+  });
+  const sidebarOpen = useStore((s) => {
+    const sid = s.currentSessionId;
+    if (sid && (s.myRole.get(sid) ?? null) === "spectator") return false;
+    return s.sidebarOpen;
+  });
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
@@ -93,6 +102,13 @@ export default function App() {
     setInviteJoinInProgress(true);
   }
 
+  // Spectators can only view their session — redirect any other navigation back
+  useEffect(() => {
+    if (isSpectator && !isSessionView && !isJoinHash) {
+      window.location.hash = "";
+    }
+  }, [isSpectator, isSessionView, isJoinHash]);
+
   // Handle invite join links: #/join/:token
   useEffect(() => {
     const match = hash.match(/^#\/join\/(.+)$/);
@@ -134,24 +150,26 @@ export default function App() {
   return (
     <div className="h-[100dvh] flex font-sans-ui bg-cc-bg text-cc-fg antialiased text-[12.5px] leading-normal">
       {/* Mobile overlay backdrop */}
-      {sidebarOpen && (
+      {sidebarOpen && !isSpectator && (
         <div
           className="fixed inset-0 bg-black/30 z-30 md:hidden"
           onClick={() => useStore.getState().setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar — overlay on mobile, inline on desktop */}
-      <div
-        className={`
-          fixed md:relative z-40 md:z-auto
-          h-full shrink-0 transition-all duration-150 ease-out
-          ${sidebarOpen ? "w-[232px] translate-x-0" : "w-0 -translate-x-full md:w-0 md:-translate-x-full"}
-          overflow-hidden
-        `}
-      >
-        <Sidebar />
-      </div>
+      {/* Sidebar — hidden for spectators, overlay on mobile, inline on desktop */}
+      {!isSpectator && (
+        <div
+          className={`
+            fixed md:relative z-40 md:z-auto
+            h-full shrink-0 transition-all duration-150 ease-out
+            ${sidebarOpen ? "w-[232px] translate-x-0" : "w-0 -translate-x-full md:w-0 md:-translate-x-full"}
+            overflow-hidden
+          `}
+        >
+          <Sidebar />
+        </div>
+      )}
 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
