@@ -47,6 +47,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const sessionData = useStore((s) => s.sessions.get(sessionId));
   const previousMode = useStore((s) => s.previousPermissionMode.get(sessionId) || "acceptEdits");
 
+  const myRole = useStore((s) => s.myRole.get(sessionId) ?? "spectator");
+  const isSpectator = myRole === "spectator";
   const isConnected = cliConnected.get(sessionId) ?? false;
   const currentMode = sessionData?.permissionMode || "acceptEdits";
   const isPlan = currentMode === "plan";
@@ -173,7 +175,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
   function handleSend() {
     const msg = text.trim();
-    if (!msg || !isConnected) return;
+    if (!msg || !isConnected || isSpectator) return;
 
     sendToSession(sessionId, {
       type: "user_message",
@@ -279,6 +281,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }
 
   function handleInterrupt() {
+    if (isSpectator) return;
     sendToSession(sessionId, { type: "interrupt" });
   }
 
@@ -317,7 +320,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }
 
   function toggleMode() {
-    if (!isConnected || isCodex) return;
+    if (!isConnected || isCodex || isSpectator) return;
     const store = useStore.getState();
     if (!isPlan) {
       store.setPreviousPermissionMode(sessionId, currentMode);
@@ -332,7 +335,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
   const sessionStatus = useStore((s) => s.sessionStatus);
   const isRunning = sessionStatus.get(sessionId) === "running";
-  const canSend = text.trim().length > 0 && isConnected;
+  const canSend = text.trim().length > 0 && isConnected && !isSpectator;
 
   return (
     <div className="shrink-0 px-4 sm:px-6 pb-3 pt-1">
@@ -443,8 +446,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isConnected ? "Type a message... (/ for commands, @ for prompts)" : "Waiting for connection..."}
-            disabled={!isConnected}
+            placeholder={isSpectator ? "Spectators cannot send messages" : isConnected ? "Type a message... (/ for commands, @ for prompts)" : "Waiting for connection..."}
+            disabled={!isConnected || isSpectator}
             rows={1}
             className="w-full px-3.5 pt-2.5 pb-1 text-[13px] bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted/50 disabled:opacity-40"
             style={{ minHeight: "34px", maxHeight: "200px" }}
@@ -500,9 +503,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
             {/* Left: mode indicator */}
             <button
               onClick={toggleMode}
-              disabled={!isConnected || isCodex}
+              disabled={!isConnected || isCodex || isSpectator}
               className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono-code transition-all select-none ${
-                !isConnected || isCodex
+                !isConnected || isCodex || isSpectator
                   ? "opacity-25 cursor-not-allowed text-cc-muted"
                   : isPlan
                   ? "text-cc-primary hover:bg-cc-primary/10 cursor-pointer"
@@ -528,9 +531,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
             <div className="flex items-center gap-1">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={!isConnected}
+                disabled={!isConnected || isSpectator}
                 className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
-                  isConnected
+                  isConnected && !isSpectator
                     ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
                     : "text-cc-muted opacity-30 cursor-not-allowed"
                 }`}
@@ -546,8 +549,13 @@ export function Composer({ sessionId }: { sessionId: string }) {
               {isRunning ? (
                 <button
                   onClick={handleInterrupt}
-                  className="flex items-center justify-center w-7 h-7 rounded-md bg-cc-error/10 hover:bg-cc-error/20 text-cc-error transition-colors cursor-pointer"
-                  title="Stop generation"
+                  disabled={isSpectator}
+                  className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+                    isSpectator
+                      ? "bg-cc-hover text-cc-muted/40 cursor-not-allowed"
+                      : "bg-cc-error/10 hover:bg-cc-error/20 text-cc-error cursor-pointer"
+                  }`}
+                  title={isSpectator ? "Spectators cannot interrupt" : "Stop generation"}
                 >
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
                     <rect x="4" y="4" width="8" height="8" rx="1" />
