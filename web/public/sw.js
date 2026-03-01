@@ -1,5 +1,5 @@
 // Campfire Service Worker — caching + push notifications
-const CACHE_NAME = "campfire-v1";
+const CACHE_NAME = "campfire-v2";
 
 // Assets to pre-cache on install (shell resources)
 const PRECACHE_URLS = [

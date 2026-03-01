@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { DiffViewer } from "./DiffViewer.js";
@@ -11,9 +13,12 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
   const changedFilesSet = useStore((s) => s.changedFiles.get(sessionId));
 
   const cwd = session?.cwd || sdkSession?.cwd;
+  const gitStartCommit = session?.git_start_commit;
 
   const [diffContent, setDiffContent] = useState<string>("");
   const [diffLoading, setDiffLoading] = useState(false);
+  const [fileExists, setFileExists] = useState(true);
+  const [viewMode, setViewMode] = useState<"diff" | "raw">("diff");
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 640 : true,
   );
@@ -47,26 +52,29 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (!selectedFile) {
       setDiffContent("");
+      setFileExists(true);
       return;
     }
     let cancelled = false;
     setDiffLoading(true);
     api
-      .getFileDiff(selectedFile)
+      .getFileDiff(selectedFile, { base: gitStartCommit, knownChanged: true, sessionId })
       .then((res) => {
         if (!cancelled) {
           setDiffContent(res.diff);
+          setFileExists(res.exists !== false);
           setDiffLoading(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setDiffContent("");
+          setFileExists(true);
           setDiffLoading(false);
         }
       });
     return () => { cancelled = true; };
-  }, [selectedFile]);
+  }, [selectedFile, gitStartCommit, sessionId]);
 
   const handleFileSelect = useCallback(
     (path: string) => {
@@ -82,6 +90,17 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
     if (!selectedFile || !cwd) return selectedFile;
     return selectedFile.startsWith(cwd + "/") ? selectedFile.slice(cwd.length + 1) : selectedFile;
   }, [selectedFile, cwd]);
+
+  const rawDiffMarkdown = useMemo(() => {
+    if (!diffContent.trim()) return "";
+    const matches = diffContent.match(/`+/g) ?? [];
+    let maxRun = 0;
+    for (const run of matches) {
+      if (run.length > maxRun) maxRun = run.length;
+    }
+    const fence = "`".repeat(Math.max(3, maxRun + 1));
+    return `${fence}diff\n${diffContent}\n${fence}`;
+  }, [diffContent]);
 
   if (!cwd) {
     return (
@@ -191,8 +210,22 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
               </span>
             </div>
             <span className="text-cc-muted text-[11px] shrink-0 hidden sm:inline">
-              Compared to default branch
+              Compared to session start
             </span>
+            <div className="ml-2 hidden sm:flex items-center gap-1 rounded-md bg-cc-bg border border-cc-border p-0.5 text-[11px]">
+              <button
+                onClick={() => setViewMode("diff")}
+                className={`px-2 py-0.5 rounded ${viewMode === "diff" ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg"}`}
+              >
+                Diff
+              </button>
+              <button
+                onClick={() => setViewMode("raw")}
+                className={`px-2 py-0.5 rounded ${viewMode === "raw" ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg"}`}
+              >
+                Raw
+              </button>
+            </div>
           </div>
         )}
 
@@ -204,7 +237,27 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
             </div>
           ) : selectedFile ? (
             <div className="p-4">
-              <DiffViewer unifiedDiff={diffContent} fileName={selectedRelPath || undefined} mode="full" />
+              {!fileExists && !diffContent.trim() ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-12">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 text-cc-muted">
+                    <path d="M12 9v4m0 4h.01M5.07 19h13.86c1.05 0 1.7-1.14 1.18-2.06l-6.93-12a1.33 1.33 0 00-2.36 0l-6.93 12c-.52.92.13 2.06 1.18 2.06z" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <p className="text-cc-muted text-sm">File not found on disk</p>
+                  <p className="text-cc-muted text-xs">The file may have been deleted or the write was not executed.</p>
+                </div>
+              ) : viewMode === "raw" ? (
+                rawDiffMarkdown ? (
+                  <div className="markdown-body text-[12px] text-cc-fg leading-[1.7]">
+                    <Markdown remarkPlugins={[remarkGfm]}>
+                      {rawDiffMarkdown}
+                    </Markdown>
+                  </div>
+                ) : (
+                  <p className="text-cc-muted text-sm">No diff content returned.</p>
+                )
+              ) : (
+                <DiffViewer unifiedDiff={diffContent} fileName={selectedRelPath || undefined} mode="full" />
+              )}
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center">

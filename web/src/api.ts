@@ -528,9 +528,9 @@ export const api = {
     ),
   writeFile: (path: string, content: string) =>
     put<{ ok: boolean; path: string }>("/fs/write", { path, content }),
-  getFileDiff: (path: string) =>
-    get<{ path: string; diff: string }>(
-      `/fs/diff?path=${encodeURIComponent(path)}`,
+  getFileDiff: (path: string, opts?: { base?: string; knownChanged?: boolean; sessionId?: string }) =>
+    get<{ path: string; diff: string; exists?: boolean }>(
+      `/fs/diff?path=${encodeURIComponent(path)}${opts?.base ? `&base=${encodeURIComponent(opts.base)}` : ""}${opts?.knownChanged ? "&known_changed=1" : ""}${opts?.sessionId ? `&session_id=${encodeURIComponent(opts.sessionId)}` : ""}`,
     ),
   getClaudeMdFiles: (cwd: string) =>
     get<{ cwd: string; files: { path: string; content: string }[] }>(
