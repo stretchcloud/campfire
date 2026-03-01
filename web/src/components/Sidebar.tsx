@@ -41,6 +41,7 @@ export function Sidebar() {
   const isIntegrationsPage = hash.startsWith("#/integrations");
   const isMemoryPage = hash === "#/memory";
   const isRouterPage = hash === "#/router";
+  const isDmuxPage = hash === "#/dmux";
   const isCollectiveMindPage = hash === "#/collective";
 
   // Poll for SDK sessions on mount
@@ -441,6 +442,24 @@ export function Sidebar() {
             <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm2 1.5l3 2.5-3 2.5V4.5zM8.5 10h3v1h-3v-1z" />
           </svg>
           <span>terminal</span>
+        </button>
+        <button
+          onClick={() => {
+            window.location.hash = "#/dmux";
+            if (window.innerWidth < 768) {
+              useStore.getState().setSidebarOpen(false);
+            }
+          }}
+          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] font-mono-code transition-colors cursor-pointer ${
+            isDmuxPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted/70 hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+            <path d="M2 2h5.5v5.5H2V2zm.75.75v4h4v-4h-4zM8.5 2H14v5.5H8.5V2zm.75.75v4h4v-4h-4zM2 8.5h5.5V14H2V8.5zm.75.75v4h4v-4h-4zM8.5 8.5H14V14H8.5V8.5zm.75.75v4h4v-4h-4z" />
+          </svg>
+          <span>dmux</span>
         </button>
         <button
           onClick={() => {
