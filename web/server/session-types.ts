@@ -267,6 +267,8 @@ export interface SessionState {
   git_branch: string;
   is_worktree: boolean;
   repo_root: string;
+  /** HEAD commit SHA when the session was created — used as diff base. */
+  git_start_commit?: string;
   git_ahead: number;
   git_behind: number;
   total_lines_added: number;

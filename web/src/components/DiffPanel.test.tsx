@@ -4,6 +4,13 @@ import "@testing-library/jest-dom";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
+vi.mock("react-markdown", () => ({
+  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+vi.mock("remark-gfm", () => ({
+  default: () => {},
+}));
+
 const mockApi = {
   getFileDiff: vi.fn().mockResolvedValue({ path: "/repo/file.ts", diff: "" }),
 };
@@ -101,14 +108,17 @@ describe("DiffPanel", () => {
     const { container } = render(<DiffPanel sessionId="s1" />);
 
     await waitFor(() => {
-      expect(mockApi.getFileDiff).toHaveBeenCalledWith("/repo/src/app.ts");
+      expect(mockApi.getFileDiff).toHaveBeenCalledWith(
+        "/repo/src/app.ts",
+        expect.objectContaining({ knownChanged: true, sessionId: "s1" }),
+      );
     });
 
     // DiffViewer should render the diff content (may appear in top bar + DiffViewer header)
     await waitFor(() => {
       expect(container.querySelector(".diff-line-add")).toBeTruthy();
     });
-    expect(screen.getByText("Compared to default branch")).toBeInTheDocument();
+    expect(screen.getByText("Compared to session start")).toBeInTheDocument();
   });
 
   it("shows 'No changes' when diff is empty for selected file", async () => {

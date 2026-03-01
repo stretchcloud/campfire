@@ -133,6 +133,7 @@ function makeDefaultState(sessionId: string, backendType: BackendType = "claude"
     git_branch: "",
     is_worktree: false,
     repo_root: "",
+    git_start_commit: "",
     git_ahead: 0,
     git_behind: 0,
     total_lines_added: 0,
@@ -149,6 +150,15 @@ function resolveGitInfo(state: SessionState): void {
     state.git_branch = execSync("git rev-parse --abbrev-ref HEAD", {
       cwd: state.cwd, encoding: "utf-8", timeout: 3000,
     }).trim();
+
+    // Capture starting commit once (used as diff base for the session)
+    if (!state.git_start_commit) {
+      try {
+        state.git_start_commit = execSync("git rev-parse HEAD", {
+          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+        }).trim();
+      } catch { /* ignore — initial commit may not exist */ }
+    }
 
     try {
       const gitDir = execSync("git rev-parse --git-dir", {

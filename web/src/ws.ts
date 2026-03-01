@@ -448,6 +448,20 @@ function handleParsedMessage(
     }
 
     case "permission_cancelled": {
+      // Clean up changedFiles if the cancelled permission was a Write/Edit
+      // (the file was never written, so it shouldn't appear in the diff view)
+      const cancelledPerm = store.pendingPermissions.get(sessionId)?.get(data.request_id);
+      if (
+        cancelledPerm &&
+        (cancelledPerm.tool_name === "Write" || cancelledPerm.tool_name === "Edit") &&
+        typeof cancelledPerm.input?.file_path === "string"
+      ) {
+        const sessionCwd =
+          store.sessions.get(sessionId)?.cwd ||
+          store.sdkSessions.find((sdk) => sdk.sessionId === sessionId)?.cwd;
+        const resolved = resolveSessionFilePath(cancelledPerm.input.file_path as string, sessionCwd);
+        store.removeChangedFile(sessionId, resolved);
+      }
       store.removePermission(sessionId, data.request_id);
       break;
     }

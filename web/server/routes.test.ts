@@ -1185,9 +1185,10 @@ describe("GET /api/fs/diff", () => {
  line3`;
     vi.mocked(execSync)
       .mockReturnValueOnce("/repo\n") // rev-parse --show-toplevel
-      .mockReturnValueOnce("file.ts\n") // ls-files --full-name
+      .mockReturnValueOnce("") // git diff HEAD -> empty
       .mockReturnValueOnce("refs/remotes/origin/main\n") // symbolic-ref refs/remotes/origin/HEAD
-      .mockReturnValueOnce(diffOutput); // git diff origin/main
+      .mockReturnValueOnce("abc123\n") // git merge-base origin/main HEAD
+      .mockReturnValueOnce(diffOutput); // git diff abc123
 
     const res = await app.request("/api/fs/diff?path=/repo/file.ts", { method: "GET" });
 
@@ -1196,7 +1197,7 @@ describe("GET /api/fs/diff", () => {
     expect(json.diff).toBe(diffOutput);
     expect(json.path).toContain("file.ts");
     expect(vi.mocked(execSync)).toHaveBeenCalledWith(
-      expect.stringContaining("git diff origin/main"),
+      expect.stringContaining("git diff abc123"),
       expect.objectContaining({ encoding: "utf-8", timeout: 5000 }),
     );
   });
@@ -1213,9 +1214,12 @@ index 0000000..e69de29
 
     vi.mocked(execSync)
       .mockReturnValueOnce("/repo\n") // rev-parse --show-toplevel
-      .mockReturnValueOnce("new.txt\n") // ls-files --full-name
+      .mockReturnValueOnce("") // git diff HEAD -> empty
       .mockReturnValueOnce("refs/remotes/origin/main\n") // symbolic-ref refs/remotes/origin/HEAD
-      .mockReturnValueOnce("") // git diff origin/main -> empty for untracked
+      .mockReturnValueOnce("abc123\n") // git merge-base origin/main HEAD
+      .mockReturnValueOnce("") // git diff abc123 -> empty for untracked
+      .mockReturnValueOnce("def456\n") // git merge-base main HEAD
+      .mockReturnValueOnce("") // git diff def456 -> empty for untracked
       .mockReturnValueOnce("new.txt\n") // ls-files --others --exclude-standard
       .mockImplementationOnce(() => {
         const err = new Error("diff exits with 1 for differences") as Error & { stdout: string };
@@ -1244,14 +1248,15 @@ index 0000000..e69de29
 +added`;
     vi.mocked(execSync)
       .mockReturnValueOnce("/repo\n") // rev-parse --show-toplevel
-      .mockReturnValueOnce("file.ts\n") // ls-files --full-name
+      .mockReturnValueOnce("") // git diff HEAD -> empty
       .mockImplementationOnce(() => {
         const err = new Error("no symbol ref") as Error & { stdout: string };
         err.stdout = "error: ref refs/remotes/origin/HEAD is not a symbolic ref";
         throw err;
       }) // symbolic-ref refs/remotes/origin/HEAD unavailable
       .mockReturnValueOnce("main\n") // branch --list fallback
-      .mockReturnValueOnce(diffOutput); // git diff main
+      .mockReturnValueOnce("def456\n") // git merge-base main HEAD
+      .mockReturnValueOnce(diffOutput); // git diff def456
 
     const res = await app.request("/api/fs/diff?path=/repo/file.ts", { method: "GET" });
 
@@ -1259,7 +1264,7 @@ index 0000000..e69de29
     const json = await res.json();
     expect(json.diff).toBe(diffOutput);
     expect(vi.mocked(execSync)).toHaveBeenCalledWith(
-      expect.stringContaining("git diff main"),
+      expect.stringContaining("git diff def456"),
       expect.objectContaining({ encoding: "utf-8", timeout: 5000 }),
     );
   });
@@ -1275,6 +1280,42 @@ index 0000000..e69de29
     const json = await res.json();
     expect(json.diff).toBe("");
     expect(json.path).toContain("file.ts");
+  });
+
+  it("falls back to synthetic diff for known_changed outside repo", async () => {
+    const fileContent = "line1\nline2";
+    const readFileSync = (await import("node:fs")).readFileSync as unknown as ReturnType<typeof vi.fn>;
+    readFileSync.mockReturnValueOnce(fileContent);
+
+    vi.mocked(execSync).mockReturnValueOnce("/repo\n"); // rev-parse --show-toplevel
+
+    const res = await app.request("/api/fs/diff?path=/outside/file.ts&known_changed=1", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.diff).toContain("new file mode");
+    expect(json.diff).toContain("+line1");
+    expect(json.path).toContain("file.ts");
+  });
+
+  it("maps session cwd to launcher cwd when session_id is provided", async () => {
+    bridge.getSession.mockReturnValueOnce({ state: { cwd: "/workspace/project" } });
+    launcher.getSession.mockReturnValueOnce({ cwd: "/repo" });
+
+    vi.mocked(execSync)
+      .mockReturnValueOnce("/repo\n") // rev-parse --show-toplevel (cwd should map to /repo/src)
+      .mockReturnValueOnce("") // git diff HEAD
+      .mockReturnValueOnce("refs/remotes/origin/main\n") // symbolic-ref
+      .mockReturnValueOnce("abc123\n") // merge-base
+      .mockReturnValueOnce(""); // git diff abc123
+
+    const res = await app.request("/api/fs/diff?path=/workspace/project/src/app.ts&session_id=s1", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+      expect.stringContaining("git rev-parse --show-toplevel"),
+      expect.objectContaining({ cwd: "/repo/src", encoding: "utf-8", timeout: 5000 }),
+    );
   });
 });
 

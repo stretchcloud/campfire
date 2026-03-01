@@ -123,6 +123,7 @@ interface AppState {
 
   // Changed files actions
   addChangedFile: (sessionId: string, filePath: string) => void;
+  removeChangedFile: (sessionId: string, filePath: string) => void;
   clearChangedFiles: (sessionId: string) => void;
 
   // Session name actions
@@ -575,6 +576,19 @@ export const useStore = create<AppState>((set) => ({
       files.add(filePath);
       changedFiles.set(sessionId, files);
       return { changedFiles };
+    }),
+
+  removeChangedFile: (sessionId, filePath) =>
+    set((s) => {
+      const changedFiles = new Map(s.changedFiles);
+      const files = changedFiles.get(sessionId);
+      if (files?.has(filePath)) {
+        const updated = new Set(files);
+        updated.delete(filePath);
+        changedFiles.set(sessionId, updated);
+        return { changedFiles };
+      }
+      return s;
     }),
 
   clearChangedFiles: (sessionId) =>

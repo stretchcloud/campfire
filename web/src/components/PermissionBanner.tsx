@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useStore } from "../store.js";
-import { sendToSession } from "../ws.js";
+import { sendToSession, resolveSessionFilePath } from "../ws.js";
 import type { PermissionRequest, PermissionVote as PermissionVoteType } from "../types.js";
 import type { PermissionUpdate } from "../../server/session-types.js";
 import { DiffViewer } from "./DiffViewer.js";
@@ -32,6 +32,7 @@ export function PermissionBanner({
 }) {
   const [loading, setLoading] = useState(false);
   const removePermission = useStore((s) => s.removePermission);
+  const removeChangedFile = useStore((s) => s.removeChangedFile);
   // Default to "spectator" until role_assigned arrives — this prevents
   // spectators from acting as owners during the brief window before the
   // server sends their role.  Owners always receive role_assigned promptly.
@@ -59,6 +60,18 @@ export function PermissionBanner({
       behavior: "deny",
       message: "Denied by user",
     });
+    // Remove file from changedFiles if this was a Write/Edit that was denied
+    // (the file was never actually written, so it shouldn't appear in the diff view)
+    if (
+      (permission.tool_name === "Write" || permission.tool_name === "Edit") &&
+      typeof permission.input?.file_path === "string"
+    ) {
+      const sessionCwd =
+        useStore.getState().sessions.get(sessionId)?.cwd ||
+        useStore.getState().sdkSessions.find((sdk) => sdk.sessionId === sessionId)?.cwd;
+      const resolved = resolveSessionFilePath(permission.input.file_path as string, sessionCwd);
+      removeChangedFile(sessionId, resolved);
+    }
     removePermission(sessionId, permission.request_id);
   }
 
