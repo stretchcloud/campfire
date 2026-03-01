@@ -2,7 +2,10 @@ import type { Hono } from "hono";
 import type { RouteDeps } from "./route-deps.js";
 import { execSync } from "node:child_process";
 import { readdir, readFile, writeFile, stat } from "node:fs/promises";
-import { resolve, join, dirname } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve, join, dirname, relative, isAbsolute } from "node:path";
+import { containerManager } from "../container-manager.js";
+import { mapContainerPath } from "../session-git-info.js";
 import { homedir } from "node:os";
 
 function execCaptureStdout(
@@ -45,7 +48,7 @@ function resolveBranchDiffBases(repoRoot: string): string[] {
   return ["main"];
 }
 
-export function registerFsRoutes(api: Hono, _deps: RouteDeps): void {
+export function registerFsRoutes(api: Hono, deps: RouteDeps): void {
   api.get("/fs/list", async (c) => {
     const rawPath = c.req.query("path") || homedir();
     const basePath = resolve(rawPath);
@@ -158,33 +161,104 @@ export function registerFsRoutes(api: Hono, _deps: RouteDeps): void {
   api.get("/fs/diff", (c) => {
     const filePath = c.req.query("path");
     if (!filePath) return c.json({ error: "path required" }, 400);
-    const absPath = resolve(filePath);
+    const sessionId = c.req.query("session_id") || undefined;
+    let absPath = resolve(filePath);
+    if (sessionId) {
+      const session = deps.wsBridge.getSession(sessionId);
+      const sessionCwd = session?.state.cwd;
+      const launchInfo = deps.launcher.getSession(sessionId);
+      const hostCwd = launchInfo?.cwd;
+      const containerInfo = containerManager.getContainer(sessionId);
+      if (containerInfo) {
+        absPath = resolve(
+          mapContainerPath(absPath, [{
+            hostPath: containerInfo.hostCwd,
+            containerPath: containerInfo.containerCwd,
+          }]),
+        );
+      } else if (sessionCwd && hostCwd && sessionCwd !== hostCwd) {
+        const resolvedSessionCwd = resolve(sessionCwd);
+        const resolvedHostCwd = resolve(hostCwd);
+        if (absPath === resolvedSessionCwd || absPath.startsWith(`${resolvedSessionCwd}/`)) {
+          absPath = resolve(resolvedHostCwd, relative(resolvedSessionCwd, absPath));
+        }
+      }
+    }
+    // Optional base ref provided by the frontend (e.g. the commit at session start)
+    const baseRef = c.req.query("base");
+    // If "known_changed=1", the frontend asserts this file was modified by the session.
+    // Enables the synthetic diff fallback when all git strategies return empty.
+    const knownChanged = c.req.query("known_changed") === "1";
+    const fileExists = existsSync(absPath);
     try {
       const repoRoot = execSync("git rev-parse --show-toplevel", {
         cwd: dirname(absPath),
         encoding: "utf-8",
         timeout: 5000,
       }).trim();
-      const relPath = execSync(`git -C "${repoRoot}" ls-files --full-name -- "${absPath}"`, {
-        encoding: "utf-8",
-        timeout: 5000,
-      }).trim() || absPath;
+      const relPath = relative(repoRoot, absPath);
+      if (!relPath || relPath.startsWith("..") || isAbsolute(relPath)) {
+        if (knownChanged) {
+          try {
+            const content = readFileSync(absPath, "utf-8");
+            if (content != null) {
+              const lines = content.split("\n");
+              const header = [
+                `diff --git a/${absPath} b/${absPath}`,
+                "new file mode 100644",
+                "--- /dev/null",
+                `+++ b/${absPath}`,
+                `@@ -0,0 +1,${lines.length} @@`,
+              ];
+              const diff = header.join("\n") + "\n" + lines.map((l) => `+${l}`).join("\n") + "\n";
+              return c.json({ path: absPath, diff, exists: fileExists });
+            }
+          } catch {
+            // Ignore
+          }
+        }
+        return c.json({ path: absPath, diff: "", exists: fileExists });
+      }
 
+      const opts = { cwd: repoRoot, encoding: "utf-8", timeout: 5000 } as const;
       let diff = "";
-      const diffBases = resolveBranchDiffBases(repoRoot);
-      for (const base of diffBases) {
+
+      // If a specific base ref was provided (e.g. session start commit), use it
+      if (baseRef) {
         try {
-          diff = execCaptureStdout(`git diff ${base} -- "${relPath}"`, {
-            cwd: repoRoot,
-            encoding: "utf-8",
-            timeout: 5000,
-          });
-          break;
+          diff = execCaptureStdout(`git diff ${baseRef} -- "${relPath}"`, opts);
         } catch {
-          // Try next candidate
+          // Invalid ref — fall through to other strategies
         }
       }
 
+      // 1. Try uncommitted working-tree changes (staged + unstaged vs HEAD)
+      if (!diff.trim()) {
+        try {
+          diff = execCaptureStdout(`git diff HEAD -- "${relPath}"`, opts);
+        } catch {
+          // HEAD may not exist (initial commit) — ignore
+        }
+      }
+
+      // 2. Try branch-base diff (for feature branches diffing against main)
+      if (!diff.trim()) {
+        const diffBases = resolveBranchDiffBases(repoRoot);
+        for (const base of diffBases) {
+          try {
+            // Use merge-base to get only the branch's own changes
+            const mergeBase = execSync(`git merge-base ${base} HEAD`, opts).trim();
+            if (mergeBase) {
+              diff = execCaptureStdout(`git diff ${mergeBase} -- "${relPath}"`, opts);
+              if (diff.trim()) break;
+            }
+          } catch {
+            // Try next candidate
+          }
+        }
+      }
+
+      // 3. Check for untracked files
       if (!diff.trim()) {
         const untracked = execSync(`git ls-files --others --exclude-standard -- "${relPath}"`, {
           cwd: repoRoot,
@@ -192,17 +266,54 @@ export function registerFsRoutes(api: Hono, _deps: RouteDeps): void {
           timeout: 5000,
         }).trim();
         if (untracked) {
-          diff = execCaptureStdout(`git diff --no-index -- /dev/null "${absPath}"`, {
-            cwd: repoRoot,
-            encoding: "utf-8",
-            timeout: 5000,
-          });
+          diff = execCaptureStdout(`git diff --no-index -- /dev/null "${absPath}"`, opts);
         }
       }
 
-      return c.json({ path: absPath, diff });
+      // 4. Final fallback: if the frontend asserts this file was changed but all git
+      // strategies returned empty (e.g. file created and committed on the same branch),
+      // generate a synthetic "new file" diff from the current file contents.
+      if (!diff.trim() && knownChanged) {
+        try {
+          const content = readFileSync(absPath, "utf-8");
+          if (content != null) {
+            const lines = content.split("\n");
+            const header = [
+              `diff --git a/${relPath} b/${relPath}`,
+              "new file mode 100644",
+              "--- /dev/null",
+              `+++ b/${relPath}`,
+              `@@ -0,0 +1,${lines.length} @@`,
+            ];
+            diff = header.join("\n") + "\n" + lines.map((l) => `+${l}`).join("\n") + "\n";
+          }
+        } catch {
+          // File doesn't exist or can't be read
+        }
+      }
+
+      return c.json({ path: absPath, diff, exists: fileExists });
     } catch {
-      return c.json({ path: absPath, diff: "" });
+      if (knownChanged) {
+        try {
+          const content = readFileSync(absPath, "utf-8");
+          if (content != null) {
+            const lines = content.split("\n");
+            const header = [
+              `diff --git a/${absPath} b/${absPath}`,
+              "new file mode 100644",
+              "--- /dev/null",
+              `+++ b/${absPath}`,
+              `@@ -0,0 +1,${lines.length} @@`,
+            ];
+            const diff = header.join("\n") + "\n" + lines.map((l) => `+${l}`).join("\n") + "\n";
+            return c.json({ path: absPath, diff, exists: fileExists });
+          }
+        } catch {
+          // Ignore
+        }
+      }
+      return c.json({ path: absPath, diff: "", exists: fileExists });
     }
   });
 
