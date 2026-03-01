@@ -61,7 +61,12 @@ interface TerminalSocketData {
   terminalId: string;
 }
 
-export type SocketData = CLISocketData | BrowserSocketData | TerminalSocketData;
+interface DmuxSocketData {
+  kind: "dmux";
+  cwd: string;
+}
+
+export type SocketData = CLISocketData | BrowserSocketData | TerminalSocketData | DmuxSocketData;
 
 // ─── Session ──────────────────────────────────────────────────────────────────
 

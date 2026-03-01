@@ -28,6 +28,7 @@ import { AdapterRegistry } from "./adapter-registry.js";
 import { collectiveIntelligenceLayer } from "./collective-intelligence.js";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { isRunningAsService } from "./service.js";
+import { DmuxWatcher } from "./dmux-watcher.js";
 import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
 
@@ -48,6 +49,7 @@ const recorder = new RecorderManager();
 const cronScheduler = new CronScheduler(launcher, wsBridge);
 const webhookManager = new WebhookManager();
 const adapterRegistry = new AdapterRegistry();
+const dmuxWatcher = new DmuxWatcher();
 
 // ── Restore persisted sessions from disk ────────────────────────────────────
 wsBridge.setStore(sessionStore);
@@ -166,6 +168,16 @@ const server = Bun.serve<SocketData>({
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
+    // ── Dmux WebSocket — real-time dmux status + pane streaming ──────
+    if (url.pathname === "/ws/dmux") {
+      const cwd = url.searchParams.get("cwd") || "";
+      const upgraded = server.upgrade(req, {
+        data: { kind: "dmux" as const, cwd },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
     // Hono handles the rest
     return app.fetch(req, server);
   },
@@ -179,6 +191,10 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserOpen(ws, data.sessionId);
       } else if (data.kind === "terminal") {
         terminalManager.addBrowserSocket(ws);
+      } else if (data.kind === "dmux") {
+        const client = { cwd: data.cwd, send: (d: string) => ws.send(d) };
+        (ws as unknown as { _dmuxClient: typeof client })._dmuxClient = client;
+        dmuxWatcher.addClient(client);
       }
     },
     message(ws: ServerWebSocket<SocketData>, msg: string | Buffer) {
@@ -189,6 +205,14 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserMessage(ws, msg);
       } else if (data.kind === "terminal") {
         terminalManager.handleBrowserMessage(ws, msg);
+      } else if (data.kind === "dmux") {
+        try {
+          const parsed = JSON.parse(typeof msg === "string" ? msg : msg.toString());
+          const client = (ws as unknown as { _dmuxClient: import("./dmux-watcher.js").DmuxWatchClient })._dmuxClient;
+          if (client) dmuxWatcher.handleMessage(client, parsed);
+        } catch {
+          // Ignore malformed messages
+        }
       }
     },
     close(ws: ServerWebSocket<SocketData>) {
@@ -199,6 +223,9 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserClose(ws);
       } else if (data.kind === "terminal") {
         terminalManager.removeBrowserSocket(ws);
+      } else if (data.kind === "dmux") {
+        const client = (ws as unknown as { _dmuxClient: import("./dmux-watcher.js").DmuxWatchClient })._dmuxClient;
+        if (client) dmuxWatcher.removeClient(client);
       }
     },
   },

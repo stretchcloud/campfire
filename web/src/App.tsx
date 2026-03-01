@@ -28,6 +28,8 @@ import { LinearSettingsPage } from "./components/LinearSettingsPage.js";
 import { MemoryPanel } from "./components/MemoryPanel.js";
 import { TaskRouterPage } from "./components/TaskRouterPage.js";
 import { CollectiveMindPanel } from "./components/CollectiveMindPanel.js";
+import { DmuxPage } from "./components/DmuxPage.js";
+import { DmuxReplayViewer } from "./components/DmuxReplayViewer.js";
 
 function useHash() {
   return useSyncExternalStore(
@@ -76,6 +78,9 @@ export default function App() {
   const isLinearSettingsPage = hash === "#/integrations/linear";
   const isMemoryPage = hash === "#/memory";
   const isRouterPage = hash === "#/router";
+  const isDmuxPage = hash === "#/dmux";
+  const dmuxReplayMatch = hash.match(/^#\/dmux\/replay\/(.+)$/);
+  const isDmuxReplayPage = !!dmuxReplayMatch;
   const isCollectiveMindPage = hash === "#/collective";
   // Replay routes: #/replay/:filename or #/replay/session/:id
   const replayFileMatch = hash.match(/^#\/replay\/(?!session\/)(.+)$/);
@@ -85,7 +90,7 @@ export default function App() {
   const publicReplayMatch = hash.match(/^#\/public-replay\/(.+)$/);
   const isPublicReplayPage = !!publicReplayMatch;
 
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isReplayPage && !isPublicReplayPage;
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isReplayPage && !isPublicReplayPage;
 
   useEffect(() => {
     capturePageView(hash || "#/");
@@ -184,6 +189,18 @@ export default function App() {
           {isTerminalPage && (
             <div className="absolute inset-0">
               <TerminalPage />
+            </div>
+          )}
+
+          {isDmuxPage && (
+            <div className="absolute inset-0">
+              <DmuxPage />
+            </div>
+          )}
+
+          {isDmuxReplayPage && dmuxReplayMatch && (
+            <div className="absolute inset-0">
+              <DmuxReplayViewer filename={decodeURIComponent(dmuxReplayMatch[1])} />
             </div>
           )}
 

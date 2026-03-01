@@ -15,6 +15,7 @@ interface TerminalViewProps {
   cwd: string;
   onClose?: () => void;
   embedded?: boolean;
+  initialCommand?: string;
 }
 
 function getTerminalTheme(dark: boolean) {
@@ -26,7 +27,7 @@ function getTerminalTheme(dark: boolean) {
   };
 }
 
-export function TerminalView({ cwd, onClose, embedded = false }: TerminalViewProps) {
+export function TerminalView({ cwd, onClose, embedded = false, initialCommand }: TerminalViewProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -74,6 +75,9 @@ export function TerminalView({ cwd, onClose, embedded = false }: TerminalViewPro
             // (ResizeObserver may have fired before the socket was ready)
             fit.fit();
             sendTerminalResize(xterm.cols, xterm.rows);
+            if (initialCommand) {
+              setTimeout(() => sendTerminalInput(initialCommand + "\n"), 300);
+            }
           },
         );
       })
@@ -103,7 +107,7 @@ export function TerminalView({ cwd, onClose, embedded = false }: TerminalViewPro
       fitRef.current = null;
       api.killTerminal().catch(() => {});
     };
-  }, [cwd]);
+  }, [cwd, initialCommand]);
 
   // Separate effect: update theme without recreating the terminal
   useEffect(() => {
