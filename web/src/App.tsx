@@ -64,14 +64,6 @@ export default function App() {
     });
   }, []);
 
-  if (!authChecked) {
-    return <div className="h-[100dvh] flex items-center justify-center bg-cc-bg text-cc-fg text-[12px] text-cc-muted">Loading...</div>;
-  }
-
-  if (authRequired) {
-    return <LoginPage onLogin={() => setAuthRequired(false)} />;
-  }
-
   const darkMode = useStore((s) => s.darkMode);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const isSpectator = useStore((s) => {
@@ -183,6 +175,15 @@ export default function App() {
   useEffect(() => {
     return () => {};
   }, []);
+
+  // Auth gates — placed after all hooks to satisfy Rules of Hooks
+  if (!authChecked) {
+    return <div className="h-[100dvh] flex items-center justify-center bg-cc-bg text-cc-fg text-[12px] text-cc-muted">Loading...</div>;
+  }
+
+  if (authRequired) {
+    return <LoginPage onLogin={() => setAuthRequired(false)} />;
+  }
 
   if (hash === "#/playground") {
     return <Playground />;
