@@ -32,6 +32,7 @@ import { DmuxPage } from "./components/DmuxPage.js";
 import { DmuxReplayViewer } from "./components/DmuxReplayViewer.js";
 import { OrchestratorPage } from "./components/OrchestratorPage.js";
 import { KanbanPage } from "./components/KanbanPage.js";
+import { SkillsPage } from "./components/SkillsPage.js";
 
 function useHash() {
   return useSyncExternalStore(
@@ -86,6 +87,7 @@ export default function App() {
   const isCollectiveMindPage = hash === "#/collective";
   const isOrchestratorPage = hash === "#/orchestrator";
   const isKanbanPage = hash === "#/kanban";
+  const isSkillsPage = hash === "#/skills";
   // Replay routes: #/replay/:filename or #/replay/session/:id
   const replayFileMatch = hash.match(/^#\/replay\/(?!session\/)(.+)$/);
   const replaySessionMatch = hash.match(/^#\/replay\/session\/(.+)$/);
@@ -94,7 +96,7 @@ export default function App() {
   const publicReplayMatch = hash.match(/^#\/public-replay\/(.+)$/);
   const isPublicReplayPage = !!publicReplayMatch;
 
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isKanbanPage && !isReplayPage && !isPublicReplayPage;
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isKanbanPage && !isSkillsPage && !isReplayPage && !isPublicReplayPage;
 
   useEffect(() => {
     capturePageView(hash || "#/");
@@ -295,6 +297,12 @@ export default function App() {
           {isKanbanPage && (
             <div className="absolute inset-0">
               <KanbanPage />
+            </div>
+          )}
+
+          {isSkillsPage && (
+            <div className="absolute inset-0">
+              <SkillsPage embedded />
             </div>
           )}
 
