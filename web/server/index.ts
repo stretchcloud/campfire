@@ -117,6 +117,11 @@ if (recorder.isGloballyEnabled()) {
 
 const app = new Hono();
 
+app.onError((err, c) => {
+  console.error(`[server] ${c.req.method} ${c.req.path} error:`, err);
+  return c.json({ error: err.message }, 500);
+});
+
 app.use("/api/*", cors());
 app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, webhookManager, adapterRegistry));
 

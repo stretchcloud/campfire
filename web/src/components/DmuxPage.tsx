@@ -219,7 +219,13 @@ export function DmuxPage() {
             </button>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
+                if (!selectedCwd) return;
+                try {
+                  await api.stopDmux(selectedCwd);
+                } catch {
+                  // Session may already be stopped
+                }
                 setDmuxRunning(false);
                 setLaunchCommand(null);
               }}
