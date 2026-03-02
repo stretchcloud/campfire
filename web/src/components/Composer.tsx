@@ -363,6 +363,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }
 
+  const [showModeMenu, setShowModeMenu] = useState(false);
+
   function toggleMode() {
     if (!isConnected || isCodex || isSpectator) return;
     const store = useStore.getState();
@@ -376,6 +378,21 @@ export function Composer({ sessionId }: { sessionId: string }) {
       store.updateSession(sessionId, { permissionMode: restoreMode });
     }
   }
+
+  function switchMode(mode: string) {
+    if (!isConnected || isSpectator) return;
+    const store = useStore.getState();
+    sendToSession(sessionId, { type: "set_permission_mode", mode });
+    store.updateSession(sessionId, { permissionMode: mode });
+    setShowModeMenu(false);
+  }
+
+  const modeLabels: Record<string, string> = {
+    bypassPermissions: "Agent",
+    acceptEdits: "Accept Edits",
+    default: "Ask",
+    plan: "Plan",
+  };
 
   const sessionStatus = useStore((s) => s.sessionStatus);
   const isRunning = sessionStatus.get(sessionId) === "running";
@@ -653,32 +670,70 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
           {/* Bottom toolbar */}
           <div className="flex items-center justify-between px-2.5 pb-2">
-            {/* Left: mode indicator */}
-            <button
-              onClick={toggleMode}
-              disabled={!isConnected || isCodex || isSpectator}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono-code transition-all select-none ${
-                !isConnected || isCodex || isSpectator
-                  ? "opacity-25 cursor-not-allowed text-cc-muted"
-                  : isPlan
-                  ? "text-cc-primary hover:bg-cc-primary/10 cursor-pointer"
-                  : "text-cc-muted/60 hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-              }`}
-              title={isCodex ? "Mode is fixed for Codex sessions" : "Toggle mode (Shift+Tab)"}
-            >
-              {isPlan ? (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
-                  <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
+            {/* Left: mode selector */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (isCodex || isSpectator || !isConnected) return;
+                  setShowModeMenu(!showModeMenu);
+                }}
+                disabled={!isConnected || isCodex || isSpectator}
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono-code transition-all select-none ${
+                  !isConnected || isCodex || isSpectator
+                    ? "opacity-25 cursor-not-allowed text-cc-muted"
+                    : isPlan
+                    ? "text-cc-primary hover:bg-cc-primary/10 cursor-pointer"
+                    : currentMode === "bypassPermissions"
+                    ? "text-cc-warning hover:bg-cc-warning/10 cursor-pointer"
+                    : "text-cc-muted/60 hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                }`}
+                title={isCodex ? "Mode is fixed for Codex sessions" : "Switch permission mode"}
+              >
+                {isPlan ? (
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                    <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
+                    <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
+                  </svg>
+                ) : currentMode === "bypassPermissions" ? (
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                    <path d="M8 1.5a.75.75 0 01.75.75v2h2a.75.75 0 010 1.5h-2v2a.75.75 0 01-1.5 0v-2h-2a.75.75 0 010-1.5h2v-2A.75.75 0 018 1.5z" />
+                    <path d="M3.5 10.25a.75.75 0 000 1.5h9a.75.75 0 000-1.5h-9zm0 2.5a.75.75 0 000 1.5h5a.75.75 0 000-1.5h-5z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                    <path d="M2.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  </svg>
+                )}
+                <span>{modeLabels[currentMode] || modeLabel}</span>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 opacity-50">
+                  <path d="M4 6l4 4 4-4" />
                 </svg>
-              ) : (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <path d="M2.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </svg>
+              </button>
+
+              {/* Mode dropdown menu */}
+              {showModeMenu && (
+                <div className="absolute left-0 bottom-full mb-1 w-44 bg-cc-card border border-cc-border rounded-lg shadow-lg z-20 py-1">
+                  {[
+                    { value: "bypassPermissions", label: "Agent (auto-approve)", desc: "Auto-approve all tools" },
+                    { value: "acceptEdits", label: "Accept Edits", desc: "Auto-approve file edits" },
+                    { value: "default", label: "Ask Every Time", desc: "Prompt for each tool" },
+                    { value: "plan", label: "Plan Only", desc: "No tool execution" },
+                  ].map((m) => (
+                    <button
+                      key={m.value}
+                      onClick={() => switchMode(m.value)}
+                      className={`w-full px-3 py-1.5 text-left hover:bg-cc-hover transition-colors cursor-pointer ${
+                        currentMode === m.value ? "text-cc-primary" : "text-cc-fg"
+                      }`}
+                    >
+                      <div className="text-[11px] font-medium">{m.label}</div>
+                      <div className="text-[10px] text-cc-muted">{m.desc}</div>
+                    </button>
+                  ))}
+                </div>
               )}
-              <span>{modeLabel}</span>
-            </button>
+            </div>
 
             {/* Right: image + send/stop */}
             <div className="flex items-center gap-1">
