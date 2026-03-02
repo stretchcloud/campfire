@@ -45,6 +45,7 @@ export function Sidebar() {
   const isCollectiveMindPage = hash === "#/collective";
   const isOrchestratorPage = hash === "#/orchestrator";
   const isKanbanPage = hash === "#/kanban";
+  const isSkillsPage = hash === "#/skills";
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -610,6 +611,22 @@ export function Sidebar() {
             <path d="M5 5h6M5 8h6M5 11h4" strokeLinecap="round" />
           </svg>
           <span>prompts</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/skills";
+          }}
+          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] font-mono-code transition-colors cursor-pointer ${
+            isSkillsPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted/70 hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+            <path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 001.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 00-1.828 1.829l-.645 1.936a.361.361 0 01-.686 0l-.645-1.937a2.89 2.89 0 00-1.828-1.828l-1.937-.645a.361.361 0 010-.686l1.937-.645a2.89 2.89 0 001.828-1.829l.645-1.936zM3.794 1.148a.217.217 0 01.412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 010 .412l-1.162.387A1.734 1.734 0 004.593 5.69l-.387 1.162a.217.217 0 01-.412 0L3.407 5.69a1.734 1.734 0 00-1.097-1.097l-1.162-.387a.217.217 0 010-.412l1.162-.387A1.734 1.734 0 003.407 2.31l.387-1.162z" />
+          </svg>
+          <span>skills</span>
         </button>
         <button
           onClick={() => {
