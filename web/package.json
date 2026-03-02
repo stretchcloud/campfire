@@ -42,6 +42,7 @@
     "diff": "^8.0.3",
     "geist": "^1.7.0",
     "hono": "^4.7.0",
+    "mermaid": "^11.12.3",
     "posthog-js": "^1.347.2"
   },
   "devDependencies": {
