@@ -669,11 +669,25 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
             {/* Task section header */}
             <div className="px-4 py-2.5 border-b border-cc-border flex items-center justify-between">
               <span className="text-[12px] font-semibold text-cc-fg">Tasks</span>
-              {tasks.length > 0 && (
-                <span className="text-[11px] text-cc-muted tabular-nums">
-                  {completedCount}/{tasks.length}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {tasks.length > 0 && (
+                  <span className="text-[11px] text-cc-muted tabular-nums">
+                    {completedCount}/{tasks.length}
+                  </span>
+                )}
+                {tasks.length > 0 && (
+                  <button
+                    onClick={() => { window.location.hash = "#/kanban"; }}
+                    className="text-[10px] font-mono-code text-cc-muted hover:text-cc-fg px-1.5 py-0.5 rounded hover:bg-cc-hover transition-colors cursor-pointer"
+                    title="View Kanban board"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 inline-block mr-0.5 -mt-px">
+                      <path d="M1.5 2h4v12h-4V2zm.75.75v10.5h2.5V2.75h-2.5zM6 2h4v8H6V2zm.75.75v6.5h2.5v-6.5h-2.5zM10.5 2h4v10h-4V2zm.75.75v8.5h2.5v-8.5h-2.5z" />
+                    </svg>
+                    board
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Task list */}
