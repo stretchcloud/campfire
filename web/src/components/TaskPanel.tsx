@@ -4,6 +4,7 @@ import { api, type UsageLimits, type GitHubPRInfo } from "../api.js";
 import type { TaskItem } from "../types.js";
 import { McpSection } from "./McpPanel.js";
 import { CostCard } from "./CostCard.js";
+import { WorkspaceSection } from "./WorkspaceSection.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
 const POLL_INTERVAL = 60_000;
@@ -659,6 +660,9 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
 
         {/* MCP servers */}
         <McpSection sessionId={sessionId} />
+
+        {/* Workspace file tree */}
+        <WorkspaceSection sessionId={sessionId} />
 
         {showTasks && (
           <>
