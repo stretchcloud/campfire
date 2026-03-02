@@ -337,6 +337,10 @@ export class CliLauncher {
     }
     if (options.permissionMode) {
       args.push("--permission-mode", options.permissionMode);
+      // bypassPermissions requires --dangerously-skip-permissions flag
+      if (options.permissionMode === "bypassPermissions") {
+        args.push("--dangerously-skip-permissions");
+      }
     }
     if (options.allowedTools) {
       for (const tool of options.allowedTools) {
