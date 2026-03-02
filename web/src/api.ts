@@ -519,6 +519,11 @@ export const api = {
 
   getHome: () => get<{ home: string; cwd: string }>("/fs/home"),
 
+  listEntries: (path: string, hidden?: boolean) =>
+    get<{ path: string; entries: { name: string; path: string; type: "file" | "directory"; size?: number }[] }>(
+      `/fs/list-entries?path=${encodeURIComponent(path)}${hidden ? "&hidden=1" : ""}`,
+    ),
+
   // Environments
   listEnvs: () => get<CompanionEnv[]>("/envs"),
   getEnv: (slug: string) =>
