@@ -361,8 +361,12 @@ function handleParsedMessage(
 
     case "result": {
       const r = data.data;
+      const currentCost = store.sessions.get(sessionId)?.total_cost_usd || 0;
       const sessionUpdates: Partial<SessionState> = {
-        total_cost_usd: r.total_cost_usd,
+        // Only update cost if new value is higher — slash commands like /cost
+        // emit result with total_cost_usd: 0 which would erase accumulated cost
+        total_cost_usd: (typeof r.total_cost_usd === "number" && r.total_cost_usd > currentCost)
+          ? r.total_cost_usd : currentCost,
         num_turns: r.num_turns,
       };
       // Forward lines changed if present
