@@ -3,9 +3,121 @@ import type { RouteDeps } from "./route-deps.js";
 import * as galleryStore from "../gallery-store.js";
 import * as galleryVotes from "../gallery-votes.js";
 import type { GalleryFilter } from "../gallery-types.js";
-import type { BackendType } from "../session-types.js";
+import type { BackendType, BrowserIncomingMessage } from "../session-types.js";
 import * as settingsManager from "../settings-manager.js";
+import { DEFAULT_OPENROUTER_MODEL } from "../settings-manager.js";
 import * as clawhubExport from "../clawhub-export.js";
+
+// ─── Session Summarizer for Moltbook Posts ──────────────────────────────────
+
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+/** Extract a condensed conversation transcript from message history. */
+function extractConversationDigest(messages: BrowserIncomingMessage[], maxChars = 3000): string {
+  const parts: string[] = [];
+  let totalLen = 0;
+
+  for (const msg of messages) {
+    if (totalLen >= maxChars) break;
+
+    if (msg.type === "user_message") {
+      const text = (msg as any).content || "";
+      if (text) {
+        const snippet = text.slice(0, 400);
+        parts.push(`USER: ${snippet}`);
+        totalLen += snippet.length + 6;
+      }
+    } else if (msg.type === "assistant") {
+      const content = (msg as any).message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (totalLen >= maxChars) break;
+          if (block.type === "text" && block.text) {
+            const snippet = block.text.slice(0, 300);
+            parts.push(`ASSISTANT: ${snippet}`);
+            totalLen += snippet.length + 11;
+          } else if (block.type === "tool_use") {
+            const toolInfo = `[Tool: ${block.name}]`;
+            parts.push(toolInfo);
+            totalLen += toolInfo.length;
+          }
+        }
+      }
+    }
+  }
+
+  return parts.join("\n");
+}
+
+/** Use OpenRouter to generate a human-readable title and summary for a session. */
+async function generateMoltbookSummary(
+  digest: string,
+  sessionMeta: { name: string; backend: string; model: string; cost: string; duration: string; turns: number; tags: string[] },
+): Promise<{ title: string; summary: string } | null> {
+  const settings = settingsManager.getSettings();
+  const apiKey = settings.openrouterApiKey?.trim();
+  if (!apiKey) return null;
+
+  const model = settings.openrouterModel?.trim() || DEFAULT_OPENROUTER_MODEL;
+
+  const prompt = `You are writing a short social media post about an AI coding session. Based on the conversation transcript below, generate:
+1. A catchy, human-readable title (5-10 words) that describes what was built or accomplished — NOT the session name, but what actually happened.
+2. A brief summary (2-4 sentences) written in a casual, first-person developer voice. Describe what was built, what problems were solved, or what was interesting about the session. Make it sound like a developer sharing their work, not a technical report.
+
+Session metadata:
+- Backend: ${sessionMeta.backend} | Model: ${sessionMeta.model}
+- Cost: ${sessionMeta.cost} | Duration: ${sessionMeta.duration} | Turns: ${sessionMeta.turns}
+${sessionMeta.tags.length > 0 ? `- Tags: ${sessionMeta.tags.join(", ")}` : ""}
+
+Conversation transcript (condensed):
+${digest}
+
+Respond in this exact JSON format:
+{"title": "your title here", "summary": "your summary here"}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+
+  try {
+    const res = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.3,
+        response_format: { type: "json_object" },
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      console.warn(`[moltbook] OpenRouter summary failed: ${res.status}`);
+      return null;
+    }
+
+    const data = await res.json() as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    const raw = data.choices?.[0]?.message?.content?.trim();
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as { title?: string; summary?: string };
+    if (parsed.title && parsed.summary) {
+      return { title: parsed.title, summary: parsed.summary };
+    }
+    return null;
+  } catch (err) {
+    console.warn("[moltbook] Failed to generate summary:", err);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ─── Public Replay Token Store ──────────────────────────────────────────────
 const publicReplayTokens = new Map<string, { sessionId: string; createdAt: number }>();
@@ -209,17 +321,46 @@ export function registerGalleryRoutes(api: Hono, deps: RouteDeps): void {
     const replayUrl = `${baseUrl}/#/replay/session/${entry.sessionId}`;
     const costStr = entry.totalCostUsd > 0 ? `$${entry.totalCostUsd.toFixed(2)}` : "free";
     const durationMin = Math.round(entry.durationMs / 60_000);
+    const durationStr = durationMin >= 60
+      ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`
+      : `${durationMin}m`;
+
+    // Try to generate an AI summary from the session's conversation history
+    let postTitle = entry.name;
+    let postSummary = entry.description || "";
+
+    const persisted = sessionStore.load(entry.sessionId);
+    if (persisted?.messageHistory?.length) {
+      const digest = extractConversationDigest(persisted.messageHistory);
+      if (digest.length > 50) {
+        const aiSummary = await generateMoltbookSummary(digest, {
+          name: entry.name,
+          backend: entry.backendType,
+          model: entry.model,
+          cost: costStr,
+          duration: durationStr,
+          turns: entry.numTurns,
+          tags: entry.tags,
+        });
+        if (aiSummary) {
+          postTitle = aiSummary.title;
+          postSummary = aiSummary.summary;
+        }
+      }
+    }
+
     const content = [
-      entry.description || `Session: ${entry.name}`,
+      postSummary,
       "",
-      `**Backend:** ${entry.backendType} | **Model:** ${entry.model} | **Cost:** ${costStr} | **Duration:** ${durationMin}m | **Turns:** ${entry.numTurns}`,
+      `**${entry.backendType}** · ${entry.model} · ${costStr} · ${durationStr} · ${entry.numTurns} turns`,
       "",
-      entry.tags.length > 0 ? `Tags: ${entry.tags.join(", ")}` : "",
+      entry.tags.length > 0 ? entry.tags.map(t => `#${t}`).join(" ") : "",
     ].filter(Boolean).join("\n");
+
     const moltbook = await import("../moltbook-client.js");
     const result = await moltbook.postToMoltbook({
       apiKey: moltbookApiKey,
-      title: entry.name,
+      title: postTitle,
       content,
       replayUrl,
       submolt: body.submolt || "general",
