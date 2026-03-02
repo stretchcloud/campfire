@@ -597,6 +597,14 @@ export interface PluginInfo {
   disabledInCampfire: boolean;
 }
 
+export interface SessionFolder {
+  id: string;
+  name: string;
+  color?: string;
+  sessionIds: string[];
+  createdAt: number;
+}
+
 export const api = {
   // Auth
   getAuthStatus: () => get<AuthStatus>("/auth/status"),
@@ -717,6 +725,19 @@ export const api = {
     get<{ content: string }>(`/skills/${encodeURIComponent(pluginId)}/command/${encodeURIComponent(commandName)}`),
   togglePlugin: (id: string, disabled: boolean) =>
     post<{ ok: boolean; disabled: boolean }>(`/skills/${encodeURIComponent(id)}/toggle`, { disabled }),
+
+  // Session Folders
+  listFolders: () => get<SessionFolder[]>("/folders"),
+  createFolder: (name: string, color?: string) =>
+    post<SessionFolder>("/folders", { name, color }),
+  updateFolder: (id: string, updates: { name?: string; color?: string }) =>
+    patch<SessionFolder>(`/folders/${encodeURIComponent(id)}`, updates),
+  deleteFolder: (id: string) =>
+    del<{ ok: boolean }>(`/folders/${encodeURIComponent(id)}`),
+  addSessionToFolder: (folderId: string, sessionId: string) =>
+    post<{ ok: boolean }>(`/folders/${encodeURIComponent(folderId)}/sessions/${encodeURIComponent(sessionId)}`),
+  removeSessionFromFolder: (sessionId: string) =>
+    del<{ ok: boolean }>(`/folders/sessions/${encodeURIComponent(sessionId)}`),
 
   // Backends
   getBackends: () => get<BackendInfo[]>("/backends"),
