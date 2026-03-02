@@ -1,8 +1,9 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useStore } from "./store.js";
 import { connectSession, disconnectSession, setInviteToken, setInviteJoinInProgress } from "./ws.js";
-import { api } from "./api.js";
+import { api, getAuthToken, clearAuthToken } from "./api.js";
 import { capturePageView } from "./analytics.js";
+import { LoginPage } from "./components/LoginPage.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -41,6 +42,35 @@ function useHash() {
 }
 
 export default function App() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
+
+  useEffect(() => {
+    api.getAuthStatus().then((status) => {
+      if (status.enabled && !status.isLoggedIn) {
+        // Maybe we have a stored token — check it
+        const token = getAuthToken();
+        if (token) {
+          // Token exists but server says not logged in — token is invalid
+          clearAuthToken();
+        }
+        setAuthRequired(true);
+      }
+      setAuthChecked(true);
+    }).catch(() => {
+      // If we can't reach the server, just show the app
+      setAuthChecked(true);
+    });
+  }, []);
+
+  if (!authChecked) {
+    return <div className="h-[100dvh] flex items-center justify-center bg-cc-bg text-cc-fg text-[12px] text-cc-muted">Loading...</div>;
+  }
+
+  if (authRequired) {
+    return <LoginPage onLogin={() => setAuthRequired(false)} />;
+  }
+
   const darkMode = useStore((s) => s.darkMode);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const isSpectator = useStore((s) => {

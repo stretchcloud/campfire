@@ -3,6 +3,26 @@ import { captureEvent, captureException } from "./analytics.js";
 
 const BASE = "/api";
 
+// Auth token management
+const AUTH_TOKEN_KEY = "campfire-auth-token";
+
+export function getAuthToken(): string | null {
+  try { return localStorage.getItem(AUTH_TOKEN_KEY); } catch { return null; }
+}
+
+export function setAuthToken(token: string): void {
+  try { localStorage.setItem(AUTH_TOKEN_KEY, token); } catch { /* ignore */ }
+}
+
+export function clearAuthToken(): void {
+  try { localStorage.removeItem(AUTH_TOKEN_KEY); } catch { /* ignore */ }
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function nowMs(): number {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
@@ -42,7 +62,7 @@ async function post<T = unknown>(path: string, body?: object): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
@@ -66,7 +86,7 @@ async function get<T = unknown>(path: string): Promise<T> {
   const startedAt = nowMs();
   let failureTracked = false;
   try {
-    const res = await fetch(`${BASE}${path}`);
+    const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
     if (!res.ok) {
       const apiError = new Error(res.statusText);
       trackApiFailure("GET", path, nowMs() - startedAt, apiError, res.status);
@@ -89,7 +109,7 @@ async function put<T = unknown>(path: string, body?: object): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
@@ -115,7 +135,7 @@ async function patch<T = unknown>(path: string, body?: object): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
@@ -141,7 +161,7 @@ async function del<T = unknown>(path: string, body?: object): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method: "DELETE",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...authHeaders() },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
@@ -525,7 +545,21 @@ export interface InstalledAdapterInfo {
   npmPackage: string;
 }
 
+export interface AuthStatus {
+  enabled: boolean;
+  hasPassword: boolean;
+  activeSessions: number;
+  isLoggedIn: boolean;
+}
+
 export const api = {
+  // Auth
+  getAuthStatus: () => get<AuthStatus>("/auth/status"),
+  login: (password: string) => post<{ token: string }>("/auth/login", { password }),
+  logout: () => post("/auth/logout"),
+  setupAuth: (password: string) => post<AuthStatus & { ok: boolean }>("/auth/setup", { password }),
+  disableAuth: () => post<{ ok: boolean }>("/auth/disable"),
+
   createSession: (opts?: CreateSessionOpts) =>
     post<{ sessionId: string; state: string; cwd: string }>(
       "/sessions/create",

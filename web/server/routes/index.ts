@@ -16,9 +16,16 @@ import { registerPromptRoutes } from "./prompt-routes.js";
 import { registerLinearRoutes } from "./linear-routes.js";
 import { registerDmuxRoutes } from "./dmux-routes.js";
 import { registerOrchestratorRoutes } from "./orchestrator-routes.js";
+import { registerAuthRoutes, authMiddleware } from "./auth-routes.js";
 
 export function createRoutes(deps: RouteDeps): Hono {
   const api = new Hono();
+
+  // Auth routes must be registered BEFORE the middleware
+  registerAuthRoutes(api, deps);
+
+  // Auth middleware protects all other routes
+  api.use("/*", authMiddleware());
 
   registerSessionRoutes(api, deps);
   registerRecordingRoutes(api, deps);
