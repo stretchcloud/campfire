@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type MouseEvent } from "react";
 import { useStore } from "../store.js";
-import { api } from "../api.js";
+import { api, type SessionFolder } from "../api.js";
 import { connectSession, connectAllSessions, disconnectSession } from "../ws.js";
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
@@ -28,6 +28,15 @@ export function Sidebar() {
   const pendingPermissions = useStore((s) => s.pendingPermissions);
   const collapsedProjects = useStore((s) => s.collapsedProjects);
   const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
+  const [folders, setFolders] = useState<SessionFolder[]>([]);
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("cc-collapsed-folders");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
   const isSettingsPage = hash === "#/settings";
   const isTerminalPage = hash === "#/terminal";
   const isEnvironmentsPage = hash === "#/environments";
@@ -83,6 +92,54 @@ export function Sidebar() {
       clearInterval(interval);
     };
   }, []);
+
+  // Load folders on mount
+  useEffect(() => {
+    api.listFolders().then(setFolders).catch(() => {});
+  }, []);
+
+  function toggleFolderCollapse(folderId: string) {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      localStorage.setItem("cc-collapsed-folders", JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  async function handleCreateFolder() {
+    if (!newFolderName.trim()) return;
+    try {
+      const folder = await api.createFolder(newFolderName.trim());
+      setFolders((prev) => [...prev, folder]);
+      setNewFolderName("");
+      setShowNewFolder(false);
+    } catch {}
+  }
+
+  async function handleDeleteFolder(folderId: string) {
+    try {
+      await api.deleteFolder(folderId);
+      setFolders((prev) => prev.filter((f) => f.id !== folderId));
+    } catch {}
+  }
+
+  async function handleMoveToFolder(sessionId: string, folderId: string) {
+    try {
+      await api.addSessionToFolder(folderId, sessionId);
+      const updated = await api.listFolders();
+      setFolders(updated);
+    } catch {}
+  }
+
+  async function handleRemoveFromFolder(sessionId: string) {
+    try {
+      await api.removeSessionFromFolder(sessionId);
+      const updated = await api.listFolders();
+      setFolders(updated);
+    } catch {}
+  }
 
   useEffect(() => {
     const onHashChange = () => setHash(window.location.hash);
@@ -335,6 +392,83 @@ export function Sidebar() {
           </p>
         ) : (
           <>
+            {/* User-defined folders */}
+            {folders.length > 0 && folders.map((folder) => {
+              const folderSessionIds = new Set(folder.sessionIds);
+              const folderSessions = activeSessions.filter((s) => folderSessionIds.has(s.id));
+              const isCollapsed = collapsedFolders.has(folder.id);
+              return (
+                <div key={folder.id} className="mb-1">
+                  <div className="flex items-center group">
+                    <button
+                      onClick={() => toggleFolderCollapse(folder.id)}
+                      className="flex-1 flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono-code font-semibold text-cc-muted uppercase tracking-wider hover:text-cc-fg transition-colors cursor-pointer"
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" className={`w-2.5 h-2.5 transition-transform ${isCollapsed ? "" : "rotate-90"}`}>
+                        <path d="M6 3l5 5-5 5V3z" />
+                      </svg>
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50" style={folder.color ? { color: folder.color } : undefined}>
+                        <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
+                      </svg>
+                      <span className="truncate">{folder.name}</span>
+                      <span className="text-cc-muted/50 ml-auto">{folderSessions.length}</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteFolder(folder.id)}
+                      className="opacity-0 group-hover:opacity-100 px-1 text-cc-muted hover:text-cc-error transition-all cursor-pointer"
+                      title="Delete folder"
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                      </svg>
+                    </button>
+                  </div>
+                  {!isCollapsed && folderSessions.map((s) => {
+                    const permMap = pendingPermissions.get(s.id);
+                    const permCount = permMap ? permMap.size : 0;
+                    return (
+                      <SessionItem
+                        key={s.id}
+                        session={s}
+                        isActive={s.id === currentSessionId}
+                        sessionName={sessionNames?.get(s.id)}
+                        permCount={permCount}
+                        isRecentlyRenamed={recentlyRenamed.has(s.id)}
+                        {...sessionItemProps}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
+
+            {/* New folder inline input */}
+            {showNewFolder && (
+              <div className="flex items-center gap-1 px-2 py-1 mb-1">
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); if (e.key === "Escape") setShowNewFolder(false); }}
+                  placeholder="Folder name"
+                  className="flex-1 px-2 py-0.5 text-[11px] rounded border border-cc-border bg-cc-bg text-cc-fg focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                  autoFocus
+                />
+                <button onClick={handleCreateFolder} className="text-[10px] text-cc-primary hover:text-cc-primary-hover cursor-pointer">+</button>
+              </div>
+            )}
+
+            {/* New folder toggle */}
+            <button
+              onClick={() => setShowNewFolder(!showNewFolder)}
+              className="w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-[10px] text-cc-muted/50 hover:text-cc-muted transition-colors cursor-pointer"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
+              </svg>
+              <span>New folder</span>
+            </button>
+
             {projectGroups.map((group, i) => (
               <ProjectGroup
                 key={group.key}
