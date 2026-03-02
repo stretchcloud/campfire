@@ -30,6 +30,7 @@ import { TaskRouterPage } from "./components/TaskRouterPage.js";
 import { CollectiveMindPanel } from "./components/CollectiveMindPanel.js";
 import { DmuxPage } from "./components/DmuxPage.js";
 import { DmuxReplayViewer } from "./components/DmuxReplayViewer.js";
+import { OrchestratorPage } from "./components/OrchestratorPage.js";
 
 function useHash() {
   return useSyncExternalStore(
@@ -82,6 +83,7 @@ export default function App() {
   const dmuxReplayMatch = hash.match(/^#\/dmux\/replay\/(.+)$/);
   const isDmuxReplayPage = !!dmuxReplayMatch;
   const isCollectiveMindPage = hash === "#/collective";
+  const isOrchestratorPage = hash === "#/orchestrator";
   // Replay routes: #/replay/:filename or #/replay/session/:id
   const replayFileMatch = hash.match(/^#\/replay\/(?!session\/)(.+)$/);
   const replaySessionMatch = hash.match(/^#\/replay\/session\/(.+)$/);
@@ -90,7 +92,7 @@ export default function App() {
   const publicReplayMatch = hash.match(/^#\/public-replay\/(.+)$/);
   const isPublicReplayPage = !!publicReplayMatch;
 
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isReplayPage && !isPublicReplayPage;
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isReplayPage && !isPublicReplayPage;
 
   useEffect(() => {
     capturePageView(hash || "#/");
@@ -279,6 +281,12 @@ export default function App() {
           {isCollectiveMindPage && (
             <div className="absolute inset-0">
               <CollectiveMindPanel />
+            </div>
+          )}
+
+          {isOrchestratorPage && (
+            <div className="absolute inset-0">
+              <OrchestratorPage />
             </div>
           )}
 
