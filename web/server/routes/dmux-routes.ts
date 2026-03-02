@@ -61,6 +61,15 @@ export function registerDmuxRoutes(api: Hono, _deps: RouteDeps): void {
     return c.json({ command });
   });
 
+  // ─── Stop session ───────────────────────────────────────────────
+  api.post("/dmux/stop", async (c) => {
+    const body = await c.req.json<{ cwd: string }>();
+    if (!body.cwd) return c.json({ error: "cwd is required" }, 400);
+    const result = dmuxManager.stopSession(body.cwd);
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json({ ok: true });
+  });
+
   // ─── Config CRUD ──────────────────────────────────────────────────
 
   api.get("/dmux/config", (c) => {

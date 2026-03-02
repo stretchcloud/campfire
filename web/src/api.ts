@@ -636,6 +636,8 @@ export const api = {
     post<{ ok: boolean }>("/dmux/pane/send", { tmuxTarget, keys, enter }),
   launchDmux: (config: DmuxLaunchConfig) =>
     post<{ command: string }>("/dmux/launch", config),
+  stopDmux: (cwd: string) =>
+    post<{ ok: boolean }>("/dmux/stop", { cwd }),
   getDmuxConfig: (cwd: string) =>
     get<DmuxConfigFile>(`/dmux/config?cwd=${encodeURIComponent(cwd)}`),
   updateDmuxConfig: (cwd: string, updates: Partial<DmuxConfigFile>) =>

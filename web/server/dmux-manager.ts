@@ -73,14 +73,24 @@ interface DmuxConfigPane {
   id?: string;
   slug?: string;
   agent?: string;
-  pane_id?: string;
+  // dmux uses camelCase in its config
+  paneId?: string;
+  pane_id?: string;       // legacy snake_case fallback
   tmux_target?: string;
   branch?: string;
   worktree?: string;
+  worktreePath?: string;  // dmux uses this
   status?: string;
+  agentStatus?: string;   // dmux uses this
+  projectRoot?: string;
+  projectName?: string;
 }
 
 interface DmuxConfig {
+  // dmux uses camelCase
+  projectName?: string;
+  projectRoot?: string;
+  // legacy snake_case fallback
   session_name?: string;
   project_root?: string;
   panes?: DmuxConfigPane[];
@@ -95,16 +105,22 @@ class DmuxManager {
    */
   getStatus(cwd: string): DmuxSessionStatus {
     const config = this.readDmuxConfig(cwd);
-    if (!config || !config.session_name) {
+    if (!config) {
       return { running: false, sessionName: null, projectRoot: null, panes: [], totalPanes: 0 };
     }
 
-    const sessionName = config.session_name;
-    const projectRoot = config.project_root || cwd;
+    // dmux config uses camelCase (projectName), fall back to snake_case (session_name)
+    const projectName = config.projectName || config.session_name;
+    if (!projectName) {
+      return { running: false, sessionName: null, projectRoot: null, panes: [], totalPanes: 0 };
+    }
 
-    // Check if the tmux session is actually alive
-    if (!this.tmuxSessionExists(sessionName)) {
-      return { running: false, sessionName, projectRoot, panes: [], totalPanes: 0 };
+    const projectRoot = config.projectRoot || config.project_root || cwd;
+
+    // dmux names tmux sessions as "dmux-{projectName}-{hash}" — find the matching session
+    const sessionName = this.findDmuxTmuxSession(projectName);
+    if (!sessionName) {
+      return { running: false, sessionName: null, projectRoot, panes: [], totalPanes: 0 };
     }
 
     // Get live pane info from tmux
@@ -114,12 +130,12 @@ class DmuxManager {
     // Merge config panes with live tmux state — only include panes that exist in tmux
     const panes: DmuxPaneInfo[] = [];
     for (const cp of configPanes) {
-      const paneId = cp.pane_id || "";
+      const paneId = cp.paneId || cp.pane_id || "";
       const tmuxTarget = cp.tmux_target || "";
 
-      // Check if this pane exists in live tmux output
+      // Check if this pane exists in live tmux output (match by pane ID like "%3")
       const live = livePanes.find(
-        (lp) => lp.paneId === paneId || lp.tmuxTarget === tmuxTarget,
+        (lp) => lp.paneId === paneId || (tmuxTarget && lp.tmuxTarget === tmuxTarget),
       );
       if (!live) continue;
 
@@ -129,9 +145,9 @@ class DmuxManager {
         paneId: live.paneId,
         tmuxTarget: live.tmuxTarget,
         agent: cp.agent || "unknown",
-        agentStatus: this.normalizeStatus(cp.status),
+        agentStatus: this.normalizeStatus(cp.agentStatus || cp.status),
         branchName: cp.branch || "",
-        worktreePath: cp.worktree || "",
+        worktreePath: cp.worktreePath || cp.worktree || "",
         projectRoot,
         isActive: live.isActive,
       });
@@ -198,6 +214,27 @@ class DmuxManager {
   }
 
   /**
+   * Stop a dmux session by killing the tmux session.
+   */
+  stopSession(cwd: string): { ok: boolean; error?: string } {
+    const status = this.getStatus(cwd);
+    if (!status.running || !status.sessionName) {
+      return { ok: false, error: "No running dmux session found" };
+    }
+    try {
+      const tmux = this.getTmuxPath();
+      if (!tmux) return { ok: false, error: "tmux not found" };
+      execSync(`${tmux} kill-session -t ${this.shellEscape(status.sessionName)}`, {
+        timeout: 5000,
+        stdio: "pipe",
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  /**
    * Build the launch command for dmux. Since dmux is configured via its own TUI
    * and config files, we just return "dmux".
    */
@@ -212,6 +249,31 @@ class DmuxManager {
       const configPath = join(cwd, ".dmux", "dmux.config.json");
       const raw = readFileSync(configPath, "utf-8");
       return JSON.parse(raw) as DmuxConfig;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Find a tmux session matching the dmux naming pattern "dmux-{projectName}-{hash}".
+   * Also checks for exact match (legacy session_name in config).
+   */
+  private findDmuxTmuxSession(projectName: string): string | null {
+    try {
+      const tmux = this.getTmuxPath();
+      if (!tmux) return null;
+      const output = execSync(`${tmux} list-sessions -F "#{session_name}"`, {
+        encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+      if (!output) return null;
+      const sessions = output.split("\n");
+      // Match "dmux-{projectName}-{hash}" pattern
+      const prefix = `dmux-${projectName}-`;
+      const match = sessions.find((s) => s.startsWith(prefix));
+      if (match) return match;
+      // Also try exact match (legacy format)
+      if (sessions.includes(projectName)) return projectName;
+      return null;
     } catch {
       return null;
     }
