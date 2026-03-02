@@ -43,6 +43,7 @@ export function Sidebar() {
   const isRouterPage = hash === "#/router";
   const isDmuxPage = hash === "#/dmux";
   const isCollectiveMindPage = hash === "#/collective";
+  const isKanbanPage = hash === "#/kanban";
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -653,6 +654,22 @@ export function Sidebar() {
             <path d="M8 0a8 8 0 110 16A8 8 0 018 0zM4.5 7.5a.5.5 0 000 1h7a.5.5 0 000-1h-7zM4 5.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zm4.5 5a.5.5 0 000 1h3a.5.5 0 000-1h-3z"/>
           </svg>
           <span>collective</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/kanban";
+          }}
+          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] font-mono-code transition-colors cursor-pointer ${
+            isKanbanPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted/70 hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+            <path d="M1.5 2h4v12h-4V2zm.75.75v10.5h2.5V2.75h-2.5zM6 2h4v8H6V2zm.75.75v6.5h2.5v-6.5h-2.5zM10.5 2h4v10h-4V2zm.75.75v8.5h2.5v-8.5h-2.5z" />
+          </svg>
+          <span>kanban</span>
         </button>
         <button
           onClick={() => {
