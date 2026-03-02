@@ -4,7 +4,7 @@
 
 <h1 align="center">Campfire</h1>
 <p align="center"><strong>The collaborative web platform for AI coding agents.</strong></p>
-<p align="center">Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, permission voting, session replay, webhooks, a public gallery, a prompt library, Linear integration, and collective intelligence across agents.</p>
+<p align="center">Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, permission voting, session replay, webhooks, a public gallery, a prompt library, Linear integration, collective intelligence, session folders, skills management, and drag & drop uploads.</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/the-companion"><img src="https://img.shields.io/npm/v/the-companion.svg" alt="npm version" /></a>
@@ -47,6 +47,13 @@
   - [Orchestrator Pipelines](#orchestrator-pipelines)
   - [Message Queue](#message-queue)
   - [Kanban Task Board](#kanban-task-board)
+  - [Authentication](#authentication)
+  - [Adopt Running Sessions](#adopt-running-sessions)
+  - [Thinking Effort (Codex)](#thinking-effort-codex)
+  - [Skills & Plugins Management](#skills--plugins-management)
+  - [Drag & Drop Upload](#drag--drop-upload)
+  - [Session Folders](#session-folders)
+  - [Permission Mode Selector](#permission-mode-selector)
 - [Architecture](#architecture)
 - [Docker Deployment](#docker-deployment)
 - [CLI Reference](#cli-reference)
@@ -1428,6 +1435,131 @@ A progress bar at the top shows overall completion percentage.
 
 ---
 
+### Authentication
+
+Token-based authentication to protect your Campfire instance. When enabled, all API routes and WebSocket connections require a valid session token.
+
+**Setup:**
+
+```bash
+# Set a password via environment variable
+CAMPFIRE_PASSWORD=your-secret bunx the-companion
+
+# Or configure through the UI on first visit
+```
+
+**Features:**
+- Password-based login with SHA256 hashing
+- 7-day rotating session tokens stored in `~/.companion/auth.json`
+- Auth middleware protects all `/api/*` routes
+- WebSocket connections validated on upgrade
+- Environment variable override for headless/CI deployments
+
+**API endpoints:**
+- `GET /api/auth/status` — Check if auth is enabled and user is logged in
+- `POST /api/auth/login` — Authenticate with password
+- `POST /api/auth/logout` — Invalidate session token
+- `POST /api/auth/setup` — Initial password setup
+- `POST /api/auth/disable` — Remove authentication
+
+---
+
+### Adopt Running Sessions
+
+Detect and adopt Claude Code CLI processes that are already running outside of Campfire. Useful when you started a session in the terminal and want to bring it into the web UI.
+
+**How it works:**
+1. Go to the Home page and expand the **"Adopt Running Sessions"** section at the bottom
+2. Campfire scans `ps aux` for running `claude --sdk-url` processes
+3. Each detected process shows its PID, model, working directory, and command line
+4. Click **"Adopt"** to bring the session into Campfire — the old process is killed and relaunched with `--resume` to preserve conversation history
+
+**API endpoints:**
+- `GET /api/sessions/detect` — Scan for running Claude Code processes
+- `POST /api/sessions/adopt` — Adopt a detected process by PID
+
+---
+
+### Thinking Effort (Codex)
+
+Control the reasoning effort level for Codex o-series models. This maps to Codex's `reasoningEffort` parameter on `thread/start` and `thread/resume` calls.
+
+**Three levels:**
+- **Low** — Faster responses, less deliberation
+- **Medium** — Balanced (default)
+- **High** — Maximum reasoning depth
+
+**Usage:** When creating a new session with the Codex backend, a segmented control appears on the Home page. Your selection persists in localStorage across page reloads.
+
+---
+
+### Skills & Plugins Management
+
+Browse and manage Claude Code plugins and skills from a dedicated UI page at `#/skills` (accessible via the sparkle icon in the sidebar).
+
+**Features:**
+- Lists all installed plugins from `~/.claude/plugins/installed_plugins.json`
+- Expandable cards showing each plugin's skills, commands, install path, version, and author
+- View SKILL.md content for any skill by clicking its name
+- Enable/disable plugins in Campfire without uninstalling them (stored in `~/.companion/skills-config.json`)
+- Blocked plugin detection from `~/.claude/plugins/blocklist.json`
+
+**API endpoints:**
+- `GET /api/skills` — List all plugins with enriched status
+- `GET /api/skills/:id` — Get a single plugin's details
+- `GET /api/skills/:id/skill/:name` — Read a skill's SKILL.md content
+- `GET /api/skills/:id/command/:name` — Read a command's content
+- `POST /api/skills/:id/toggle` — Enable/disable a plugin in Campfire
+
+---
+
+### Drag & Drop Upload
+
+Drag image files directly onto the Composer to attach them to your message. A visual overlay with a dashed border appears when dragging over the input area, confirming the drop target.
+
+**Supported:** Any image format (PNG, JPG, GIF, WebP, etc.). Images are converted to base64 and sent as attachments with your message.
+
+---
+
+### Session Folders
+
+Organize sessions into named, color-coded folders in the sidebar.
+
+**Features:**
+- Create folders with a name and optional color
+- Move sessions into folders via context menu
+- Collapse/expand folders (state persists in localStorage)
+- Remove sessions from folders
+- Delete empty folders
+
+**Storage:** Folder data persists in `~/.companion/session-folders.json`.
+
+**API endpoints:**
+- `GET /api/folders` — List all folders
+- `POST /api/folders` — Create a folder
+- `PATCH /api/folders/:id` — Update folder name/color
+- `DELETE /api/folders/:id` — Delete a folder
+- `POST /api/folders/:folderId/sessions/:sessionId` — Add session to folder
+- `DELETE /api/folders/sessions/:sessionId` — Remove session from folder
+
+---
+
+### Permission Mode Selector
+
+A dropdown in the Composer lets you switch between Claude Code permission modes in real-time, without restarting the session.
+
+**Four modes:**
+| Mode | Behavior |
+|------|----------|
+| **Agent (auto-approve)** | Uses `--dangerously-skip-permissions` — all tool calls approved automatically |
+| **Accept Edits** | File edits approved automatically, other tools require approval |
+| **Ask Every Time** | Every tool call requires explicit approval |
+| **Plan** | Planning mode only — no code execution |
+
+Switching sends a `set_permission_mode` control message to the CLI. The current mode is displayed as a badge on the mode button. Use `Shift+Tab` in the Composer as a keyboard shortcut to toggle between Plan and your previous mode.
+
+---
+
 ## Screenshots
 
 | Chat + tool timeline | Permission voting |
@@ -1721,6 +1853,39 @@ All endpoints are under `/api`.
 | `POST` | `/api/sessions/:id/invite` | Create a shareable invite link |
 | `GET` | `/api/sessions/join/:token` | Resolve an invite token |
 | `POST` | `/api/sessions/create-with-progress` | Create a container session with SSE progress (returns `text/event-stream`) |
+| `GET` | `/api/sessions/detect` | Detect running Claude Code CLI processes |
+| `POST` | `/api/sessions/adopt` | Adopt a detected process into Campfire |
+
+### Authentication
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/auth/status` | Check if auth is enabled and user is logged in |
+| `POST` | `/api/auth/login` | Authenticate with password |
+| `POST` | `/api/auth/logout` | Invalidate session token |
+| `POST` | `/api/auth/setup` | Initial password setup |
+| `POST` | `/api/auth/disable` | Remove authentication |
+
+### Skills & Plugins
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/skills` | List all plugins with status |
+| `GET` | `/api/skills/:id` | Get a single plugin |
+| `GET` | `/api/skills/:id/skill/:name` | Read a skill's SKILL.md content |
+| `GET` | `/api/skills/:id/command/:name` | Read a command's content |
+| `POST` | `/api/skills/:id/toggle` | Enable/disable a plugin in Campfire |
+
+### Session Folders
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/folders` | List all folders |
+| `POST` | `/api/folders` | Create a folder (`{"name": "...", "color": "..."}`) |
+| `PATCH` | `/api/folders/:id` | Update folder name/color |
+| `DELETE` | `/api/folders/:id` | Delete a folder |
+| `POST` | `/api/folders/:folderId/sessions/:sessionId` | Add session to folder |
+| `DELETE` | `/api/folders/sessions/:sessionId` | Remove session from folder |
 
 ### Session Recording
 
