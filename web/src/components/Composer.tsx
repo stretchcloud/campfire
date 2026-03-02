@@ -398,8 +398,71 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }, [isRunning, isConnected, isSpectator, sessionId]);
 
+  // Drag & drop state
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCountRef = useRef(0);
+
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCountRef.current++;
+    if (dragCountRef.current === 1) setIsDragOver(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCountRef.current--;
+    if (dragCountRef.current <= 0) {
+      dragCountRef.current = 0;
+      setIsDragOver(false);
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCountRef.current = 0;
+    setIsDragOver(false);
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const newImages: ImageAttachment[] = [];
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("image/")) continue;
+      const { base64, mediaType } = await readFileAsBase64(file);
+      newImages.push({ name: file.name, base64, mediaType });
+    }
+    if (newImages.length > 0) {
+      setImages((prev) => [...prev, ...newImages]);
+    }
+  }
+
   return (
-    <div className="shrink-0 px-4 sm:px-6 pb-3 pt-1">
+    <div
+      className="shrink-0 px-4 sm:px-6 pb-3 pt-1 relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-cc-primary/5 border-2 border-dashed border-cc-primary/40 rounded-xl pointer-events-none">
+          <div className="flex items-center gap-2 text-cc-primary text-xs font-medium">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+              <path d="M3.5 4A1.5 1.5 0 012 2.5V2h12v.5A1.5 1.5 0 0112.5 4h-9zM2 5v7.5A1.5 1.5 0 003.5 14h9a1.5 1.5 0 001.5-1.5V5H2zm5.25 2.5a.75.75 0 011.5 0v1.75H10.5a.75.75 0 010 1.5H8.75V12.5a.75.75 0 01-1.5 0v-1.75H5.5a.75.75 0 010-1.5h1.75V7.5z" />
+            </svg>
+            Drop images here
+          </div>
+        </div>
+      )}
       <div className="max-w-4xl mx-auto">
         {/* Queued messages indicator */}
         {queuedMessages.length > 0 && (
