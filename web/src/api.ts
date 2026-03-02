@@ -209,6 +209,7 @@ export interface CreateSessionOpts {
   claudeBinary?: string;
   codexBinary?: string;
   codexInternetAccess?: boolean;
+  codexReasoningEffort?: "low" | "medium" | "high";
   allowedTools?: string[];
   envSlug?: string;
   branch?: string;
