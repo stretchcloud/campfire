@@ -40,6 +40,13 @@
   - [Collective Intelligence](#collective-intelligence)
   - [TUI Client](#tui-client)
   - [dmux Integration](#dmux-integration)
+  - [Copy Output Button](#copy-output-button)
+  - [Voice Input](#voice-input)
+  - [Workspace File Tree](#workspace-file-tree)
+  - [Mermaid Diagram Rendering](#mermaid-diagram-rendering)
+  - [Orchestrator Pipelines](#orchestrator-pipelines)
+  - [Message Queue](#message-queue)
+  - [Kanban Task Board](#kanban-task-board)
 - [Architecture](#architecture)
 - [Docker Deployment](#docker-deployment)
 - [CLI Reference](#cli-reference)
@@ -1325,6 +1332,99 @@ Run multiple AI coding agents in parallel via [dmux](https://github.com/dimfeld/
 | `GET` | `/api/dmux/recordings/:filename` | Load recording for replay |
 
 **Replay route:** `#/dmux/replay/:filename` opens the multi-pane replay viewer directly.
+
+### Copy Output Button
+
+Hover over any user or assistant message to reveal a copy button. Copies the full text content to your clipboard with a checkmark confirmation animation. Uses the Clipboard API with a textarea fallback for insecure contexts (e.g. HTTP without TLS).
+
+### Voice Input
+
+Dictate messages using the Web Speech API. Click the microphone button in the composer or press **Ctrl+Shift+M** (Cmd+Shift+M on macOS) to toggle voice input. Features include:
+
+- Real-time interim text display while speaking
+- Auto-restart on silence for continuous dictation
+- Pulsing red indicator when active
+- Transcript is appended to the composer textarea so you can edit before sending
+
+> **Note:** Requires a browser that supports the Web Speech API (Chrome, Edge, Safari).
+
+### Workspace File Tree
+
+A collapsible file tree in the right-side TaskPanel showing the session's working directory. Features include:
+
+- **Lazy-loading** — subdirectories load on expand, keeping the initial render fast
+- **File preview** — click a file to see its contents inline (up to 10KB)
+- **Hidden files toggle** — show/hide dotfiles and system directories
+- **Refresh** — re-scan the directory tree on demand
+
+Powered by the `GET /api/fs/list-entries` endpoint which filters out `.git`, `node_modules`, and `__pycache__` by default.
+
+### Mermaid Diagram Rendering
+
+When an assistant returns a fenced code block with the `mermaid` language tag, Campfire renders it as an interactive SVG diagram instead of raw text. Supports all Mermaid diagram types: flowcharts, sequence diagrams, class diagrams, state diagrams, ER diagrams, Gantt charts, and more.
+
+- Toggle between **diagram** and **source code** views
+- Error handling with automatic fallback to source display
+- Lazy-loaded via `React.lazy()` to avoid impacting initial bundle size
+
+### Orchestrator Pipelines
+
+A multi-stage automation engine for chaining sequential AI sessions into workflows. Access it at `#/orchestrator` in the sidebar.
+
+**How it works:**
+
+1. **Create a pipeline** — define a name, working directory, and a series of stages
+2. **Each stage** has a prompt, backend (Claude/Codex), and model selection
+3. **Run the pipeline** — stages execute sequentially, each creating a real agent session
+4. **Context passing** — output from one stage feeds into the next via `{{previous_output}}`
+5. **Monitor** — real-time status timeline with per-stage duration and cost tracking
+
+**Example use cases:**
+- Analyze → Review → Write Tests → Create PR
+- Scaffold → Implement → Lint → Deploy
+- Research → Plan → Execute → Verify
+
+**REST API:**
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/api/orchestrator/pipelines` | List all pipelines |
+| `POST` | `/api/orchestrator/pipelines` | Create a new pipeline |
+| `PUT` | `/api/orchestrator/pipelines/:id` | Update a pipeline |
+| `DELETE` | `/api/orchestrator/pipelines/:id` | Delete a pipeline |
+| `POST` | `/api/orchestrator/pipelines/:id/run` | Execute a pipeline |
+| `GET` | `/api/orchestrator/runs` | List all runs |
+| `GET` | `/api/orchestrator/runs/:id` | Get run status and details |
+| `POST` | `/api/orchestrator/runs/:id/cancel` | Cancel a running pipeline |
+
+Pipeline and run data is persisted to `~/.companion/orchestrator/`.
+
+### Message Queue
+
+When the agent is busy processing a request (status "running"), new messages are queued instead of being dropped. Features include:
+
+- **Queue indicator** — a badge shows the number of queued messages with a clear button
+- **Auto-send** — queued messages are sent one at a time when the agent becomes idle
+- **System notification** — a "Queued: ..." message appears in the chat timeline so you know the message was captured
+- Works seamlessly with all backends (Claude Code, Codex, Goose, Aider, OpenHands)
+
+### Kanban Task Board
+
+A full-page Kanban board at `#/kanban` (also accessible via the sidebar or the "board" button in the TaskPanel) that visualizes tasks extracted from agent tool calls (`TaskCreate`, `TaskUpdate`, `TodoWrite`).
+
+**Three columns:**
+- **To Do** — pending tasks
+- **In Progress** — tasks the agent is actively working on (with animated pulse indicator)
+- **Done** — completed tasks
+
+**Task cards show:**
+- Subject and description
+- Owner (agent name)
+- Active form (what the agent is currently doing)
+- Blocked status with warning badge
+- Task ID for reference
+
+A progress bar at the top shows overall completion percentage.
 
 ---
 
