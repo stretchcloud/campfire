@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
 import type { ModeOption } from "../utils/backends.js";
 import type { Prompt } from "../types.js";
+import { useSpeechToText } from "../hooks/useSpeechToText.js";
 
 let idCounter = 0;
 
@@ -46,6 +47,22 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionData = useStore((s) => s.sessions.get(sessionId));
   const previousMode = useStore((s) => s.previousPermissionMode.get(sessionId) || "acceptEdits");
+
+  // Voice input
+  const handleVoiceTranscript = useCallback((transcript: string) => {
+    setText((prev) => {
+      const needsSpace = prev.length > 0 && !prev.endsWith(" ");
+      return prev + (needsSpace ? " " : "") + transcript;
+    });
+    // Auto-resize textarea
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      ta.style.height = "auto";
+      ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
+    });
+  }, []);
+  const { isSupported: speechSupported, isListening, interimText, toggle: toggleVoice, stop: stopVoice } = useSpeechToText(handleVoiceTranscript);
 
   const myRole = useStore((s) => s.myRole.get(sessionId) ?? "spectator");
   const isSpectator = myRole === "spectator";
@@ -196,6 +213,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     setImages([]);
     setSlashMenuOpen(false);
     setAtMenuOpen(false);
+    if (isListening) stopVoice();
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -260,6 +278,13 @@ export function Composer({ sessionId }: { sessionId: string }) {
         setSlashMenuOpen(false);
         return;
       }
+    }
+
+    // Ctrl+Shift+M or Cmd+Shift+M to toggle voice input
+    if (e.key === "m" && e.shiftKey && (e.ctrlKey || e.metaKey) && speechSupported) {
+      e.preventDefault();
+      toggleVoice();
+      return;
     }
 
     if (e.key === "Tab" && e.shiftKey) {
@@ -453,6 +478,17 @@ export function Composer({ sessionId }: { sessionId: string }) {
             style={{ minHeight: "34px", maxHeight: "200px" }}
           />
 
+          {/* Voice input interim text */}
+          {isListening && (
+            <div className="flex items-center gap-2 px-3.5 pb-1 text-[11px] text-cc-muted font-sans-ui animate-pulse">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-error shrink-0">
+                <path d="M8 1a2.5 2.5 0 00-2.5 2.5v4a2.5 2.5 0 005 0v-4A2.5 2.5 0 008 1z" />
+                <path d="M3.5 7a.75.75 0 011.5 0 3 3 0 006 0 .75.75 0 011.5 0 4.5 4.5 0 01-3.75 4.437V13h1.5a.75.75 0 010 1.5h-4.5a.75.75 0 010-1.5h1.5v-1.563A4.5 4.5 0 013.5 7z" />
+              </svg>
+              <span>{interimText || "Listening..."}</span>
+            </div>
+          )}
+
           {/* Git branch + lines info */}
           {sessionData?.git_branch && (
             <div className="flex items-center gap-2 px-3.5 pb-1 text-[10px] text-cc-muted/60 font-mono-code overflow-hidden">
@@ -545,6 +581,36 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   <path d="M2 11l3-3 2 2 3-4 4 5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
+
+              {speechSupported && (
+                <button
+                  onClick={toggleVoice}
+                  disabled={!isConnected || isSpectator}
+                  className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                    !isConnected || isSpectator
+                      ? "text-cc-muted opacity-30 cursor-not-allowed"
+                      : isListening
+                      ? "text-cc-error bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer"
+                      : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                  }`}
+                  title={isListening ? "Stop listening" : `Voice input (${navigator.platform?.includes("Mac") ? "Cmd" : "Ctrl"}+Shift+M)`}
+                >
+                  {isListening ? (
+                    <span className="relative flex items-center justify-center">
+                      <span className="absolute inline-flex h-4 w-4 rounded-full bg-cc-error/30 animate-ping" />
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 relative">
+                        <path d="M8 1a2.5 2.5 0 00-2.5 2.5v4a2.5 2.5 0 005 0v-4A2.5 2.5 0 008 1z" />
+                        <path d="M3.5 7a.75.75 0 011.5 0 3 3 0 006 0 .75.75 0 011.5 0 4.5 4.5 0 01-3.75 4.437V13h1.5a.75.75 0 010 1.5h-4.5a.75.75 0 010-1.5h1.5v-1.563A4.5 4.5 0 013.5 7z" />
+                      </svg>
+                    </span>
+                  ) : (
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                      <path d="M8 1a2.5 2.5 0 00-2.5 2.5v4a2.5 2.5 0 005 0v-4A2.5 2.5 0 008 1z" />
+                      <path d="M3.5 7a.75.75 0 011.5 0 3 3 0 006 0 .75.75 0 011.5 0 4.5 4.5 0 01-3.75 4.437V13h1.5a.75.75 0 010 1.5h-4.5a.75.75 0 010-1.5h1.5v-1.563A4.5 4.5 0 013.5 7z" />
+                    </svg>
+                  )}
+                </button>
+              )}
 
               {isRunning ? (
                 <button
