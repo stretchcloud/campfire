@@ -715,7 +715,7 @@ export class WsBridge {
         // so they survive reconnects (mirrors handleResultMessage for Claude CLI).
         const resultData = (msg as { data?: CLIResultMessage }).data;
         if (resultData) {
-          if (typeof resultData.total_cost_usd === "number") {
+          if (typeof resultData.total_cost_usd === "number" && resultData.total_cost_usd > (session.state.total_cost_usd || 0)) {
             session.state.total_cost_usd = resultData.total_cost_usd;
           }
           if (typeof resultData.num_turns === "number") {
@@ -1167,7 +1167,12 @@ export class WsBridge {
 
   private handleResultMessage(session: Session, msg: CLIResultMessage) {
     // Update session cost/turns
-    session.state.total_cost_usd = msg.total_cost_usd;
+    // Only update cost if the new value is higher — slash commands like /cost
+    // can emit result messages with total_cost_usd: 0, which would erase the
+    // accumulated cost. The CLI's total_cost_usd is cumulative and should only rise.
+    if (typeof msg.total_cost_usd === "number" && msg.total_cost_usd > (session.state.total_cost_usd || 0)) {
+      session.state.total_cost_usd = msg.total_cost_usd;
+    }
     session.state.num_turns = msg.num_turns;
 
     // Accumulate API duration across turns
