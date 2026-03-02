@@ -64,6 +64,8 @@ export interface SdkSessionInfo {
   codexInternetAccess?: boolean;
   /** Sandbox mode selected for Codex sessions */
   codexSandbox?: "workspace-write" | "danger-full-access";
+  /** Reasoning effort for Codex o-series models */
+  codexReasoningEffort?: "low" | "medium" | "high";
   /** If this session was spawned by a cron job */
   cronJobId?: string;
   /** Human-readable name of the cron job that spawned this session */
@@ -88,6 +90,8 @@ export interface LaunchOptions {
   codexSandbox?: "workspace-write" | "danger-full-access";
   /** Whether Codex internet/web search should be enabled for this session. */
   codexInternetAccess?: boolean;
+  /** Reasoning effort for Codex o-series models (low/medium/high). */
+  codexReasoningEffort?: "low" | "medium" | "high";
   /** Optional override for CODEX_HOME used by Codex sessions. */
   codexHome?: string;
   /** Pre-resolved worktree info from the session creation flow */
@@ -196,6 +200,7 @@ export class CliLauncher {
     if (backendType === "codex") {
       info.codexInternetAccess = options.codexInternetAccess === true;
       info.codexSandbox = options.codexSandbox;
+      info.codexReasoningEffort = options.codexReasoningEffort;
     }
 
     // Store worktree metadata if provided
@@ -260,6 +265,7 @@ export class CliLauncher {
         cwd: info.cwd,
         codexSandbox: info.codexSandbox,
         codexInternetAccess: info.codexInternetAccess,
+        codexReasoningEffort: info.codexReasoningEffort,
       });
     } else if (info.backendType === "goose") {
       this.spawnGoose(sessionId, info, {
@@ -535,6 +541,7 @@ export class CliLauncher {
       threadId: info.cliSessionId,
       sandbox: options.codexSandbox,
       recorder: this.recorder ?? undefined,
+      reasoningEffort: options.codexReasoningEffort,
     });
 
     // Handle init errors — mark session as exited so UI shows failure.

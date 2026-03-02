@@ -130,6 +130,8 @@ export interface CodexAdapterOptions {
   threadId?: string;
   /** Optional recorder for raw message capture. */
   recorder?: RecorderManager;
+  /** Reasoning effort for o-series models (low/medium/high). */
+  reasoningEffort?: "low" | "medium" | "high";
 }
 
 // ─── JSON-RPC Transport ───────────────────────────────────────────────────────
@@ -575,6 +577,7 @@ export class CodexAdapter implements AgentAdapter {
           cwd: this.options.cwd,
           approvalPolicy: this.mapApprovalPolicy(this.options.approvalMode),
           sandbox: this.options.sandbox || this.mapSandboxPolicy(this.options.approvalMode),
+          ...(this.options.reasoningEffort ? { reasoningEffort: this.options.reasoningEffort } : {}),
         }) as { thread: { id: string } };
         this.threadId = resumeResult.thread.id;
       } else {
@@ -584,6 +587,7 @@ export class CodexAdapter implements AgentAdapter {
           cwd: this.options.cwd,
           approvalPolicy: this.mapApprovalPolicy(this.options.approvalMode),
           sandbox: this.options.sandbox || this.mapSandboxPolicy(this.options.approvalMode),
+          ...(this.options.reasoningEffort ? { reasoningEffort: this.options.reasoningEffort } : {}),
         }) as { thread: { id: string } };
         this.threadId = threadResult.thread.id;
       }

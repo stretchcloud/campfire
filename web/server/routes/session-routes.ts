@@ -115,6 +115,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
         codexSandbox: backend === "codex" && body.codexInternetAccess === true
           ? "danger-full-access"
           : "workspace-write",
+        codexReasoningEffort: backend === "codex" ? body.codexReasoningEffort : undefined,
         allowedTools: body.allowedTools,
         env: envVars,
         backendType: backend,
@@ -463,6 +464,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
             codexSandbox: backend === "codex" && body.codexInternetAccess === true
               ? "danger-full-access"
               : "workspace-write",
+            codexReasoningEffort: backend === "codex" ? body.codexReasoningEffort : undefined,
             allowedTools: body.allowedTools,
             env: envVars,
             backendType: backend,
