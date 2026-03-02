@@ -43,6 +43,7 @@ export function Sidebar() {
   const isRouterPage = hash === "#/router";
   const isDmuxPage = hash === "#/dmux";
   const isCollectiveMindPage = hash === "#/collective";
+  const isOrchestratorPage = hash === "#/orchestrator";
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -460,6 +461,25 @@ export function Sidebar() {
             <path d="M2 2h5.5v5.5H2V2zm.75.75v4h4v-4h-4zM8.5 2H14v5.5H8.5V2zm.75.75v4h4v-4h-4zM2 8.5h5.5V14H2V8.5zm.75.75v4h4v-4h-4zM8.5 8.5H14V14H8.5V8.5zm.75.75v4h4v-4h-4z" />
           </svg>
           <span>dmux</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/orchestrator";
+            if (window.innerWidth < 768) {
+              useStore.getState().setSidebarOpen(false);
+            }
+          }}
+          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] font-mono-code transition-colors cursor-pointer ${
+            isOrchestratorPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted/70 hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+            <path d="M1.5 3A1.5 1.5 0 013 1.5h10A1.5 1.5 0 0114.5 3v1.5h-13V3zM1.5 6h13v1.5h-13V6zM1.5 9h13v1.5h-13V9zM1.5 12v1A1.5 1.5 0 003 14.5h10a1.5 1.5 0 001.5-1.5v-1h-13z" />
+          </svg>
+          <span>orchestrator</span>
         </button>
         <button
           onClick={() => {
