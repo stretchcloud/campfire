@@ -121,6 +121,40 @@ export function registerFsRoutes(api: Hono, deps: RouteDeps): void {
     return c.json({ path: basePath, tree });
   });
 
+  // Lazy directory listing for workspace file tree (supports on-demand expansion)
+  api.get("/fs/list-entries", async (c) => {
+    const rawPath = c.req.query("path");
+    if (!rawPath) return c.json({ error: "path required" }, 400);
+    const showHidden = c.req.query("hidden") === "1";
+    const basePath = resolve(rawPath);
+    try {
+      const entries = await readdir(basePath, { withFileTypes: true });
+      const items: { name: string; path: string; type: "file" | "directory"; size?: number }[] = [];
+      for (const entry of entries) {
+        if (!showHidden && entry.name.startsWith(".")) continue;
+        if (entry.name === "node_modules" || entry.name === "__pycache__" || entry.name === ".git") continue;
+        const fullPath = join(basePath, entry.name);
+        if (entry.isDirectory()) {
+          items.push({ name: entry.name, path: fullPath, type: "directory" });
+        } else if (entry.isFile()) {
+          try {
+            const info = await stat(fullPath);
+            items.push({ name: entry.name, path: fullPath, type: "file", size: info.size });
+          } catch {
+            items.push({ name: entry.name, path: fullPath, type: "file" });
+          }
+        }
+      }
+      items.sort((a, b) => {
+        if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      return c.json({ path: basePath, entries: items });
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Cannot read directory", path: basePath, entries: [] }, 400);
+    }
+  });
+
   api.get("/fs/read", async (c) => {
     const filePath = c.req.query("path");
     if (!filePath) return c.json({ error: "path required" }, 400);
