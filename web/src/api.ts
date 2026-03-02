@@ -525,6 +525,33 @@ export interface InstalledAdapterInfo {
   npmPackage: string;
 }
 
+export interface PluginSkillInfo {
+  name: string;
+  description?: string;
+  path: string;
+}
+
+export interface PluginCommandInfo {
+  name: string;
+  path: string;
+}
+
+export interface PluginInfo {
+  id: string;
+  name: string;
+  description: string;
+  marketplace: string;
+  author?: string;
+  installPath: string;
+  version: string;
+  installedAt: string;
+  blocked: boolean;
+  blockReason?: string;
+  skills: PluginSkillInfo[];
+  commands: PluginCommandInfo[];
+  disabledInCampfire: boolean;
+}
+
 export const api = {
   createSession: (opts?: CreateSessionOpts) =>
     post<{ sessionId: string; state: string; cwd: string }>(
@@ -622,6 +649,16 @@ export const api = {
     get<PRStatusResponse>(
       `/git/pr-status?cwd=${encodeURIComponent(cwd)}&branch=${encodeURIComponent(branch)}`,
     ),
+
+  // Skills / Plugins
+  listPlugins: () => get<PluginInfo[]>("/skills"),
+  getPlugin: (id: string) => get<PluginInfo>(`/skills/${encodeURIComponent(id)}`),
+  readSkillContent: (pluginId: string, skillName: string) =>
+    get<{ content: string }>(`/skills/${encodeURIComponent(pluginId)}/skill/${encodeURIComponent(skillName)}`),
+  readCommandContent: (pluginId: string, commandName: string) =>
+    get<{ content: string }>(`/skills/${encodeURIComponent(pluginId)}/command/${encodeURIComponent(commandName)}`),
+  togglePlugin: (id: string, disabled: boolean) =>
+    post<{ ok: boolean; disabled: boolean }>(`/skills/${encodeURIComponent(id)}/toggle`, { disabled }),
 
   // Backends
   getBackends: () => get<BackendInfo[]>("/backends"),
