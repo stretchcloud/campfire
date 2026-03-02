@@ -15,6 +15,7 @@ import { registerCiRoutes } from "./ci-routes.js";
 import { registerPromptRoutes } from "./prompt-routes.js";
 import { registerLinearRoutes } from "./linear-routes.js";
 import { registerDmuxRoutes } from "./dmux-routes.js";
+import { registerOrchestratorRoutes } from "./orchestrator-routes.js";
 
 export function createRoutes(deps: RouteDeps): Hono {
   const api = new Hono();
@@ -34,6 +35,7 @@ export function createRoutes(deps: RouteDeps): Hono {
   registerPromptRoutes(api, deps);
   registerLinearRoutes(api, deps);
   registerDmuxRoutes(api, deps);
+  registerOrchestratorRoutes(api, deps);
 
   return api;
 }

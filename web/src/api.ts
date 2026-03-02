@@ -440,6 +440,49 @@ export interface DmuxConfigFile {
   auto_restart?: boolean;
 }
 
+// Orchestrator types
+export interface OrchestratorStageInput {
+  name: string;
+  prompt: string;
+  backend: string;
+  model?: string;
+  permissionMode?: string;
+  inheritContext?: boolean;
+}
+
+export interface OrchestratorPipeline {
+  id: string;
+  name: string;
+  description?: string;
+  cwd: string;
+  stages: Array<OrchestratorStageInput & { id: string }>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface OrchestratorRun {
+  id: string;
+  pipelineId: string;
+  pipelineName: string;
+  cwd: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  stageResults: Array<{
+    stageId: string;
+    status: "pending" | "running" | "completed" | "failed" | "skipped";
+    sessionId?: string;
+    startedAt?: number;
+    completedAt?: number;
+    durationMs?: number;
+    costUsd?: number;
+    error?: string;
+    outputSummary?: string;
+  }>;
+  startedAt: number;
+  completedAt?: number;
+  totalCostUsd: number;
+  totalDurationMs: number;
+}
+
 export interface DmuxRecordingMeta {
   filename: string;
   cwd: string;
@@ -952,4 +995,26 @@ export const api = {
 
     return result;
   },
+
+  // Orchestrator
+  listPipelines: () =>
+    get<OrchestratorPipeline[]>("/orchestrator/pipelines"),
+  getPipeline: (id: string) =>
+    get<OrchestratorPipeline>(`/orchestrator/pipelines/${encodeURIComponent(id)}`),
+  createPipeline: (data: { name: string; description?: string; cwd: string; stages: OrchestratorStageInput[] }) =>
+    post<OrchestratorPipeline>("/orchestrator/pipelines", data),
+  updatePipeline: (id: string, data: Partial<OrchestratorPipeline>) =>
+    put<OrchestratorPipeline>(`/orchestrator/pipelines/${encodeURIComponent(id)}`, data),
+  deletePipeline: (id: string) =>
+    del(`/orchestrator/pipelines/${encodeURIComponent(id)}`),
+  listRuns: (pipelineId?: string) =>
+    get<OrchestratorRun[]>(`/orchestrator/runs${pipelineId ? `?pipeline_id=${encodeURIComponent(pipelineId)}` : ""}`),
+  getRun: (id: string) =>
+    get<OrchestratorRun>(`/orchestrator/runs/${encodeURIComponent(id)}`),
+  deleteRun: (id: string) =>
+    del(`/orchestrator/runs/${encodeURIComponent(id)}`),
+  runPipeline: (id: string) =>
+    post<OrchestratorRun>(`/orchestrator/pipelines/${encodeURIComponent(id)}/run`),
+  cancelRun: (id: string) =>
+    post<{ ok: boolean }>(`/orchestrator/runs/${encodeURIComponent(id)}/cancel`),
 };
