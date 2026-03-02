@@ -53,6 +53,9 @@ export function HomePage() {
   const [codexInternetAccess, setCodexInternetAccess] = useState(() =>
     localStorage.getItem("cc-codex-internet-access") === "1",
   );
+  const [codexReasoningEffort, setCodexReasoningEffort] = useState<"low" | "medium" | "high">(() =>
+    (localStorage.getItem("cc-codex-reasoning-effort") as "low" | "medium" | "high") || "medium",
+  );
 
   const MODELS = dynamicModels || getModelsForBackend(backend);
   const MODES = getModesForBackend(backend);
@@ -299,6 +302,7 @@ export function HomePage() {
         useWorktree: useWorktree || undefined,
         backend,
         codexInternetAccess: backend === "codex" ? codexInternetAccess : undefined,
+        codexReasoningEffort: backend === "codex" ? codexReasoningEffort : undefined,
       };
 
       let sessionId: string;
@@ -612,6 +616,29 @@ export function HomePage() {
               </svg>
               <span>Internet</span>
             </button>
+          )}
+
+          {/* Codex reasoning effort selector */}
+          {backend === "codex" && (
+            <div className="flex items-center gap-0.5 rounded-md border border-cc-border overflow-hidden">
+              {(["low", "medium", "high"] as const).map((level) => (
+                <button
+                  key={level}
+                  onClick={() => {
+                    setCodexReasoningEffort(level);
+                    localStorage.setItem("cc-codex-reasoning-effort", level);
+                  }}
+                  className={`px-2 py-1 text-[11px] transition-colors cursor-pointer ${
+                    codexReasoningEffort === level
+                      ? "bg-cc-primary/15 text-cc-primary font-medium"
+                      : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                  }`}
+                  title={`Set reasoning effort to ${level}`}
+                >
+                  {level.charAt(0).toUpperCase() + level.slice(1)}
+                </button>
+              ))}
+            </div>
           )}
 
           {/* Folder selector */}
