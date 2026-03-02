@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "../store.js";
-import { api, type CompanionEnv, type GitRepoInfo, type GitBranchInfo, type BackendInfo } from "../api.js";
+import { api, type CompanionEnv, type GitRepoInfo, type GitBranchInfo, type BackendInfo, type DetectedProcess } from "../api.js";
 import { connectSession, waitForConnection, sendToSession } from "../ws.js";
 import { disconnectSession } from "../ws.js";
 import { generateUniqueSessionName } from "../utils/names.js";
@@ -990,6 +990,9 @@ export function HomePage() {
         )}
       </div>
 
+      {/* Adopt Running Sessions Section */}
+      <AdoptSessionSection />
+
       {/* Environment manager modal */}
       {showEnvManager && (
         <EnvManager
@@ -1013,6 +1016,133 @@ export function HomePage() {
           setSending(false);
         }}
       />
+    </div>
+  );
+}
+
+/** Collapsible section for detecting and adopting running Claude Code processes. */
+function AdoptSessionSection() {
+  const [expanded, setExpanded] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [processes, setProcesses] = useState<DetectedProcess[]>([]);
+  const [adopting, setAdopting] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const setCurrentSession = useStore((s) => s.setCurrentSession);
+
+  async function handleDetect() {
+    setDetecting(true);
+    setError("");
+    try {
+      const detected = await api.detectRunningProcesses();
+      setProcesses(detected);
+      if (detected.length === 0) {
+        setError("No running Claude Code processes found.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to detect processes");
+    } finally {
+      setDetecting(false);
+    }
+  }
+
+  async function handleAdopt(proc: DetectedProcess) {
+    setAdopting(proc.pid);
+    setError("");
+    try {
+      const session = await api.adoptSession({
+        pid: proc.pid,
+        cwd: proc.cwd,
+        model: proc.model,
+        cliSessionId: proc.cliSessionId,
+        name: `Adopted (PID ${proc.pid})`,
+      });
+      // Connect to the new session
+      connectSession(session.sessionId);
+      setCurrentSession(session.sessionId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to adopt session");
+    } finally {
+      setAdopting(null);
+    }
+  }
+
+  return (
+    <div className="mt-6 border-t border-cc-border pt-4">
+      <button
+        onClick={() => { setExpanded(!expanded); if (!expanded) handleDetect(); }}
+        className="flex items-center gap-2 text-xs text-cc-muted hover:text-cc-fg transition-colors cursor-pointer w-full"
+      >
+        <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${expanded ? "rotate-90" : ""}`}>
+          <path d="M6 3l5 5-5 5V3z" />
+        </svg>
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+          <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM7 4.5v4h4v-1.5H8.5V4.5H7z" />
+        </svg>
+        <span>Adopt running session</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-2">
+          {detecting && (
+            <div className="flex items-center gap-2 text-xs text-cc-muted">
+              <span className="w-3 h-3 border-2 border-cc-muted/30 border-t-cc-muted rounded-full animate-spin" />
+              Scanning for running Claude Code processes...
+            </div>
+          )}
+
+          {error && (
+            <p className="text-xs text-cc-muted">{error}</p>
+          )}
+
+          {processes.length > 0 && (
+            <div className="space-y-1.5">
+              {processes.map((proc) => (
+                <div
+                  key={proc.pid}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg border border-cc-border bg-cc-card hover:bg-cc-hover transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono-code text-cc-fg font-medium">PID {proc.pid}</span>
+                      {proc.model && (
+                        <span className="text-[10px] font-mono-code text-cc-muted bg-cc-hover px-1.5 py-0.5 rounded">
+                          {proc.model}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-cc-muted font-mono-code truncate mt-0.5" title={proc.cwd}>
+                      {proc.cwd}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAdopt(proc)}
+                    disabled={adopting === proc.pid}
+                    className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-cc-primary/15 text-cc-primary hover:bg-cc-primary/25 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    {adopting === proc.pid ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 border-2 border-cc-primary/30 border-t-cc-primary rounded-full animate-spin" />
+                        Adopting...
+                      </span>
+                    ) : (
+                      "Adopt"
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!detecting && processes.length > 0 && (
+            <button
+              onClick={handleDetect}
+              className="text-[11px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+            >
+              Refresh
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
