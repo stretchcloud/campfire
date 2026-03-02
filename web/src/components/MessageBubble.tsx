@@ -1,8 +1,10 @@
-import { useState, useMemo, type ComponentProps } from "react";
+import { useState, useMemo, lazy, Suspense, type ComponentProps } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
 import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
+
+const MermaidDiagram = lazy(() => import("./MermaidDiagram.js").then((m) => ({ default: m.MermaidDiagram })));
 
 export function MessageBubble({ message, onFork }: { message: ChatMessage; onFork?: () => void }) {
   if (message.role === "system") {
@@ -203,6 +205,22 @@ function MarkdownContent({ text }: { text: string }) {
 
             if (isBlock) {
               const lang = match?.[1] || "";
+              const codeStr = typeof children === "string" ? children : String(children ?? "");
+
+              // Render mermaid diagrams
+              if (lang === "mermaid") {
+                return (
+                  <Suspense fallback={
+                    <div className="my-2 rounded-md overflow-hidden border border-cc-border">
+                      <div className="px-3 py-1 bg-cc-code-bg border-b border-cc-border text-[9px] text-cc-code-fg/40 font-mono-code uppercase tracking-[0.2em]">mermaid</div>
+                      <div className="px-3 py-3 bg-cc-code-bg text-[11px] text-cc-muted animate-pulse">Loading diagram...</div>
+                    </div>
+                  }>
+                    <MermaidDiagram code={codeStr} />
+                  </Suspense>
+                );
+              }
+
               return (
                 <div className="my-2 rounded-md overflow-hidden border border-cc-border">
                   {lang && (
