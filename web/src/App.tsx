@@ -30,6 +30,7 @@ import { TaskRouterPage } from "./components/TaskRouterPage.js";
 import { CollectiveMindPanel } from "./components/CollectiveMindPanel.js";
 import { DmuxPage } from "./components/DmuxPage.js";
 import { DmuxReplayViewer } from "./components/DmuxReplayViewer.js";
+import { KanbanPage } from "./components/KanbanPage.js";
 
 function useHash() {
   return useSyncExternalStore(
@@ -82,6 +83,7 @@ export default function App() {
   const dmuxReplayMatch = hash.match(/^#\/dmux\/replay\/(.+)$/);
   const isDmuxReplayPage = !!dmuxReplayMatch;
   const isCollectiveMindPage = hash === "#/collective";
+  const isKanbanPage = hash === "#/kanban";
   // Replay routes: #/replay/:filename or #/replay/session/:id
   const replayFileMatch = hash.match(/^#\/replay\/(?!session\/)(.+)$/);
   const replaySessionMatch = hash.match(/^#\/replay\/session\/(.+)$/);
@@ -90,7 +92,7 @@ export default function App() {
   const publicReplayMatch = hash.match(/^#\/public-replay\/(.+)$/);
   const isPublicReplayPage = !!publicReplayMatch;
 
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isReplayPage && !isPublicReplayPage;
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isKanbanPage && !isReplayPage && !isPublicReplayPage;
 
   useEffect(() => {
     capturePageView(hash || "#/");
@@ -279,6 +281,12 @@ export default function App() {
           {isCollectiveMindPage && (
             <div className="absolute inset-0">
               <CollectiveMindPanel />
+            </div>
+          )}
+
+          {isKanbanPage && (
+            <div className="absolute inset-0">
+              <KanbanPage />
             </div>
           )}
 
