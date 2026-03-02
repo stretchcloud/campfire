@@ -68,6 +68,9 @@ interface AppState {
   permissionVotes: Map<string, Map<string, { votes: PermissionVote[]; votersTotal: number; deadline: number }>>;
   voteResults: Map<string, Map<string, { result: "allow" | "deny"; policy: VotingPolicy }>>;
 
+  // Message queue per session (buffered messages to send when agent becomes idle)
+  messageQueue: Map<string, string[]>;
+
   // Replay state
   replaySpeed: number;
   replayState: "idle" | "playing" | "paused" | "ended";
@@ -158,6 +161,12 @@ interface AppState {
   setReplaySpeed: (speed: number) => void;
   setReplayState: (state: "idle" | "playing" | "paused" | "ended") => void;
   setReplaySessionId: (id: string | null) => void;
+
+  // Message queue actions
+  enqueueMessage: (sessionId: string, message: string) => void;
+  dequeueMessage: (sessionId: string) => string | undefined;
+  clearQueue: (sessionId: string) => void;
+  getQueue: (sessionId: string) => string[];
 
   // Plan mode actions
   setPreviousPermissionMode: (sessionId: string, mode: string) => void;
@@ -274,6 +283,7 @@ export const useStore = create<AppState>((set) => ({
   myViewerId: new Map(),
   permissionVotes: new Map(),
   voteResults: new Map(),
+  messageQueue: new Map(),
   replaySpeed: 1,
   replayState: "idle",
   replaySessionId: null,
@@ -728,6 +738,41 @@ export const useStore = create<AppState>((set) => ({
       }
       return { permissionVotes, voteResults };
     }),
+
+  // Message queue
+  enqueueMessage: (sessionId, message) => set((state) => {
+    const queue = new Map(state.messageQueue);
+    const existing = queue.get(sessionId) || [];
+    queue.set(sessionId, [...existing, message]);
+    return { messageQueue: queue };
+  }),
+  dequeueMessage: (sessionId) => {
+    let first: string | undefined;
+    set((state) => {
+      const currentQueue: string[] = state.messageQueue.get(sessionId) || [];
+      if (currentQueue.length === 0) return {};
+      first = currentQueue[0];
+      const rest: string[] = currentQueue.slice(1);
+      const newQueue = new Map(state.messageQueue);
+      if (rest.length === 0) {
+        newQueue.delete(sessionId);
+      } else {
+        newQueue.set(sessionId, rest);
+      }
+      return { messageQueue: newQueue };
+    });
+    return first;
+  },
+  clearQueue: (sessionId) => set((state) => {
+    const queue = new Map(state.messageQueue);
+    queue.delete(sessionId);
+    return { messageQueue: queue };
+  }),
+  getQueue: (_sessionId) => {
+    // Note: callers should use useStore.getState().messageQueue.get(sessionId) directly
+    // or subscribe via useStore((s) => s.messageQueue.get(sessionId))
+    return [];
+  },
 
   setReplaySpeed: (speed) => set({ replaySpeed: speed }),
   setReplayState: (state) => set({ replayState: state }),
