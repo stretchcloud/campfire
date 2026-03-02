@@ -4,6 +4,71 @@ import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
 import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
 
+function extractTextContent(message: ChatMessage): string {
+  if (message.content && typeof message.content === "string") {
+    // If there are content blocks with text, prefer those for richer content
+    if (message.contentBlocks?.length) {
+      const textParts = message.contentBlocks
+        .filter((b): b is ContentBlock & { type: "text"; text: string } => b.type === "text")
+        .map((b) => b.text);
+      if (textParts.length > 0) return textParts.join("\n\n");
+    }
+    return message.content;
+  }
+  if (message.contentBlocks?.length) {
+    return message.contentBlocks
+      .filter((b): b is ContentBlock & { type: "text"; text: string } => b.type === "text")
+      .map((b) => b.text)
+      .join("\n\n");
+  }
+  return "";
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for insecure contexts
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  if (!text) return null;
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg transition-all"
+      title={copied ? "Copied!" : "Copy message"}
+    >
+      {copied ? (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-success">
+          <path fillRule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+          <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25z" />
+          <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 export function MessageBubble({ message, onFork }: { message: ChatMessage; onFork?: () => void }) {
   if (message.role === "system") {
     return (
@@ -20,17 +85,22 @@ export function MessageBubble({ message, onFork }: { message: ChatMessage; onFor
   if (message.role === "user") {
     return (
       <div className="group/msg animate-[fadeSlideIn_0.15s_ease-out] relative">
-        {onFork && (
-          <button
-            onClick={onFork}
-            className="absolute right-0 top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg z-10"
-            title="Fork session from here"
-          >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-              <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
-            </svg>
-          </button>
-        )}
+        <div className="absolute right-0 top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-0.5 z-10">
+          {typeof message.content === "string" && message.content && (
+            <CopyButton text={message.content} />
+          )}
+          {onFork && (
+            <button
+              onClick={onFork}
+              className="p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg transition-all"
+              title="Fork session from here"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
+              </svg>
+            </button>
+          )}
+        </div>
         <div className="log-user">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] font-mono-code text-cc-muted/60 uppercase tracking-wider">you</span>
@@ -56,19 +126,23 @@ export function MessageBubble({ message, onFork }: { message: ChatMessage; onFor
   }
 
   // Assistant message
+  const textContent = extractTextContent(message);
   return (
     <div className="group/msg animate-[fadeSlideIn_0.15s_ease-out] relative">
-      {onFork && (
-        <button
-          onClick={onFork}
-          className="absolute right-0 top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg z-10"
-          title="Fork session from here"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-            <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
-          </svg>
-        </button>
-      )}
+      <div className="absolute right-0 top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-0.5 z-10">
+        {textContent && <CopyButton text={textContent} />}
+        {onFork && (
+          <button
+            onClick={onFork}
+            className="p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg transition-all"
+            title="Fork session from here"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+              <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
+            </svg>
+          </button>
+        )}
+      </div>
       <AssistantMessage message={message} />
     </div>
   );
