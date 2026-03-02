@@ -525,6 +525,14 @@ export interface InstalledAdapterInfo {
   npmPackage: string;
 }
 
+export interface SessionFolder {
+  id: string;
+  name: string;
+  color?: string;
+  sessionIds: string[];
+  createdAt: number;
+}
+
 export const api = {
   createSession: (opts?: CreateSessionOpts) =>
     post<{ sessionId: string; state: string; cwd: string }>(
@@ -622,6 +630,19 @@ export const api = {
     get<PRStatusResponse>(
       `/git/pr-status?cwd=${encodeURIComponent(cwd)}&branch=${encodeURIComponent(branch)}`,
     ),
+
+  // Session Folders
+  listFolders: () => get<SessionFolder[]>("/folders"),
+  createFolder: (name: string, color?: string) =>
+    post<SessionFolder>("/folders", { name, color }),
+  updateFolder: (id: string, updates: { name?: string; color?: string }) =>
+    patch<SessionFolder>(`/folders/${encodeURIComponent(id)}`, updates),
+  deleteFolder: (id: string) =>
+    del<{ ok: boolean }>(`/folders/${encodeURIComponent(id)}`),
+  addSessionToFolder: (folderId: string, sessionId: string) =>
+    post<{ ok: boolean }>(`/folders/${encodeURIComponent(folderId)}/sessions/${encodeURIComponent(sessionId)}`),
+  removeSessionFromFolder: (sessionId: string) =>
+    del<{ ok: boolean }>(`/folders/sessions/${encodeURIComponent(sessionId)}`),
 
   // Backends
   getBackends: () => get<BackendInfo[]>("/backends"),
