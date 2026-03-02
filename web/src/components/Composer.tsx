@@ -8,6 +8,7 @@ import type { Prompt } from "../types.js";
 import { useSpeechToText } from "../hooks/useSpeechToText.js";
 
 let idCounter = 0;
+const EMPTY_QUEUE: string[] = [];
 
 interface ImageAttachment {
   name: string;
@@ -378,7 +379,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
   const sessionStatus = useStore((s) => s.sessionStatus);
   const isRunning = sessionStatus.get(sessionId) === "running";
-  const queuedMessages = useStore((s) => s.messageQueue.get(sessionId) || []);
+  const queuedMessages = useStore((s) => s.messageQueue.get(sessionId)) ?? EMPTY_QUEUE;
   const canSend = text.trim().length > 0 && isConnected && !isSpectator;
 
   // Auto-send queued messages when agent transitions to idle
