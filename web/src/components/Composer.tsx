@@ -190,24 +190,42 @@ export function Composer({ sessionId }: { sessionId: string }) {
     });
   }, [text]);
 
-  function handleSend() {
-    const msg = text.trim();
-    if (!msg || !isConnected || isSpectator) return;
-
+  function sendMessageDirectly(msg: string, imgs?: ImageAttachment[]) {
     sendToSession(sessionId, {
       type: "user_message",
       content: msg,
       session_id: sessionId,
-      images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
+      images: imgs && imgs.length > 0 ? imgs.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
     });
 
     useStore.getState().appendMessage(sessionId, {
       id: `user-${Date.now()}-${++idCounter}`,
       role: "user",
       content: msg,
-      images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
+      images: imgs && imgs.length > 0 ? imgs.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
       timestamp: Date.now(),
     });
+  }
+
+  function handleSend() {
+    const msg = text.trim();
+    if (!msg || !isConnected || isSpectator) return;
+
+    const sessionSt = useStore.getState().sessionStatus.get(sessionId);
+    const agentIsRunning = sessionSt === "running";
+
+    if (agentIsRunning) {
+      // Queue the message for later
+      useStore.getState().enqueueMessage(sessionId, msg);
+      useStore.getState().appendMessage(sessionId, {
+        id: `user-queued-${Date.now()}-${++idCounter}`,
+        role: "system",
+        content: `Queued: "${msg.length > 60 ? msg.slice(0, 60) + "…" : msg}"`,
+        timestamp: Date.now(),
+      });
+    } else {
+      sendMessageDirectly(msg, images);
+    }
 
     setText("");
     setImages([]);
@@ -360,11 +378,46 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
   const sessionStatus = useStore((s) => s.sessionStatus);
   const isRunning = sessionStatus.get(sessionId) === "running";
+  const queuedMessages = useStore((s) => s.messageQueue.get(sessionId) || []);
   const canSend = text.trim().length > 0 && isConnected && !isSpectator;
+
+  // Auto-send queued messages when agent transitions to idle
+  const prevRunningRef = useRef(isRunning);
+  useEffect(() => {
+    const wasRunning = prevRunningRef.current;
+    prevRunningRef.current = isRunning;
+
+    if (wasRunning && !isRunning && isConnected && !isSpectator) {
+      // Agent just became idle — send next queued message
+      const nextMsg = useStore.getState().dequeueMessage(sessionId);
+      if (nextMsg) {
+        // Small delay to let the UI settle
+        setTimeout(() => sendMessageDirectly(nextMsg), 300);
+      }
+    }
+  }, [isRunning, isConnected, isSpectator, sessionId]);
 
   return (
     <div className="shrink-0 px-4 sm:px-6 pb-3 pt-1">
       <div className="max-w-4xl mx-auto">
+        {/* Queued messages indicator */}
+        {queuedMessages.length > 0 && (
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-cc-primary/10 text-cc-primary text-[11px] font-mono-code">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path d="M8 0a1 1 0 011 1v5.268l3.562-1.78a1 1 0 01.894 1.789L8 9.382l-5.456-3.105a1 1 0 11.894-1.79L7 6.27V1a1 1 0 011-1zM3 12a1 1 0 100 2h10a1 1 0 100-2H3z" />
+              </svg>
+              <span>{queuedMessages.length} message{queuedMessages.length > 1 ? "s" : ""} queued</span>
+            </div>
+            <button
+              onClick={() => useStore.getState().clearQueue(sessionId)}
+              className="text-[10px] text-cc-muted hover:text-cc-error transition-colors"
+            >
+              Clear queue
+            </button>
+          </div>
+        )}
+
         {/* Image thumbnails */}
         {images.length > 0 && (
           <div className="flex items-center gap-2 mb-2 flex-wrap">
