@@ -208,10 +208,10 @@ export function readCommandContent(pluginId: string, commandName: string): strin
 }
 
 /**
- * Enable/disable a plugin by modifying ~/.companion/skills-config.json.
+ * Enable/disable a plugin by modifying ~/.campfire/skills-config.json.
  * (This is a Campfire-level toggle, not modifying Claude's own config.)
  */
-const SKILLS_CONFIG_FILE = join(homedir(), ".companion", "skills-config.json");
+const SKILLS_CONFIG_FILE = join(homedir(), ".campfire", "skills-config.json");
 
 interface SkillsConfig {
   disabled: string[]; // List of plugin IDs that are disabled in Campfire
@@ -222,7 +222,7 @@ function readSkillsConfig(): SkillsConfig {
 }
 
 function writeSkillsConfig(config: SkillsConfig): void {
-  const dir = join(homedir(), ".companion");
+  const dir = join(homedir(), ".campfire");
   if (!existsSync(dir)) {
     const { mkdirSync } = require("node:fs");
     mkdirSync(dir, { recursive: true });

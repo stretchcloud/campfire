@@ -49,7 +49,7 @@ export async function imageExistsLocally(image: string): Promise<boolean> {
 
 /**
  * Pull a Docker image with progress reporting.
- * @param image Docker image to pull (e.g. "companion-dev:latest")
+ * @param image Docker image to pull (e.g. "campfire-dev:latest")
  * @param onProgress Callback for progress updates
  * @param timeout Maximum time to wait in ms (default 5 minutes)
  * @returns true if pull succeeded

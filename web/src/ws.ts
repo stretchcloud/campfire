@@ -192,7 +192,7 @@ function getWsUrl(sessionId: string): string {
 }
 
 function getLastSeqStorageKey(sessionId: string): string {
-  return `companion:last-seq:${sessionId}`;
+  return `campfire:last-seq:${sessionId}`;
 }
 
 function getLastSeq(sessionId: string): number {

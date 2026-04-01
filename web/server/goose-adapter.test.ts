@@ -1,6 +1,6 @@
 /**
  * Tests for the GooseAdapter — validates that Goose ACP JSON-RPC messages
- * are correctly translated to the Companion's BrowserIncomingMessage types.
+ * are correctly translated to the Campfire's BrowserIncomingMessage types.
  *
  * These tests mock the Bun.Subprocess and verify that the adapter:
  * 1. Performs the ACP initialization handshake
@@ -350,7 +350,7 @@ describe("GooseAdapter", () => {
     }
   });
 
-  it("maps Goose tool names to Companion-compatible names", async () => {
+  it("maps Goose tool names to Campfire-compatible names", async () => {
     const { proc, messages } = await createInitializedAdapter();
     messages.length = 0;
 

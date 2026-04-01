@@ -1,4 +1,4 @@
-/** Hash-based routing utilities for the Companion app. */
+/** Hash-based routing utilities for the Campfire app. */
 
 export type AppRoute =
   | { type: "home" }

@@ -5,7 +5,7 @@ services:
       - "3456:3456"
     volumes:
       # Persistent data (envs, cron, gallery, webhooks, adapters, settings, recordings)
-      - campfire-data:/home/campfire/.companion
+      - campfire-data:/home/campfire/.campfire
       # Session state (survives container restarts)
       - campfire-sessions:/tmp/vibe-sessions
     environment:

@@ -40,3 +40,4 @@ temp/
 
 # Recordings
 recordings/
+.dmux/

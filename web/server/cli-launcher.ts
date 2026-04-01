@@ -23,7 +23,7 @@ import type { AgentAdapter } from "./adapter-types.js";
 import { resolveBinary, getEnrichedPath } from "./path-resolver.js";
 import {
   getLegacyCodexHome,
-  resolveCompanionCodexSessionHome,
+  resolveCampfireCodexSessionHome,
 } from "./codex-home.js";
 
 export interface SdkSessionInfo {
@@ -476,7 +476,7 @@ export class CliLauncher {
     const args: string[] = ["app-server"];
     const internetEnabled = options.codexInternetAccess === true;
     args.push("-c", `tools.webSearch=${internetEnabled ? "true" : "false"}`);
-    const codexHome = resolveCompanionCodexSessionHome(
+    const codexHome = resolveCampfireCodexSessionHome(
       sessionId,
       options.codexHome,
     );

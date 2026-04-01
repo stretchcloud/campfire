@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
-const AUTH_FILE = join(homedir(), ".companion", "auth.json");
+const AUTH_FILE = join(homedir(), ".campfire", "auth.json");
 
 interface AuthConfig {
   /** bcrypt-style hash of the password/token */

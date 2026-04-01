@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Pipeline, PipelineRun } from "./orchestrator-types.js";
 
-const STORE_DIR = join(homedir(), ".companion", "orchestrator");
+const STORE_DIR = join(homedir(), ".campfire", "orchestrator");
 const PIPELINES_DIR = join(STORE_DIR, "pipelines");
 const RUNS_DIR = join(STORE_DIR, "runs");
 

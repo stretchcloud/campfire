@@ -1,6 +1,6 @@
 /**
  * Types for the adapter registry — manages third-party agent adapters
- * installed via npm into ~/.companion/adapters/.
+ * installed via npm into ~/.campfire/adapters/.
  *
  * Each adapter package declares a "campfireAdapter" field in its package.json
  * containing an AdapterMetadata object that tells the registry how to launch

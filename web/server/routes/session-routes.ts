@@ -23,13 +23,13 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
       // Resolve environment variables from envSlug
       let envVars: Record<string, string> | undefined = body.env;
       if (body.envSlug) {
-        const companionEnv = envManager.getEnv(body.envSlug);
-        if (companionEnv) {
+        const campfireEnv = envManager.getEnv(body.envSlug);
+        if (campfireEnv) {
           console.log(
-            `[routes] Injecting env "${companionEnv.name}" (${Object.keys(companionEnv.variables).length} vars):`,
-            Object.keys(companionEnv.variables).join(", "),
+            `[routes] Injecting env "${campfireEnv.name}" (${Object.keys(campfireEnv.variables).length} vars):`,
+            Object.keys(campfireEnv.variables).join(", "),
           );
-          envVars = { ...companionEnv.variables, ...body.env };
+          envVars = { ...campfireEnv.variables, ...body.env };
         } else {
           console.warn(
             `[routes] Environment "${body.envSlug}" not found, ignoring`,
@@ -94,7 +94,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
       let containerInfo: ContainerInfo | undefined;
       if (body.container && backend === "claude") {
         const cConfig: ContainerConfig = {
-          image: body.container.image || "companion-dev:latest",
+          image: body.container.image || "campfire-dev:latest",
           ports: Array.isArray(body.container.ports)
             ? body.container.ports.map(Number).filter((n: number) => n > 0)
             : [],
@@ -347,7 +347,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
   api.post("/sessions/create-with-progress", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const backend = body.backend ?? "claude";
-    const image = body.container?.image || "companion-dev:latest";
+    const image = body.container?.image || "campfire-dev:latest";
 
     // Set up SSE stream
     const encoder = new TextEncoder();
@@ -413,9 +413,9 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
 
           let envVars: Record<string, string> | undefined = body.env;
           if (body.envSlug) {
-            const companionEnv = envManager.getEnv(body.envSlug);
-            if (companionEnv) {
-              envVars = { ...companionEnv.variables, ...body.env };
+            const campfireEnv = envManager.getEnv(body.envSlug);
+            if (campfireEnv) {
+              envVars = { ...campfireEnv.variables, ...body.env };
             }
           }
 

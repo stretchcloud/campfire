@@ -2,7 +2,7 @@
  * Goose ACP (Agent Client Protocol) Adapter
  *
  * Translates between the Goose ACP JSON-RPC protocol (stdin/stdout)
- * and The Companion's BrowserIncomingMessage/BrowserOutgoingMessage types.
+ * and Campfire's BrowserIncomingMessage/BrowserOutgoingMessage types.
  *
  * This allows the browser to be completely unaware of which backend is running —
  * it sees the same message types regardless of whether Claude Code, Codex, or
@@ -217,7 +217,7 @@ class JsonRpcTransport {
 export class GooseAdapter implements AgentAdapter {
   private transport: JsonRpcTransport;
   private proc: Subprocess;
-  private sessionId: string; // Companion session ID
+  private sessionId: string; // Campfire session ID
   private options: GooseAdapterOptions;
 
   private browserMessageCb: ((msg: BrowserIncomingMessage) => void) | null = null;
@@ -712,7 +712,7 @@ export class GooseAdapter implements AgentAdapter {
 
     this.activeToolCalls.set(toolCallId, { toolName, startTime: Date.now() });
 
-    // Map Goose tool names to Companion-compatible names
+    // Map Goose tool names to Campfire-compatible names
     const mappedName = this.mapToolName(toolName);
 
     // Emit stream event for tool_use start
@@ -904,7 +904,7 @@ export class GooseAdapter implements AgentAdapter {
     this.emit({ type: "permission_request", request: perm });
   }
 
-  /** Map Goose tool names to Companion-compatible tool names. */
+  /** Map Goose tool names to Campfire-compatible tool names. */
   private mapToolName(gooseToolName: string): string {
     // Goose uses developer__bash, developer__text_editor, etc.
     const toolMap: Record<string, string> = {
