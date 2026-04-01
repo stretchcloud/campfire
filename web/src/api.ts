@@ -219,23 +219,6 @@ export interface CreateSessionOpts {
   container?: ContainerCreateOpts;
 }
 
-export interface DetectedProcess {
-  pid: number;
-  cwd: string;
-  sdkUrl?: string;
-  model?: string;
-  cliSessionId?: string;
-  cmdline: string;
-}
-
-export interface AdoptSessionOpts {
-  pid?: number;
-  cwd?: string;
-  model?: string;
-  cliSessionId?: string;
-  name?: string;
-}
-
 export interface BackendInfo {
   id: string;
   name: string;
@@ -620,12 +603,6 @@ export const api = {
     ),
 
   listSessions: () => get<SdkSessionInfo[]>("/sessions"),
-
-  detectRunningProcesses: () =>
-    get<DetectedProcess[]>("/sessions/detect"),
-
-  adoptSession: (opts: AdoptSessionOpts) =>
-    post<SdkSessionInfo>("/sessions/adopt", opts),
 
   killSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/kill`),
