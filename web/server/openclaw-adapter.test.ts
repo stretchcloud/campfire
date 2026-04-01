@@ -1,6 +1,6 @@
 /**
  * Tests for the OpenClawAdapter — validates that OpenClaw ACP JSON-RPC messages
- * are correctly translated to the Companion's BrowserIncomingMessage types.
+ * are correctly translated to the Campfire's BrowserIncomingMessage types.
  *
  * OpenClaw uses the same ACP protocol as Goose, but with different tool naming
  * conventions (plain names instead of developer__ prefixed names) and different
@@ -299,7 +299,7 @@ describe("OpenClawAdapter", () => {
     expect(resultMsg).toBeTruthy();
   });
 
-  it("maps OpenClaw tool names to Companion-compatible names", async () => {
+  it("maps OpenClaw tool names to Campfire-compatible names", async () => {
     const { proc, messages } = await createInitializedAdapter();
     messages.length = 0;
 

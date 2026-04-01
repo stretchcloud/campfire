@@ -1,7 +1,7 @@
 /**
  * DmuxPaneRecorder — JSONL recording of pane output for replay.
  *
- * Follows the recorder.ts pattern. Stores recordings in ~/.companion/dmux-recordings/.
+ * Follows the recorder.ts pattern. Stores recordings in ~/.campfire/dmux-recordings/.
  */
 
 import { mkdirSync, appendFileSync, readdirSync, readFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 
-const DEFAULT_DIR = join(homedir(), ".companion", "dmux-recordings");
+const DEFAULT_DIR = join(homedir(), ".campfire", "dmux-recordings");
 const RECORDING_FILENAME_RE = /^[A-Za-z0-9._-]+\.jsonl$/;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ export interface DmuxRecordingData {
 }
 
 function getRecordingsDir(): string {
-  return process.env.COMPANION_DMUX_RECORDINGS_DIR || DEFAULT_DIR;
+  return process.env.CAMPFIRE_DMUX_RECORDINGS_DIR || DEFAULT_DIR;
 }
 
 function isValidHeader(value: unknown): value is DmuxRecordingHeader {

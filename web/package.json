@@ -1,12 +1,12 @@
 {
-  "name": "the-companion",
+  "name": "the-campfire",
   "version": "0.42.0",
   "type": "module",
   "description": "Web UI for launching and interacting with Claude Code agents",
   "license": "MIT",
   "author": "The Vibe Company",
   "bin": {
-    "the-companion": "./bin/cli.ts"
+    "the-campfire": "./bin/cli.ts"
   },
   "files": [
     "bin/",

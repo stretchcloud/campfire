@@ -40,7 +40,7 @@ afterEach(() => {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function adaptersDir(): string {
-  return join(tempDir, ".companion", "adapters");
+  return join(tempDir, ".campfire", "adapters");
 }
 
 /**

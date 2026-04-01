@@ -2,7 +2,7 @@
  * OpenClaw ACP (Agent Client Protocol) Adapter
  *
  * Translates between the OpenClaw ACP JSON-RPC protocol (stdin/stdout)
- * and The Companion's BrowserIncomingMessage/BrowserOutgoingMessage types.
+ * and Campfire's BrowserIncomingMessage/BrowserOutgoingMessage types.
  *
  * OpenClaw uses the same ACP standard as Goose (`@agentclientprotocol/sdk`),
  * so this adapter follows the identical JSON-RPC 2.0 over stdio pattern.
@@ -888,7 +888,7 @@ export class OpenClawAdapter implements AgentAdapter {
   }
 
   /**
-   * Map OpenClaw tool names to Companion-compatible tool names.
+   * Map OpenClaw tool names to Campfire-compatible tool names.
    * Unlike Goose (which uses developer__bash, developer__text_editor, etc.),
    * OpenClaw skills use plain names that mostly pass through unchanged.
    * Only map known OpenClaw skill tool names to standard Campfire names.

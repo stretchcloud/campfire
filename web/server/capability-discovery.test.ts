@@ -22,9 +22,9 @@ import { CapabilityDiscovery } from "./capability-discovery.js";
 import type { AgentCapabilities } from "./capability-discovery.js";
 
 // ─── Cleanup helpers ──────────────────────────────────────────────────────────
-// Capability discovery writes to ~/.companion/capabilities/{sessionId}.json.
+// Capability discovery writes to ~/.campfire/capabilities/{sessionId}.json.
 // We must clean up after each test to prevent cross-test pollution.
-const CAPABILITIES_DIR = join(homedir(), ".companion", "capabilities");
+const CAPABILITIES_DIR = join(homedir(), ".campfire", "capabilities");
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 
 // We need to mock the gallery dir before importing. Use a temp dir.
 const testDir = join(tmpdir(), `gallery-test-${Date.now()}`);
-const galleryDir = join(testDir, ".companion", "gallery");
+const galleryDir = join(testDir, ".campfire", "gallery");
 
 // Mock homedir so gallery-store writes to our temp dir
 vi.mock("node:os", async () => {

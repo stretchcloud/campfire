@@ -1,7 +1,7 @@
 {
   "packages": {
     ".": {
-      "package-name": "the-companion",
+      "package-name": "the-campfire",
       "release-type": "node",
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,

@@ -1,6 +1,6 @@
 /**
  * Tests for the OpenCodeAdapter — validates that OpenCode ACP JSON-RPC messages
- * are correctly translated to the Companion's BrowserIncomingMessage types.
+ * are correctly translated to the Campfire's BrowserIncomingMessage types.
  *
  * OpenCode differences from Goose:
  * - Notification method: "session/update" (not "session/notification")
@@ -424,7 +424,7 @@ describe("OpenCodeAdapter", () => {
     expect(responseMsg).toBeTruthy();
   });
 
-  it("maps OpenCode tool names to Companion-compatible names", async () => {
+  it("maps OpenCode tool names to Campfire-compatible names", async () => {
     // Validates the tool name mapping for OpenCode's tool naming conventions
     const { proc, messages } = await createInitializedAdapter();
     messages.length = 0;

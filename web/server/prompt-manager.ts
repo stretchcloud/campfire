@@ -18,7 +18,7 @@ export interface Prompt {
   updatedAt: number;
 }
 
-const PROMPTS_FILE = join(homedir(), ".companion", "prompts.json");
+const PROMPTS_FILE = join(homedir(), ".campfire", "prompts.json");
 
 function ensureDir(): void {
   mkdirSync(dirname(PROMPTS_FILE), { recursive: true });

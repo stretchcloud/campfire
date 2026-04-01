@@ -7,8 +7,8 @@
 <p align="center">Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, permission voting, session replay, webhooks, a public gallery, a prompt library, Linear integration, collective intelligence, session folders, skills management, and drag & drop uploads.</p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/the-companion"><img src="https://img.shields.io/npm/v/the-companion.svg" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/the-companion"><img src="https://img.shields.io/npm/dm/the-companion.svg" alt="npm downloads" /></a>
+  <a href="https://www.npmjs.com/package/the-campfire"><img src="https://img.shields.io/npm/v/the-campfire.svg" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/the-campfire"><img src="https://img.shields.io/npm/dm/the-campfire.svg" alt="npm downloads" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
 </p>
 
@@ -78,7 +78,7 @@ If you just want to run Campfire without cloning the repo:
 curl -fsSL https://bun.sh/install | bash
 
 # Run Campfire (downloads and starts automatically)
-bunx the-companion
+bunx the-campfire
 ```
 
 Open [http://localhost:3456](http://localhost:3456). That's it.
@@ -86,7 +86,7 @@ Open [http://localhost:3456](http://localhost:3456). That's it.
 To run on a different port:
 
 ```bash
-bunx the-companion --port 8080
+bunx the-campfire --port 8080
 ```
 
 ### Option 2: Run from source (native)
@@ -148,7 +148,7 @@ docker build -t campfire:latest .
 docker run -d \
   --name campfire \
   -p 3456:3456 \
-  -v campfire-data:/home/campfire/.companion \
+  -v campfire-data:/home/campfire/.campfire \
   -v campfire-sessions:/tmp/vibe-sessions \
   campfire:latest
 ```
@@ -351,7 +351,7 @@ Scrub through completed sessions at 1x / 2x / 4x / 8x speed. Every tool call, pe
 
 **Recording format:**
 
-Recordings are stored as JSONL (newline-delimited JSON) files in `~/.companion/recordings/`. Each line captures the exact raw message as it was sent or received:
+Recordings are stored as JSONL (newline-delimited JSON) files in `~/.campfire/recordings/`. Each line captures the exact raw message as it was sent or received:
 
 ```json
 {"ts": 1771153996875, "dir": "in", "raw": "{\"type\":\"system\",...}", "ch": "cli"}
@@ -376,7 +376,7 @@ curl -X POST http://localhost:3456/api/sessions/:id/recording/start
 curl -X POST http://localhost:3456/api/sessions/:id/recording/stop
 ```
 
-Recording is enabled by default. Disable globally with `COMPANION_RECORD=0`. Files auto-rotate when total lines exceed 100,000 (configurable with `COMPANION_RECORDINGS_MAX_LINES`).
+Recording is enabled by default. Disable globally with `CAMPFIRE_RECORD=0`. Files auto-rotate when total lines exceed 100,000 (configurable with `CAMPFIRE_RECORDINGS_MAX_LINES`).
 
 ---
 
@@ -528,7 +528,7 @@ curl -X PUT http://localhost:3456/api/prompts/:id \
 curl -X DELETE http://localhost:3456/api/prompts/:id
 ```
 
-Prompts are stored at `~/.companion/prompts.json`.
+Prompts are stored at `~/.campfire/prompts.json`.
 
 ---
 
@@ -552,7 +552,7 @@ Connect your Linear workspace to manage issues end-to-end: browse and search iss
 
 **Project-repo mapping:**
 
-When you first use Linear in a git repository, Campfire prompts you to link the repo to a Linear team. Once linked, issue searches are automatically filtered to that team. Mappings are stored in `~/.companion/linear-projects.json`.
+When you first use Linear in a git repository, Campfire prompts you to link the repo to a Linear team. Once linked, issue searches are automatically filtered to that team. Mappings are stored in `~/.campfire/linear-projects.json`.
 
 **Issue-session workflow:**
 
@@ -610,9 +610,9 @@ Linear API responses are cached with a 60-second TTL to reduce API calls. Concur
 
 | File | Contents |
 |------|----------|
-| `~/.companion/settings.json` | Linear API key (never exposed via GET) |
-| `~/.companion/linear-projects.json` | Repo → team/project mappings |
-| `~/.companion/linear-session-issues.json` | Session → issue links |
+| `~/.campfire/settings.json` | Linear API key (never exposed via GET) |
+| `~/.campfire/linear-projects.json` | Repo → team/project mappings |
+| `~/.campfire/linear-session-issues.json` | Session → issue links |
 
 ---
 
@@ -796,7 +796,7 @@ Install community agent adapters from npm to add new backends to Campfire. Adapt
 
 ```bash
 # Via CLI
-the-companion install-adapter @campfire/example-adapter
+the-campfire install-adapter @campfire/example-adapter
 
 # Via API
 curl -X POST http://localhost:3456/api/adapters/install \
@@ -900,7 +900,7 @@ When creating a session, select an environment profile from the dropdown. All va
 }
 ```
 
-Profiles are stored as individual JSON files in `~/.companion/envs/`.
+Profiles are stored as individual JSON files in `~/.campfire/envs/`.
 
 ```bash
 # List profiles
@@ -1021,9 +1021,9 @@ The server automatically records all raw protocol messages to JSONL files. This 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `COMPANION_RECORD` | `1` | Set to `0` or `false` to disable |
-| `COMPANION_RECORDINGS_DIR` | `~/.companion/recordings` | Output directory |
-| `COMPANION_RECORDINGS_MAX_LINES` | `100000` | Auto-rotation threshold |
+| `CAMPFIRE_RECORD` | `1` | Set to `0` or `false` to disable |
+| `CAMPFIRE_RECORDINGS_DIR` | `~/.campfire/recordings` | Output directory |
+| `CAMPFIRE_RECORDINGS_MAX_LINES` | `100000` | Auto-rotation threshold |
 
 **File format:**
 
@@ -1045,7 +1045,7 @@ Optionally sandbox sessions inside Docker containers for isolation. When enabled
 **How it works:**
 
 1. When creating a session, click the **Container** toggle in the toolbar
-2. Choose a Docker image (default: `companion-dev:latest`) in the text field that appears
+2. Choose a Docker image (default: `campfire-dev:latest`) in the text field that appears
 3. Click **Create** — a progress overlay appears showing each step
 4. The session runs inside the container with authentication automatically seeded
 
@@ -1090,12 +1090,12 @@ curl -N -X POST http://localhost:3456/api/sessions/create-with-progress \
     "backend": "claude",
     "model": "claude-sonnet-4-5-20250929",
     "cwd": "/home/user/project",
-    "container": {"image": "companion-dev:latest"}
+    "container": {"image": "campfire-dev:latest"}
   }'
 # event: step
-# data: {"step":"checking_image","message":"Checking image companion-dev:latest..."}
+# data: {"step":"checking_image","message":"Checking image campfire-dev:latest..."}
 # event: step
-# data: {"step":"pulling_image","message":"Pulling companion-dev:latest...","percent":45}
+# data: {"step":"pulling_image","message":"Pulling campfire-dev:latest...","percent":45}
 # event: done
 # data: {"sessionId":"abc-123","session":{...}}
 ```
@@ -1191,14 +1191,14 @@ Without an embedding provider, memory still works — queries fall back to a ful
 
 **Storage:**
 
-All CI data is stored locally under `~/.companion/memory/lancedb/` — no external service required.
+All CI data is stored locally under `~/.campfire/memory/lancedb/` — no external service required.
 
 | Table | Purpose |
 |-------|---------|
 | `fragments.lance` | Episodic memory fragments with embeddings |
 | `consolidated.lance` | Distilled knowledge synthesized from sessions |
 
-Capability data is stored as JSON in `~/.companion/capabilities/` and learning history is appended to `~/.companion/capability-learning.jsonl`.
+Capability data is stored as JSON in `~/.campfire/capabilities/` and learning history is appended to `~/.campfire/capability-learning.jsonl`.
 
 **Quick setup:**
 
@@ -1298,7 +1298,7 @@ Run multiple AI coding agents in parallel via [dmux](https://github.com/dimfeld/
 | **Pane Log Streaming** | Click "View Log" on any pane to stream its terminal output in real time via an embedded xterm.js viewer |
 | **Pane Focus & Keys** | Click a pane card to focus it in tmux, or send keystrokes directly from the browser |
 | **Config Editor** | Edit `.dmux/dmux.config.json` from the UI — session name, branch prefix, default prompt, auto-restart toggle. Supports both form and raw JSON editing |
-| **Pane Recording** | Record all pane output to JSONL files in `~/.companion/dmux-recordings/` for later replay |
+| **Pane Recording** | Record all pane output to JSONL files in `~/.campfire/dmux-recordings/` for later replay |
 | **Multi-Pane Replay** | Replay recordings with one xterm.js terminal per pane, playback controls (play/pause/restart), and speed options (1x/2x/4x/8x) |
 | **Embedded Terminal** | An integrated terminal runs alongside the status panel so you can interact with dmux directly |
 
@@ -1404,7 +1404,7 @@ A multi-stage automation engine for chaining sequential AI sessions into workflo
 | `GET` | `/api/orchestrator/runs/:id` | Get run status and details |
 | `POST` | `/api/orchestrator/runs/:id/cancel` | Cancel a running pipeline |
 
-Pipeline and run data is persisted to `~/.companion/orchestrator/`.
+Pipeline and run data is persisted to `~/.campfire/orchestrator/`.
 
 ### Message Queue
 
@@ -1443,14 +1443,14 @@ Token-based authentication to protect your Campfire instance. When enabled, all 
 
 ```bash
 # Set a password via environment variable
-CAMPFIRE_PASSWORD=your-secret bunx the-companion
+CAMPFIRE_PASSWORD=your-secret bunx the-campfire
 
 # Or configure through the UI on first visit
 ```
 
 **Features:**
 - Password-based login with SHA256 hashing
-- 7-day rotating session tokens stored in `~/.companion/auth.json`
+- 7-day rotating session tokens stored in `~/.campfire/auth.json`
 - Auth middleware protects all `/api/*` routes
 - WebSocket connections validated on upgrade
 - Environment variable override for headless/CI deployments
@@ -1501,7 +1501,7 @@ Browse and manage Claude Code plugins and skills from a dedicated UI page at `#/
 - Lists all installed plugins from `~/.claude/plugins/installed_plugins.json`
 - Expandable cards showing each plugin's skills, commands, install path, version, and author
 - View SKILL.md content for any skill by clicking its name
-- Enable/disable plugins in Campfire without uninstalling them (stored in `~/.companion/skills-config.json`)
+- Enable/disable plugins in Campfire without uninstalling them (stored in `~/.campfire/skills-config.json`)
 - Blocked plugin detection from `~/.claude/plugins/blocklist.json`
 
 **API endpoints:**
@@ -1532,7 +1532,7 @@ Organize sessions into named, color-coded folders in the sidebar.
 - Remove sessions from folders
 - Delete empty folders
 
-**Storage:** Folder data persists in `~/.companion/session-folders.json`.
+**Storage:** Folder data persists in `~/.campfire/session-folders.json`.
 
 **API endpoints:**
 - `GET /api/folders` — List all folders
@@ -1608,21 +1608,21 @@ All state is file-based — no database required:
 
 | Data | Location | Format |
 |------|----------|--------|
-| Sessions | `$TMPDIR/vibe-sessions/` (override: `COMPANION_SESSION_DIR`) | JSON per session |
-| Recordings | `~/.companion/recordings/` | JSONL per session |
-| Environments | `~/.companion/envs/` | JSON per profile |
-| Cron jobs | `~/.companion/cron/` | JSON per job |
-| Gallery entries | `~/.companion/gallery/` | JSON per entry |
-| Webhooks | `~/.companion/webhooks/` | JSON per webhook |
-| Adapters | `~/.companion/adapters/` | npm packages |
-| Settings | `~/.companion/settings.json` | Single JSON file |
-| Prompts | `~/.companion/prompts.json` | Single JSON array |
-| Session names | `~/.companion/session-names.json` | Single JSON file |
-| Linear project mappings | `~/.companion/linear-projects.json` | Single JSON file |
-| Linear session issues | `~/.companion/linear-session-issues.json` | Single JSON file |
-| **CI Memory** | `~/.companion/memory/lancedb/` | LanceDB vector tables |
-| **CI Capabilities** | `~/.companion/capabilities/` | JSON per session |
-| **CI Learning log** | `~/.companion/capability-learning.jsonl` | JSONL append-only |
+| Sessions | `$TMPDIR/vibe-sessions/` (override: `CAMPFIRE_SESSION_DIR`) | JSON per session |
+| Recordings | `~/.campfire/recordings/` | JSONL per session |
+| Environments | `~/.campfire/envs/` | JSON per profile |
+| Cron jobs | `~/.campfire/cron/` | JSON per job |
+| Gallery entries | `~/.campfire/gallery/` | JSON per entry |
+| Webhooks | `~/.campfire/webhooks/` | JSON per webhook |
+| Adapters | `~/.campfire/adapters/` | npm packages |
+| Settings | `~/.campfire/settings.json` | Single JSON file |
+| Prompts | `~/.campfire/prompts.json` | Single JSON array |
+| Session names | `~/.campfire/session-names.json` | Single JSON file |
+| Linear project mappings | `~/.campfire/linear-projects.json` | Single JSON file |
+| Linear session issues | `~/.campfire/linear-session-issues.json` | Single JSON file |
+| **CI Memory** | `~/.campfire/memory/lancedb/` | LanceDB vector tables |
+| **CI Capabilities** | `~/.campfire/capabilities/` | JSON per session |
+| **CI Learning log** | `~/.campfire/capability-learning.jsonl` | JSONL append-only |
 
 ---
 
@@ -1676,7 +1676,7 @@ services:
     ports:
       - "3456:3456"
     volumes:
-      - campfire-data:/home/campfire/.companion
+      - campfire-data:/home/campfire/.campfire
       - campfire-sessions:/tmp/vibe-sessions
     environment:
       - NODE_ENV=production
@@ -1694,16 +1694,16 @@ volumes:
 |----------|---------|-------------|
 | `PORT` | `3456` | Server port |
 | `NODE_ENV` | `production` | Environment mode |
-| `COMPANION_RECORD` | `1` | Enable protocol recording (`0` to disable) |
-| `COMPANION_RECORDINGS_DIR` | `~/.companion/recordings` | Recording output directory |
-| `COMPANION_RECORDINGS_MAX_LINES` | `100000` | Auto-rotation threshold |
-| `COMPANION_SESSION_DIR` | `$TMPDIR/vibe-sessions` | Override session persistence directory |
+| `CAMPFIRE_RECORD` | `1` | Enable protocol recording (`0` to disable) |
+| `CAMPFIRE_RECORDINGS_DIR` | `~/.campfire/recordings` | Recording output directory |
+| `CAMPFIRE_RECORDINGS_MAX_LINES` | `100000` | Auto-rotation threshold |
+| `CAMPFIRE_SESSION_DIR` | `$TMPDIR/vibe-sessions` | Override session persistence directory |
 
 ### Volumes
 
 | Path | Purpose |
 |------|---------|
-| `/home/campfire/.companion` | Persistent data (envs, cron, gallery, webhooks, adapters, settings) |
+| `/home/campfire/.campfire` | Persistent data (envs, cron, gallery, webhooks, adapters, settings) |
 | `/tmp/vibe-sessions` | Session state (survives container restarts) |
 
 ### Running with Agent CLIs
@@ -1719,7 +1719,7 @@ services:
     ports:
       - "3456:3456"
     volumes:
-      - campfire-data:/home/campfire/.companion
+      - campfire-data:/home/campfire/.campfire
       - campfire-sessions:/tmp/vibe-sessions
       # Mount agent CLIs from host
       - /usr/local/bin/claude:/usr/local/bin/claude:ro
@@ -1754,7 +1754,7 @@ services:
     build: .
     network_mode: host
     volumes:
-      - campfire-data:/home/campfire/.companion
+      - campfire-data:/home/campfire/.campfire
 ```
 
 This lets Campfire spawn agent processes on the host directly.
@@ -1794,7 +1794,7 @@ curl -f http://localhost:3456/api/sessions || exit 1
 ## CLI Reference
 
 ```
-the-companion [command] [options]
+the-campfire [command] [options]
 
 Commands:
   (none)                        Start server in foreground (default)
@@ -1818,16 +1818,16 @@ Options:
 
 ```bash
 # Start on a custom port
-the-companion --port 8080
+the-campfire --port 8080
 
 # Install as a background service
-the-companion install
-the-companion start
-the-companion status
+the-campfire install
+the-campfire start
+the-campfire status
 
 # Manage adapters
-the-companion install-adapter @campfire/my-agent
-the-companion uninstall-adapter my-agent
+the-campfire install-adapter @campfire/my-agent
+the-campfire uninstall-adapter my-agent
 ```
 
 ---

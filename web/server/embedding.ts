@@ -6,7 +6,7 @@
  * - "ollama": nomic-embed-text (768-dim) via local Ollama at http://localhost:11434
  * - "none": returns zero-vectors (disables vector search, fragments stored without embeddings)
  *
- * Provider is configured in ~/.companion/settings.json via embeddingProvider field.
+ * Provider is configured in ~/.campfire/settings.json via embeddingProvider field.
  */
 
 import { getSettings } from "./settings-manager.js";

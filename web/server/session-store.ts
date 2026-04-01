@@ -25,7 +25,7 @@ export interface PersistedSession {
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_DIR = process.env.COMPANION_SESSION_DIR || join(tmpdir(), "vibe-sessions");
+const DEFAULT_DIR = process.env.CAMPFIRE_SESSION_DIR || join(tmpdir(), "vibe-sessions");
 
 export class SessionStore {
   private dir: string;

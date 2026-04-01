@@ -33,7 +33,7 @@ import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const packageRoot = process.env.__COMPANION_PACKAGE_ROOT || resolve(__dirname, "..");
+const packageRoot = process.env.__CAMPFIRE_PACKAGE_ROOT || resolve(__dirname, "..");
 
 import { DEFAULT_PORT_DEV, DEFAULT_PORT_PROD } from "./constants.js";
 

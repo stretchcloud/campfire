@@ -21,7 +21,7 @@ export interface AdapterSessionMeta {
  * Common interface for all agent backend adapters.
  *
  * Each adapter translates between a backend-specific protocol (JSON-RPC, etc.)
- * and the Companion's BrowserIncomingMessage/BrowserOutgoingMessage types,
+ * and the Campfire's BrowserIncomingMessage/BrowserOutgoingMessage types,
  * making the browser completely unaware of which backend is running.
  */
 export interface AgentAdapter {

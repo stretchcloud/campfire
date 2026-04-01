@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 function cronDir(): string {
-  return join(tempDir, ".companion", "cron");
+  return join(tempDir, ".campfire", "cron");
 }
 
 function makeJobInput(overrides: Record<string, unknown> = {}) {

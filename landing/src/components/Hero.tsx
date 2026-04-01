@@ -5,7 +5,7 @@ export function Hero() {
   return (
     <section className="pt-14 sm:pt-20 pb-16 px-5 sm:px-7">
       <div className="max-w-[1060px] mx-auto">
-        <div className="cc-label animate-fade-up-1 mb-5 text-center">The Companion</div>
+        <div className="cc-label animate-fade-up-1 mb-5 text-center">Campfire</div>
         <div className="animate-fade-up-2 mb-7 inline-flex w-full justify-center">
           <div className="cc-card rounded-2xl p-2 bg-cc-card">
             <div className="bg-[#efe3cd] rounded-xl px-4 py-2.5">

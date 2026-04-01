@@ -17,8 +17,8 @@ import type {
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
-const COMPANION_DIR = join(homedir(), ".companion");
-const GALLERY_DIR = join(COMPANION_DIR, "gallery");
+const CAMPFIRE_DIR = join(homedir(), ".campfire");
+const GALLERY_DIR = join(CAMPFIRE_DIR, "gallery");
 
 function ensureDir(): void {
   mkdirSync(GALLERY_DIR, { recursive: true });

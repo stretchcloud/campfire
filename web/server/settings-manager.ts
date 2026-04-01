@@ -11,7 +11,7 @@ export const DEFAULT_OPENROUTER_MODEL = "openrouter/free";
 
 export type EmbeddingProvider = "openai" | "ollama" | "none";
 
-export interface CompanionSettings {
+export interface CampfireSettings {
   openrouterApiKey: string;
   openrouterModel: string;
   moltbookApiKey: string;
@@ -24,11 +24,11 @@ export interface CompanionSettings {
   updatedAt: number;
 }
 
-const DEFAULT_PATH = join(homedir(), ".companion", "settings.json");
+const DEFAULT_PATH = join(homedir(), ".campfire", "settings.json");
 
 let loaded = false;
 let filePath = DEFAULT_PATH;
-let settings: CompanionSettings = {
+let settings: CampfireSettings = {
   openrouterApiKey: "",
   openrouterModel: DEFAULT_OPENROUTER_MODEL,
   moltbookApiKey: "",
@@ -40,7 +40,7 @@ let settings: CompanionSettings = {
   updatedAt: 0,
 };
 
-function normalize(raw: Partial<CompanionSettings> | null | undefined): CompanionSettings {
+function normalize(raw: Partial<CampfireSettings> | null | undefined): CampfireSettings {
   return {
     openrouterApiKey: typeof raw?.openrouterApiKey === "string" ? raw.openrouterApiKey : "",
     openrouterModel:
@@ -64,7 +64,7 @@ function ensureLoaded(): void {
   try {
     if (existsSync(filePath)) {
       const raw = readFileSync(filePath, "utf-8");
-      settings = normalize(JSON.parse(raw) as Partial<CompanionSettings>);
+      settings = normalize(JSON.parse(raw) as Partial<CampfireSettings>);
     }
   } catch {
     settings = normalize(null);
@@ -77,14 +77,14 @@ function persist(): void {
   writeFileSync(filePath, JSON.stringify(settings, null, 2), "utf-8");
 }
 
-export function getSettings(): CompanionSettings {
+export function getSettings(): CampfireSettings {
   ensureLoaded();
   return { ...settings };
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "openrouterApiKey" | "openrouterModel" | "moltbookApiKey" | "linearApiKey" | "embeddingProvider" | "embeddingApiKey" | "embeddingModel" | "embeddingBaseUrl">>,
-): CompanionSettings {
+  patch: Partial<Pick<CampfireSettings, "openrouterApiKey" | "openrouterModel" | "moltbookApiKey" | "linearApiKey" | "embeddingProvider" | "embeddingApiKey" | "embeddingModel" | "embeddingBaseUrl">>,
+): CampfireSettings {
   ensureLoaded();
   settings = {
     ...settings,

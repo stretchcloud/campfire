@@ -79,7 +79,7 @@ Access the app at: **http://localhost:5174**
 **How it works:**
 - Semantic memory extraction happens automatically in the background
 - Every agent message is processed for observations
-- Memory fragments stored in `~/.companion/memory/lancedb/`
+- Memory fragments stored in `~/.campfire/memory/lancedb/`
 - Cross-session memory retrieval injects context into prompts automatically
 
 **Access UI:**
@@ -325,7 +325,7 @@ Type: "Think step-by-step about how to optimize database queries in this codebas
   4. Automatically creates git worktree if in a repo
 
 **9.2: Session Recording & Replay**
-- **Recording**: Automatic (every session recorded to `~/.companion/recordings/`)
+- **Recording**: Automatic (every session recorded to `~/.campfire/recordings/`)
 - **Replay Location**: Replay Page (`#/replay`)
 - **Steps:**
   1. Click logo in sidebar → Select "Replay" from dropdown

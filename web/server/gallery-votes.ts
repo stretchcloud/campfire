@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
-const GALLERY_DIR = join(homedir(), ".companion", "gallery");
+const GALLERY_DIR = join(homedir(), ".campfire", "gallery");
 const VOTES_FILE = join(GALLERY_DIR, "votes.json");
 
 type VoteDirection = 1 | -1;

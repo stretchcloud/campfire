@@ -1,7 +1,7 @@
 /**
  * AdapterRegistry — manages third-party agent adapters installed via npm.
  *
- * Adapters are stored in ~/.companion/adapters/{name}/ and discovered by
+ * Adapters are stored in ~/.campfire/adapters/{name}/ and discovered by
  * scanning for package.json files with a "campfireAdapter" field.
  *
  * Follows the same file-based persistence pattern as cron-store.ts.
@@ -33,7 +33,7 @@ class AdapterRegistry {
   private installed: Map<string, InstalledAdapter>;
 
   constructor() {
-    this.adaptersDir = join(homedir(), ".companion", "adapters");
+    this.adaptersDir = join(homedir(), ".campfire", "adapters");
     mkdirSync(this.adaptersDir, { recursive: true });
     this.installed = new Map();
     this.scan();
@@ -42,7 +42,7 @@ class AdapterRegistry {
   // ─── Scan ────────────────────────────────────────────────────────────────
 
   /**
-   * Scan ~/.companion/adapters/ for installed adapter packages.
+   * Scan ~/.campfire/adapters/ for installed adapter packages.
    * Each subdirectory is expected to contain a package.json with a
    * "campfireAdapter" field. Invalid directories are silently skipped.
    */
@@ -150,7 +150,7 @@ class AdapterRegistry {
   // ─── Install ─────────────────────────────────────────────────────────────
 
   /**
-   * Install an adapter from npm into ~/.companion/adapters/{name}/.
+   * Install an adapter from npm into ~/.campfire/adapters/{name}/.
    *
    * Uses `bun add` in a temporary directory, validates the downloaded package
    * has a campfireAdapter field, then moves it into the adapters directory.
@@ -244,7 +244,7 @@ class AdapterRegistry {
 
   /**
    * Uninstall an adapter by name, removing its directory from
-   * ~/.companion/adapters/.
+   * ~/.campfire/adapters/.
    */
   uninstall(name: string): boolean {
     const dir = join(this.adaptersDir, name);

@@ -74,7 +74,7 @@ describe("createSession", () => {
       backend: "claude",
       cwd: "/repo",
       container: {
-        image: "companion-core:latest",
+        image: "campfire-core:latest",
         ports: [3000, 5173],
       },
     });
@@ -84,7 +84,7 @@ describe("createSession", () => {
       backend: "claude",
       cwd: "/repo",
       container: {
-        image: "companion-core:latest",
+        image: "campfire-core:latest",
         ports: [3000, 5173],
       },
     });
@@ -371,10 +371,10 @@ describe("getCloudProviderPlan", () => {
     const plan = {
       provider: "modal",
       sessionId: "s1",
-      image: "companion-core:latest",
+      image: "campfire-core:latest",
       cwd: "/repo",
       mappedPorts: [{ containerPort: 3000, hostPort: 49152 }],
-      commandPreview: "modal run companion_cloud.py --manifest /repo/.companion/cloud/environments/s1.json",
+      commandPreview: "modal run campfire_cloud.py --manifest /repo/.campfire/cloud/environments/s1.json",
     };
     mockFetch.mockResolvedValueOnce(mockResponse(plan));
 

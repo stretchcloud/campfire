@@ -73,7 +73,7 @@ export function registerFsRoutes(api: Hono, deps: RouteDeps): void {
   api.get("/fs/home", (c) => {
     const home = homedir();
     const cwd = process.cwd();
-    const packageRoot = process.env.__COMPANION_PACKAGE_ROOT;
+    const packageRoot = process.env.__CAMPFIRE_PACKAGE_ROOT;
     const isProjectDir =
       cwd !== home &&
       (!packageRoot || !cwd.startsWith(packageRoot));

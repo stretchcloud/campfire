@@ -106,7 +106,7 @@ See `aider-adapter.ts`. Parses unstructured text output, detecting SEARCH/REPLAC
 
 ## Tool Name Mapping
 
-Map your backend's tool names to Companion-standard names so the UI renders them correctly:
+Map your backend's tool names to Campfire-standard names so the UI renders them correctly:
 
 ```typescript
 const toolMap: Record<string, string> = {

@@ -1,6 +1,6 @@
 /**
  * Associates Linear issues with Campfire sessions.
- * Persisted to ~/.companion/linear-session-issues.json
+ * Persisted to ~/.campfire/linear-session-issues.json
  */
 
 import { join } from "node:path";
@@ -21,7 +21,7 @@ interface IssueMap {
   [sessionId: string]: LinkedIssue;
 }
 
-const STORE_DIR = join(homedir(), ".companion");
+const STORE_DIR = join(homedir(), ".campfire");
 const STORE_PATH = join(STORE_DIR, "linear-session-issues.json");
 
 function loadIssues(): IssueMap {

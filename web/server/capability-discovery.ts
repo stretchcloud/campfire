@@ -3,7 +3,7 @@
  *
  * Dynamically routes tasks to the best-suited agent backend using:
  *   1. Self-reported capabilities (agent declares its strengths/tools on init)
- *   2. Historical performance (task execution success rates from ~/.companion/capability-learning.jsonl)
+ *   2. Historical performance (task execution success rates from ~/.campfire/capability-learning.jsonl)
  *   3. Real-time probing (send agent a "rate your confidence" message, parse JSON response)
  *
  * Scoring formula:
@@ -79,8 +79,8 @@ export interface CapabilityProbe {
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
-const LEARNING_LOG = join(homedir(), ".companion", "capability-learning.jsonl");
-const CAPABILITIES_DIR = join(homedir(), ".companion", "capabilities");
+const LEARNING_LOG = join(homedir(), ".campfire", "capability-learning.jsonl");
+const CAPABILITIES_DIR = join(homedir(), ".campfire", "capabilities");
 
 function ensureDirs(): void {
   mkdirSync(dirname(LEARNING_LOG), { recursive: true });

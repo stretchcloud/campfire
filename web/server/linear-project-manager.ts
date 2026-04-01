@@ -1,6 +1,6 @@
 /**
  * Maps git repositories to Linear teams/projects.
- * Persisted to ~/.companion/linear-projects.json
+ * Persisted to ~/.campfire/linear-projects.json
  */
 
 import { join } from "node:path";
@@ -21,7 +21,7 @@ interface MappingsFile {
   mappings: ProjectMapping[];
 }
 
-const STORE_DIR = join(homedir(), ".companion");
+const STORE_DIR = join(homedir(), ".campfire");
 const STORE_PATH = join(STORE_DIR, "linear-projects.json");
 
 function loadMappings(): MappingsFile {

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code & Codex when working with code in thi
 
 ## What This Is
 
-The Companion — a web UI for Claude Code & Codex. 
+Campfire — a web UI for Claude Code & Codex. 
 It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Claude Code CLI to provide a browser-based interface for running multiple Claude Code sessions with streaming, tool call visibility, and permission control.
 
 ## Development Commands
@@ -22,7 +22,7 @@ cd web && bun run typecheck
 # Production build + serve
 cd web && bun run build && bun run start
 
-# Landing page (thecompanion.sh) — idempotent: starts if down, no-op if up
+# Landing page (campfire.sh) — idempotent: starts if down, no-op if up
 # IMPORTANT: Always use this script to run the landing page. Never cd into landing/ and run bun/vite manually.
 ./scripts/landing-start.sh          # start
 ./scripts/landing-start.sh --stop   # stop
@@ -72,7 +72,7 @@ Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJS
   - `session-store.ts` — JSON file persistence to `$TMPDIR/vibe-sessions/`. Debounced writes.
   - `session-types.ts` — All TypeScript types for CLI messages (NDJSON), browser messages, session state, permissions.
   - `routes.ts` — REST API: session CRUD, filesystem browsing, environment management.
-  - `env-manager.ts` — CRUD for environment profiles stored in `~/.companion/envs/`.
+  - `env-manager.ts` — CRUD for environment profiles stored in `~/.campfire/envs/`.
 
 - **`web/src/`** — React 19 frontend
   - `store.ts` — Zustand store. All state keyed by session ID (messages, streaming text, permissions, tasks, connection status).
@@ -82,7 +82,7 @@ Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJS
   - `App.tsx` — Root layout with sidebar, chat view, task panel. Hash routing (`#/playground`).
   - `components/` — UI: `ChatView`, `MessageFeed`, `MessageBubble`, `ToolBlock`, `Composer`, `Sidebar`, `TopBar`, `HomePage`, `TaskPanel`, `PermissionBanner`, `EnvManager`, `Playground`.
 
-- **`web/bin/cli.ts`** — CLI entry point (`bunx the-companion`). Sets `__COMPANION_PACKAGE_ROOT` and imports the server.
+- **`web/bin/cli.ts`** — CLI entry point (`bunx the-campfire`). Sets `__CAMPFIRE_PACKAGE_ROOT` and imports the server.
 
 ### WebSocket Protocol
 
@@ -98,11 +98,11 @@ Sessions persist to disk (`$TMPDIR/vibe-sessions/`) and survive server restarts.
 
 The server automatically records **all raw protocol messages** (both Claude Code NDJSON and Codex JSON-RPC) to JSONL files. This is useful for debugging, understanding the protocol, and building replay-based tests.
 
-- **Location**: `~/.companion/recordings/` (override with `COMPANION_RECORDINGS_DIR`)
+- **Location**: `~/.campfire/recordings/` (override with `CAMPFIRE_RECORDINGS_DIR`)
 - **Format**: JSONL — one JSON object per line. First line is a header with session metadata, subsequent lines are raw message entries.
 - **File naming**: `{sessionId}_{backendType}_{ISO-timestamp}_{randomSuffix}.jsonl`
-- **Disable**: set `COMPANION_RECORD=0` or `COMPANION_RECORD=false`
-- **Rotation**: automatic cleanup when total lines exceed 100k (configurable via `COMPANION_RECORDINGS_MAX_LINES`)
+- **Disable**: set `CAMPFIRE_RECORD=0` or `CAMPFIRE_RECORD=false`
+- **Rotation**: automatic cleanup when total lines exceed 100k (configurable via `CAMPFIRE_RECORDINGS_MAX_LINES`)
 
 Each entry captures:
 ```json
@@ -178,7 +178,7 @@ gh pr edit --body-file /tmp/pr_body.md
 ## Codebase Understanding (Updated 2026-02-16)
 
 ### **High-Level Purpose**
-Campfire (published as `the-companion` on npm) is a collaborative web platform for AI coding agents. It provides a unified browser interface for multiple agent backends (Claude Code, Codex, Goose, Aider, OpenHands) with real-time collaboration, permission voting, session replay, webhooks, scheduled tasks, and a session gallery.
+Campfire (published as `the-campfire` on npm) is a collaborative web platform for AI coding agents. It provides a unified browser interface for multiple agent backends (Claude Code, Codex, Goose, Aider, OpenHands) with real-time collaboration, permission voting, session replay, webhooks, scheduled tasks, and a session gallery.
 
 The core innovation is a **protocol bridge** that normalizes different agent protocols (NDJSON WebSocket, JSON-RPC stdio, stdout parsing) into a single browser message format, making the frontend completely backend-agnostic.
 
@@ -281,19 +281,19 @@ Each adapter:
 
 **`adapter-registry.ts`** - Community Adapters
 - Installs adapters from npm packages with `campfireAdapter` field in `package.json`
-- Stored in `~/.companion/adapters/`
+- Stored in `~/.campfire/adapters/`
 - Adapters appear as new backend options in session creation UI
 
 #### **Supporting Services**
 
 **Recording & Replay:**
-- **`recorder.ts`**: Captures raw protocol messages (both directions) to JSONL files in `~/.companion/recordings/`
+- **`recorder.ts`**: Captures raw protocol messages (both directions) to JSONL files in `~/.campfire/recordings/`
 - Format: `{"ts": <timestamp>, "dir": "in"|"out", "raw": "<original string>", "ch": "cli"|"browser"}`
 - Auto-rotation when total lines exceed 100k
 - **`replay.ts`**: Load & filter utilities for replay UI at 1x/2x/4x/8x speed
 
 **Automation:**
-- **`cron-scheduler.ts` + `cron-store.ts`**: Persistent scheduled jobs (recurring or one-shot) stored in `~/.companion/cron/`
+- **`cron-scheduler.ts` + `cron-store.ts`**: Persistent scheduled jobs (recurring or one-shot) stored in `~/.campfire/cron/`
 - Jobs create sessions, inject prompts, track execution history, auto-disable after repeated failures
 - Cron expression examples: `0 2 * * *` (daily 2am), `*/30 * * * *` (every 30 min)
 
@@ -301,7 +301,7 @@ Each adapter:
 - **`webhook-manager.ts`**: HTTP POST notifications for session events (created, completed, failed, permission requested/resolved, turn completed, cost threshold)
 - HMAC-SHA256 signing with `X-Campfire-Signature` header
 - Retry logic: 3 attempts with exponential backoff (1s, 5s, 15s)
-- Stored in `~/.companion/webhooks/`
+- Stored in `~/.campfire/webhooks/`
 
 **Git Integration:**
 - **`git-utils.ts` + `worktree-tracker.ts`**: Resolve repo info, manage worktrees, track ahead/behind counts
@@ -310,9 +310,9 @@ Each adapter:
 **Other Services:**
 - **`terminal-manager.ts`**: Embedded PTY terminal via `/ws/terminal/:id`
 - **`container-manager.ts`**: Docker sandboxing for sessions
-- **`gallery-store.ts`**: Session gallery with voting, featured status, stored in `~/.companion/gallery/`
-- **`env-manager.ts`**: Environment profiles (named sets of env vars) in `~/.companion/envs/`
-- **`settings-manager.ts`**: Global settings (OpenRouter API key for auto-naming) in `~/.companion/settings.json`
+- **`gallery-store.ts`**: Session gallery with voting, featured status, stored in `~/.campfire/gallery/`
+- **`env-manager.ts`**: Environment profiles (named sets of env vars) in `~/.campfire/envs/`
+- **`settings-manager.ts`**: Global settings (OpenRouter API key for auto-naming) in `~/.campfire/settings.json`
 - **`auto-namer.ts` + `session-names.ts`**: Auto-generate session titles via OpenRouter after first turn
 - **`update-checker.ts` + `service.ts`**: Check npm for updates, track service mode (launchd/systemd)
 - **`usage-limits.ts`**: Track account usage limits per backend
@@ -451,14 +451,14 @@ All state is file-based (no database):
 | Data | Location | Format |
 |------|----------|--------|
 | Sessions | `$TMPDIR/vibe-sessions/` | JSON per session |
-| Recordings | `~/.companion/recordings/` | JSONL per session |
-| Environments | `~/.companion/envs/` | JSON per profile |
-| Cron jobs | `~/.companion/cron/` | JSON per job |
-| Gallery entries | `~/.companion/gallery/` | JSON per entry |
-| Webhooks | `~/.companion/webhooks/` | JSON per webhook |
-| Adapters | `~/.companion/adapters/` | npm packages |
-| Settings | `~/.companion/settings.json` | Single JSON file |
-| Session names | `~/.companion/session-names.json` | Single JSON file |
+| Recordings | `~/.campfire/recordings/` | JSONL per session |
+| Environments | `~/.campfire/envs/` | JSON per profile |
+| Cron jobs | `~/.campfire/cron/` | JSON per job |
+| Gallery entries | `~/.campfire/gallery/` | JSON per entry |
+| Webhooks | `~/.campfire/webhooks/` | JSON per webhook |
+| Adapters | `~/.campfire/adapters/` | npm packages |
+| Settings | `~/.campfire/settings.json` | Single JSON file |
+| Session names | `~/.campfire/session-names.json` | Single JSON file |
 
 ---
 
@@ -494,7 +494,7 @@ All state is file-based (no database):
 
 ```
 campfire/
-├── web/                      # Main application (published as "the-companion")
+├── web/                      # Main application (published as "the-campfire")
 │   ├── server/               # Bun + Hono backend (port 3456/3457)
 │   │   ├── index.ts          # Server bootstrap
 │   │   ├── ws-bridge.ts      # Core message router
@@ -527,9 +527,9 @@ campfire/
 │   │   ├── App.tsx           # Root layout + routing
 │   │   ├── components/       # UI components
 │   │   └── *.test.tsx        # Frontend tests
-│   ├── bin/cli.ts            # CLI entry point (bunx the-companion)
+│   ├── bin/cli.ts            # CLI entry point (bunx the-campfire)
 │   ├── dist/                 # Built frontend assets
-│   └── package.json          # Published as "the-companion"
+│   └── package.json          # Published as "the-campfire"
 ├── landing/                  # Marketing site (separate Vite app)
 ├── scripts/                  # Utility scripts (landing-start.sh)
 ├── CLAUDE.md                 # This file (project instructions)
@@ -538,6 +538,6 @@ campfire/
 └── TODO.md                   # Roadmap
 
 **Landing Page**
-- `landing/`: separate Vite app for marketing site (thecompanion.sh)
+- `landing/`: separate Vite app for marketing site (campfire.sh)
 - Started via `scripts/landing-start.sh` (idempotent: starts if down, no-op if up)
 - Never cd into `landing/` and run bun/vite manually

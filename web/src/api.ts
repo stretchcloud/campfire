@@ -262,7 +262,7 @@ export interface WorktreeCreateResult {
   isNew: boolean;
 }
 
-export interface CompanionEnv {
+export interface CampfireEnv {
   name: string;
   slug: string;
   variables: Record<string, string>;
@@ -638,15 +638,15 @@ export const api = {
     ),
 
   // Environments
-  listEnvs: () => get<CompanionEnv[]>("/envs"),
+  listEnvs: () => get<CampfireEnv[]>("/envs"),
   getEnv: (slug: string) =>
-    get<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`),
+    get<CampfireEnv>(`/envs/${encodeURIComponent(slug)}`),
   createEnv: (name: string, variables: Record<string, string>) =>
-    post<CompanionEnv>("/envs", { name, variables }),
+    post<CampfireEnv>("/envs", { name, variables }),
   updateEnv: (
     slug: string,
     data: { name?: string; variables?: Record<string, string> },
-  ) => put<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`, data),
+  ) => put<CampfireEnv>(`/envs/${encodeURIComponent(slug)}`, data),
   deleteEnv: (slug: string) => del(`/envs/${encodeURIComponent(slug)}`),
 
   // Settings

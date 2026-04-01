@@ -2,7 +2,7 @@
  * Aider Adapter
  *
  * Translates between Aider's unstructured CLI output (stdout/stdin)
- * and The Companion's BrowserIncomingMessage/BrowserOutgoingMessage types.
+ * and Campfire's BrowserIncomingMessage/BrowserOutgoingMessage types.
  *
  * Aider has no structured protocol — it's a terminal tool. We spawn it with
  * `--no-pretty --yes --no-auto-commits` and parse stdout for:

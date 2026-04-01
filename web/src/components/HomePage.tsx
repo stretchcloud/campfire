@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "../store.js";
-import { api, type CompanionEnv, type GitRepoInfo, type GitBranchInfo, type BackendInfo } from "../api.js";
+import { api, type CampfireEnv, type GitRepoInfo, type GitBranchInfo, type BackendInfo } from "../api.js";
 import { connectSession, waitForConnection, sendToSession } from "../ws.js";
 import { disconnectSession } from "../ws.js";
 import { generateUniqueSessionName } from "../utils/names.js";
@@ -61,7 +61,7 @@ export function HomePage() {
   const MODES = getModesForBackend(backend);
 
   // Environment state
-  const [envs, setEnvs] = useState<CompanionEnv[]>([]);
+  const [envs, setEnvs] = useState<CampfireEnv[]>([]);
   const [selectedEnv, setSelectedEnv] = useState(() => localStorage.getItem("cc-selected-env") || "");
   const [showEnvManager, setShowEnvManager] = useState(false);
 
@@ -89,7 +89,7 @@ export function HomePage() {
 
   // Container mode state
   const [useContainer, setUseContainer] = useState(false);
-  const [containerImage, setContainerImage] = useState("companion-dev:latest");
+  const [containerImage, setContainerImage] = useState("campfire-dev:latest");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const branchDropdownRef = useRef<HTMLDivElement>(null);
