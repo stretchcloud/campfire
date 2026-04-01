@@ -221,7 +221,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
       useStore.getState().appendMessage(sessionId, {
         id: `user-queued-${Date.now()}-${++idCounter}`,
         role: "system",
-        content: `Queued: "${msg.length > 60 ? msg.slice(0, 60) + "…" : msg}"`,
+        content: `Queued: "${msg.length > 60 ? msg.slice(0, 60) + "\u2026" : msg}"`,
         timestamp: Date.now(),
       });
     } else {
@@ -387,9 +387,16 @@ export function Composer({ sessionId }: { sessionId: string }) {
     setShowModeMenu(false);
   }
 
+  const modeDotColors: Record<string, string> = {
+    bypassPermissions: "bg-green-400",
+    acceptEdits: "bg-blue-400",
+    default: "bg-amber-400",
+    plan: "bg-purple-400",
+  };
+
   const modeLabels: Record<string, string> = {
     bypassPermissions: "Agent",
-    acceptEdits: "Accept Edits",
+    acceptEdits: "Auto-edit",
     default: "Ask",
     plan: "Plan",
   };
@@ -406,7 +413,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     prevRunningRef.current = isRunning;
 
     if (wasRunning && !isRunning && isConnected && !isSpectator) {
-      // Agent just became idle — send next queued message
+      // Agent just became idle -- send next queued message
       const nextMsg = useStore.getState().dequeueMessage(sessionId);
       if (nextMsg) {
         // Small delay to let the UI settle
@@ -461,9 +468,17 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }
 
+  const placeholderText = isSpectator
+    ? "Spectators cannot send messages"
+    : !isConnected
+    ? "Waiting for connection..."
+    : isRunning
+    ? "Send follow-up (will queue)..."
+    : "Send a message... (/ for commands)";
+
   return (
     <div
-      className="shrink-0 px-4 sm:px-6 pb-3 pt-1 relative"
+      className="shrink-0 px-4 pb-4 pt-1 relative"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -471,7 +486,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     >
       {/* Drag overlay */}
       {isDragOver && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-cc-primary/5 border-2 border-dashed border-cc-primary/40 rounded-xl pointer-events-none">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-cc-primary/5 border-2 border-dashed border-cc-primary/30 rounded-xl backdrop-blur-sm pointer-events-none">
           <div className="flex items-center gap-2 text-cc-primary text-xs font-medium">
             <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
               <path d="M3.5 4A1.5 1.5 0 012 2.5V2h12v.5A1.5 1.5 0 0112.5 4h-9zM2 5v7.5A1.5 1.5 0 003.5 14h9a1.5 1.5 0 001.5-1.5V5H2zm5.25 2.5a.75.75 0 011.5 0v1.75H10.5a.75.75 0 010 1.5H8.75V12.5a.75.75 0 01-1.5 0v-1.75H5.5a.75.75 0 010-1.5h1.75V7.5z" />
@@ -480,45 +495,33 @@ export function Composer({ sessionId }: { sessionId: string }) {
           </div>
         </div>
       )}
-      <div className="max-w-4xl mx-auto">
-        {/* Queued messages indicator */}
-        {queuedMessages.length > 0 && (
-          <div className="flex items-center gap-2 mb-2 px-1">
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-cc-primary/10 text-cc-primary text-[11px] font-mono-code">
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                <path d="M8 0a1 1 0 011 1v5.268l3.562-1.78a1 1 0 01.894 1.789L8 9.382l-5.456-3.105a1 1 0 11.894-1.79L7 6.27V1a1 1 0 011-1zM3 12a1 1 0 100 2h10a1 1 0 100-2H3z" />
-              </svg>
-              <span>{queuedMessages.length} message{queuedMessages.length > 1 ? "s" : ""} queued</span>
-            </div>
-            <button
-              onClick={() => useStore.getState().clearQueue(sessionId)}
-              className="text-[10px] text-cc-muted hover:text-cc-error transition-colors"
-            >
-              Clear queue
-            </button>
+
+      <div className="max-w-3xl mx-auto">
+        {/* Status indicator when agent is running */}
+        {isRunning && (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-cc-primary/10 text-cc-primary px-2.5 py-0.5 text-[11px] font-medium mb-2">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 animate-spin">
+              <path d="M8 0a8 8 0 018 8h-2a6 6 0 00-6-6V0z" />
+            </svg>
+            Agent is working...
           </div>
         )}
 
-        {/* Image thumbnails */}
-        {images.length > 0 && (
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            {images.map((img, i) => (
-              <div key={i} className="relative group">
-                <img
-                  src={`data:${img.mediaType};base64,${img.base64}`}
-                  alt={img.name}
-                  className="w-10 h-10 rounded-md object-cover border border-cc-border"
-                />
-                <button
-                  onClick={() => removeImage(i)}
-                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-cc-error text-white flex items-center justify-center text-[8px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-2 h-2">
-                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-                  </svg>
-                </button>
-              </div>
-            ))}
+        {/* Queued messages pill */}
+        {queuedMessages.length > 0 && (
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cc-primary/10 text-cc-primary text-[11px] font-medium shadow-sm border border-cc-primary/20">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path d="M8 0a1 1 0 011 1v5.268l3.562-1.78a1 1 0 01.894 1.789L8 9.382l-5.456-3.105a1 1 0 11.894-1.79L7 6.27V1a1 1 0 011-1zM3 12a1 1 0 100 2h10a1 1 0 100-2H3z" />
+              </svg>
+              {queuedMessages.length} message{queuedMessages.length > 1 ? "s" : ""} queued
+            </div>
+            <button
+              onClick={() => useStore.getState().clearQueue(sessionId)}
+              className="text-[10px] text-cc-muted hover:text-cc-error transition-colors cursor-pointer"
+            >
+              Clear
+            </button>
           </div>
         )}
 
@@ -532,30 +535,36 @@ export function Composer({ sessionId }: { sessionId: string }) {
           className="hidden"
         />
 
-        {/* Terminal-style input */}
-        <div className={`relative bg-cc-card rounded-lg overflow-visible transition-all border ${
+        {/* Input card */}
+        <div className={`relative bg-cc-card rounded-xl overflow-visible shadow-sm transition-all duration-200 border focus-within:shadow-md focus-within:ring-2 ${
           isPlan
-            ? "border-cc-primary/25"
-            : "border-cc-border focus-within:border-cc-muted/20"
+            ? "border-purple-400/30 focus-within:border-purple-400/40 focus-within:ring-purple-400/10"
+            : "border-cc-border focus-within:border-cc-primary/30 focus-within:ring-cc-primary/10"
         }`}>
+          {/* Running indicator bar */}
+          {isRunning && (
+            <div className="h-1 bg-gradient-to-r from-cc-primary/60 via-cc-primary to-cc-primary/60 animate-pulse rounded-t-xl" />
+          )}
+
           {/* @-mention prompt menu */}
           {atMenuOpen && filteredPrompts.length > 0 && (
-            <div className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto bg-cc-card border border-cc-border rounded-lg shadow-lg z-20 py-1">
+            <div className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto rounded-xl border border-cc-border bg-cc-card shadow-lg z-20 py-1">
               {filteredPrompts.map((prompt, i) => (
                 <button
                   key={prompt.id}
                   onClick={() => selectPrompt(prompt)}
-                  className={`w-full px-3 py-2 text-left flex items-center gap-2.5 transition-colors cursor-pointer ${
-                    i === atMenuIndex ? "bg-cc-hover" : "hover:bg-cc-hover/50"
+                  className={`w-full px-2.5 py-1.5 text-left flex items-center gap-2.5 transition-colors cursor-pointer rounded-lg mx-1 ${
+                    i === atMenuIndex ? "bg-cc-primary/10 text-cc-primary" : "hover:bg-cc-hover"
                   }`}
+                  style={{ width: "calc(100% - 0.5rem)" }}
                 >
-                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-cc-hover text-cc-muted shrink-0 text-[11px] font-bold">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-cc-hover/80 text-cc-muted shrink-0 text-[10px] font-bold">
                     @
                   </span>
                   <div className="flex-1 min-w-0">
-                    <span className="text-[13px] font-medium text-cc-fg">{prompt.name}</span>
-                    <span className="ml-2 text-[11px] text-cc-muted capitalize">{prompt.scope}</span>
-                    <p className="text-[11px] text-cc-muted truncate mt-0.5">{prompt.content.slice(0, 60)}{prompt.content.length > 60 ? "…" : ""}</p>
+                    <span className="text-[12px] font-medium text-cc-fg">{prompt.name}</span>
+                    <span className="ml-2 text-[10px] text-cc-muted capitalize">{prompt.scope}</span>
+                    <p className="text-[10px] text-cc-muted truncate mt-0.5">{prompt.content.slice(0, 60)}{prompt.content.length > 60 ? "\u2026" : ""}</p>
                   </div>
                 </button>
               ))}
@@ -566,35 +575,65 @@ export function Composer({ sessionId }: { sessionId: string }) {
           {slashMenuOpen && filteredCommands.length > 0 && (
             <div
               ref={menuRef}
-              className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto bg-cc-card border border-cc-border rounded-lg shadow-lg z-20 py-1"
+              className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto rounded-xl border border-cc-border bg-cc-card shadow-lg z-20 py-1"
             >
               {filteredCommands.map((cmd, i) => (
                 <button
                   key={`${cmd.type}-${cmd.name}`}
                   data-cmd-index={i}
                   onClick={() => selectCommand(cmd)}
-                  className={`w-full px-3 py-2 text-left flex items-center gap-2.5 transition-colors cursor-pointer ${
+                  className={`w-full px-2.5 py-1.5 text-left flex items-center gap-2.5 transition-colors cursor-pointer rounded-lg mx-1 ${
                     i === slashMenuIndex
-                      ? "bg-cc-hover"
-                      : "hover:bg-cc-hover/50"
+                      ? "bg-cc-primary/10 text-cc-primary"
+                      : "hover:bg-cc-hover"
                   }`}
+                  style={{ width: "calc(100% - 0.5rem)" }}
                 >
-                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-cc-hover text-cc-muted shrink-0">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-cc-hover/80 text-cc-muted shrink-0">
                     {cmd.type === "skill" ? (
-                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
                         <path d="M8 1l1.796 3.64L14 5.255l-3 2.924.708 4.126L8 10.5l-3.708 1.805L5 8.18 2 5.255l4.204-.615L8 1z" />
                       </svg>
                     ) : (
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
                         <path d="M5 12L10 4" strokeLinecap="round" />
                       </svg>
                     )}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[13px] font-medium text-cc-fg">/{cmd.name}</span>
-                    <span className="ml-2 text-[11px] text-cc-muted">{cmd.type}</span>
+                  <div className="flex-1 min-w-0 flex items-center justify-between">
+                    <div>
+                      <span className="text-[12px] font-medium text-cc-fg">/{cmd.name}</span>
+                      <span className="ml-2 text-[10px] text-cc-muted">{cmd.type}</span>
+                    </div>
+                    <span className="text-[9px] text-cc-muted/50 font-mono-code px-1 py-0.5 rounded bg-cc-hover">
+                      {cmd.type === "skill" ? "skill" : "cmd"}
+                    </span>
                   </div>
                 </button>
+              ))}
+            </div>
+          )}
+
+          {/* Image attachment chips (inside card, above textarea) */}
+          {images.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 pt-2 flex-wrap">
+              {images.map((img, i) => (
+                <div key={i} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-lg border border-cc-border bg-cc-card shadow-sm text-[11px] text-cc-fg group">
+                  <img
+                    src={`data:${img.mediaType};base64,${img.base64}`}
+                    alt={img.name}
+                    className="w-8 h-8 rounded-md object-cover shrink-0"
+                  />
+                  <span className="truncate max-w-[80px]">{img.name}</span>
+                  <button
+                    onClick={() => removeImage(i)}
+                    className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-cc-muted hover:text-cc-error hover:bg-cc-error/10 transition-colors cursor-pointer shrink-0"
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" className="w-2.5 h-2.5">
+                      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -605,10 +644,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isSpectator ? "Spectators cannot send messages" : isConnected ? "Type a message... (/ for commands, @ for prompts)" : "Waiting for connection..."}
+            placeholder={placeholderText}
             disabled={!isConnected || isSpectator}
             rows={1}
-            className="w-full px-3.5 pt-2.5 pb-1 text-[13px] bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted/50 disabled:opacity-40"
+            className="w-full px-4 pt-3 pb-1.5 text-[13px] bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted/50 disabled:opacity-40"
             style={{ minHeight: "34px", maxHeight: "200px" }}
           />
 
@@ -623,54 +662,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          {/* Git branch + lines info */}
-          {sessionData?.git_branch && (
-            <div className="flex items-center gap-2 px-3.5 pb-1 text-[10px] text-cc-muted/60 font-mono-code overflow-hidden">
-              <span className="flex items-center gap-1 truncate min-w-0">
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0 opacity-60">
-                  <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
-                </svg>
-                <span className="truncate max-w-[100px] sm:max-w-[160px]">{sessionData.git_branch}</span>
-                {sessionData.is_worktree && (
-                  <span className="text-[10px] bg-cc-hover text-cc-muted px-1 rounded">worktree</span>
-                )}
-              </span>
-              {((sessionData.git_ahead || 0) > 0 || (sessionData.git_behind || 0) > 0) && (
-                <span className="flex items-center gap-0.5 text-[10px]">
-                  {(sessionData.git_ahead || 0) > 0 && <span className="text-green-500">{sessionData.git_ahead}&#8593;</span>}
-                  {(sessionData.git_behind || 0) > 0 && (
-                    <button
-                      className="text-cc-warning hover:text-amber-400 cursor-pointer hover:underline"
-                      title="Pull latest changes"
-                      onClick={() => {
-                        const cwd = sessionData.repo_root || sessionData.cwd;
-                        if (!cwd) return;
-                        api.gitPull(cwd).then((r) => {
-                          useStore.getState().updateSession(sessionId, {
-                            git_ahead: r.git_ahead,
-                            git_behind: r.git_behind,
-                          });
-                          if (!r.success) console.warn("[git pull]", r.output);
-                        }).catch((e) => console.error("[git pull]", e));
-                      }}
-                    >
-                      {sessionData.git_behind}&#8595;
-                    </button>
-                  )}
-                </span>
-              )}
-              {((sessionData.total_lines_added || 0) > 0 || (sessionData.total_lines_removed || 0) > 0) && (
-                <span className="flex items-center gap-1 shrink-0">
-                  <span className="text-green-500">+{sessionData.total_lines_added || 0}</span>
-                  <span className="text-red-400">-{sessionData.total_lines_removed || 0}</span>
-                </span>
-              )}
-            </div>
-          )}
-
           {/* Bottom toolbar */}
-          <div className="flex items-center justify-between px-2.5 pb-2">
-            {/* Left: mode selector */}
+          <div className="flex items-center justify-between px-3 pb-2.5">
+            {/* Left: mode indicator (dot + label) */}
             <div className="relative">
               <button
                 onClick={() => {
@@ -678,64 +672,94 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   setShowModeMenu(!showModeMenu);
                 }}
                 disabled={!isConnected || isCodex || isSpectator}
-                className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono-code transition-all select-none ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors select-none ${
                   !isConnected || isCodex || isSpectator
                     ? "opacity-25 cursor-not-allowed text-cc-muted"
-                    : isPlan
-                    ? "text-cc-primary hover:bg-cc-primary/10 cursor-pointer"
-                    : currentMode === "bypassPermissions"
-                    ? "text-cc-warning hover:bg-cc-warning/10 cursor-pointer"
-                    : "text-cc-muted/60 hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                    : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
                 }`}
-                title={isCodex ? "Mode is fixed for Codex sessions" : "Switch permission mode"}
+                title={isCodex ? "Mode is fixed for Codex sessions" : "Switch permission mode (Shift+Tab)"}
               >
-                {isPlan ? (
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                    <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
-                    <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
-                  </svg>
-                ) : currentMode === "bypassPermissions" ? (
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                    <path d="M8 1.5a.75.75 0 01.75.75v2h2a.75.75 0 010 1.5h-2v2a.75.75 0 01-1.5 0v-2h-2a.75.75 0 010-1.5h2v-2A.75.75 0 018 1.5z" />
-                    <path d="M3.5 10.25a.75.75 0 000 1.5h9a.75.75 0 000-1.5h-9zm0 2.5a.75.75 0 000 1.5h5a.75.75 0 000-1.5h-5z" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                    <path d="M2.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                    <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  </svg>
-                )}
+                <span className={`w-2 h-2 rounded-full shrink-0 ${modeDotColors[currentMode] || "bg-cc-muted"}`} />
                 <span>{modeLabels[currentMode] || modeLabel}</span>
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 opacity-50">
-                  <path d="M4 6l4 4 4-4" />
-                </svg>
               </button>
 
               {/* Mode dropdown menu */}
               {showModeMenu && (
-                <div className="absolute left-0 bottom-full mb-1 w-44 bg-cc-card border border-cc-border rounded-lg shadow-lg z-20 py-1">
+                <div className="absolute left-0 bottom-full mb-1 w-48 rounded-xl border border-cc-border bg-cc-card shadow-lg z-20 py-1">
                   {[
-                    { value: "bypassPermissions", label: "Agent (auto-approve)", desc: "Auto-approve all tools" },
-                    { value: "acceptEdits", label: "Accept Edits", desc: "Auto-approve file edits" },
-                    { value: "default", label: "Ask Every Time", desc: "Prompt for each tool" },
-                    { value: "plan", label: "Plan Only", desc: "No tool execution" },
+                    { value: "bypassPermissions", label: "Agent", desc: "Auto-approve all tools", dot: "bg-green-400" },
+                    { value: "acceptEdits", label: "Auto-edit", desc: "Auto-approve file edits", dot: "bg-blue-400" },
+                    { value: "default", label: "Ask", desc: "Prompt for each tool", dot: "bg-amber-400" },
+                    { value: "plan", label: "Plan", desc: "No tool execution", dot: "bg-purple-400" },
                   ].map((m) => (
                     <button
                       key={m.value}
                       onClick={() => switchMode(m.value)}
-                      className={`w-full px-3 py-1.5 text-left hover:bg-cc-hover transition-colors cursor-pointer ${
-                        currentMode === m.value ? "text-cc-primary" : "text-cc-fg"
+                      className={`w-full px-2.5 py-2 text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 rounded-lg mx-1 ${
+                        currentMode === m.value ? "text-cc-fg" : "text-cc-muted"
                       }`}
+                      style={{ width: "calc(100% - 0.5rem)" }}
                     >
-                      <div className="text-[11px] font-medium">{m.label}</div>
-                      <div className="text-[10px] text-cc-muted">{m.desc}</div>
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${m.dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-medium">{m.label}</div>
+                        <div className="text-[10px] text-cc-muted">{m.desc}</div>
+                      </div>
+                      {currentMode === m.value && (
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-primary shrink-0">
+                          <path d="M3 8.5l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                        </svg>
+                      )}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Right: image + send/stop */}
+            {/* Center: git branch info */}
+            {sessionData?.git_branch && (
+              <div className="flex items-center gap-1.5 text-[10px] text-cc-muted/60 font-mono-code overflow-hidden rounded-md bg-cc-hover/50 px-2 py-0.5">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0 opacity-50">
+                  <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
+                </svg>
+                <span className="truncate max-w-[80px] sm:max-w-[120px]">{sessionData.git_branch}</span>
+                {sessionData.is_worktree && (
+                  <span className="text-[9px] bg-cc-hover text-cc-muted px-1 rounded">wt</span>
+                )}
+                {((sessionData.git_ahead || 0) > 0 || (sessionData.git_behind || 0) > 0) && (
+                  <span className="flex items-center gap-0.5">
+                    {(sessionData.git_ahead || 0) > 0 && <span className="text-green-500">{sessionData.git_ahead}&#8593;</span>}
+                    {(sessionData.git_behind || 0) > 0 && (
+                      <button
+                        className="text-cc-warning hover:text-amber-400 cursor-pointer hover:underline"
+                        title="Pull latest changes"
+                        onClick={() => {
+                          const cwd = sessionData.repo_root || sessionData.cwd;
+                          if (!cwd) return;
+                          api.gitPull(cwd).then((r) => {
+                            useStore.getState().updateSession(sessionId, {
+                              git_ahead: r.git_ahead,
+                              git_behind: r.git_behind,
+                            });
+                            if (!r.success) console.warn("[git pull]", r.output);
+                          }).catch((e) => console.error("[git pull]", e));
+                        }}
+                      >
+                        {sessionData.git_behind}&#8595;
+                      </button>
+                    )}
+                  </span>
+                )}
+                {((sessionData.total_lines_added || 0) > 0 || (sessionData.total_lines_removed || 0) > 0) && (
+                  <span className="flex items-center gap-1 shrink-0">
+                    <span className="text-green-500">+{sessionData.total_lines_added || 0}</span>
+                    <span className="text-red-400">-{sessionData.total_lines_removed || 0}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Right: image upload + send/interrupt */}
             <div className="flex items-center gap-1">
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -754,44 +778,14 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </svg>
               </button>
 
-              {speechSupported && (
-                <button
-                  onClick={toggleVoice}
-                  disabled={!isConnected || isSpectator}
-                  className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
-                    !isConnected || isSpectator
-                      ? "text-cc-muted opacity-30 cursor-not-allowed"
-                      : isListening
-                      ? "text-cc-error bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer"
-                      : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-                  }`}
-                  title={isListening ? "Stop listening" : `Voice input (${navigator.platform?.includes("Mac") ? "Cmd" : "Ctrl"}+Shift+M)`}
-                >
-                  {isListening ? (
-                    <span className="relative flex items-center justify-center">
-                      <span className="absolute inline-flex h-4 w-4 rounded-full bg-cc-error/30 animate-ping" />
-                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 relative">
-                        <path d="M8 1a2.5 2.5 0 00-2.5 2.5v4a2.5 2.5 0 005 0v-4A2.5 2.5 0 008 1z" />
-                        <path d="M3.5 7a.75.75 0 011.5 0 3 3 0 006 0 .75.75 0 011.5 0 4.5 4.5 0 01-3.75 4.437V13h1.5a.75.75 0 010 1.5h-4.5a.75.75 0 010-1.5h1.5v-1.563A4.5 4.5 0 013.5 7z" />
-                      </svg>
-                    </span>
-                  ) : (
-                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
-                      <path d="M8 1a2.5 2.5 0 00-2.5 2.5v4a2.5 2.5 0 005 0v-4A2.5 2.5 0 008 1z" />
-                      <path d="M3.5 7a.75.75 0 011.5 0 3 3 0 006 0 .75.75 0 011.5 0 4.5 4.5 0 01-3.75 4.437V13h1.5a.75.75 0 010 1.5h-4.5a.75.75 0 010-1.5h1.5v-1.563A4.5 4.5 0 013.5 7z" />
-                    </svg>
-                  )}
-                </button>
-              )}
-
               {isRunning ? (
                 <button
                   onClick={handleInterrupt}
                   disabled={isSpectator}
-                  className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+                  className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
                     isSpectator
                       ? "bg-cc-hover text-cc-muted/40 cursor-not-allowed"
-                      : "bg-cc-error/10 hover:bg-cc-error/20 text-cc-error cursor-pointer"
+                      : "bg-cc-error/10 text-cc-error border border-cc-error/20 hover:bg-cc-error/20 cursor-pointer"
                   }`}
                   title={isSpectator ? "Spectators cannot interrupt" : "Stop generation"}
                 >
@@ -803,15 +797,15 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 <button
                   onClick={handleSend}
                   disabled={!canSend}
-                  className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+                  className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 ${
                     canSend
-                      ? "bg-cc-fg text-cc-bg hover:opacity-80 cursor-pointer"
+                      ? "bg-cc-primary text-white shadow-sm hover:shadow-md hover:opacity-90 cursor-pointer"
                       : "bg-cc-hover text-cc-muted/40 cursor-not-allowed"
                   }`}
                   title="Send message (Enter)"
                 >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                    <path d="M8 2v10M4 8l4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
+                    <path d="M8 12V4M4 7l4-4 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
               )}

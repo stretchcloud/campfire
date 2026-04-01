@@ -63,14 +63,14 @@ export function HomePage() {
   // Environment state
   const [envs, setEnvs] = useState<CompanionEnv[]>([]);
   const [selectedEnv, setSelectedEnv] = useState(() => localStorage.getItem("cc-selected-env") || "");
-  const [showEnvDropdown, setShowEnvDropdown] = useState(false);
   const [showEnvManager, setShowEnvManager] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Dropdown states
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [showModeDropdown, setShowModeDropdown] = useState(false);
+  // Options disclosure
+  const [showOptions, setShowOptions] = useState(false);
+
+  // Folder picker
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
   // Worktree state
@@ -92,15 +92,12 @@ export function HomePage() {
   const [containerImage, setContainerImage] = useState("companion-dev:latest");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
-  const modeDropdownRef = useRef<HTMLDivElement>(null);
-  const envDropdownRef = useRef<HTMLDivElement>(null);
   const branchDropdownRef = useRef<HTMLDivElement>(null);
 
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const currentSessionId = useStore((s) => s.currentSessionId);
 
-  // Auto-focus textarea (desktop only — on mobile it triggers the keyboard immediately)
+  // Auto-focus textarea (desktop only -- on mobile it triggers the keyboard immediately)
   useEffect(() => {
     const isDesktop = window.matchMedia("(min-width: 640px)").matches;
     if (isDesktop) {
@@ -151,15 +148,6 @@ export function HomePage() {
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
-        setShowModelDropdown(false);
-      }
-      if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) {
-        setShowModeDropdown(false);
-      }
-      if (envDropdownRef.current && !envDropdownRef.current.contains(e.target as Node)) {
-        setShowEnvDropdown(false);
-      }
       if (branchDropdownRef.current && !branchDropdownRef.current.contains(e.target as Node)) {
         setShowBranchDropdown(false);
       }
@@ -195,7 +183,6 @@ export function HomePage() {
 
   const selectedModel = MODELS.find((m) => m.value === model) || MODELS[0];
   const selectedMode = MODES.find((m) => m.value === mode) || MODES[0];
-  const logoSrc = backend === "codex" ? "/logo-codex.svg" : "/logo.svg";
   const dirLabel = cwd ? cwd.split("/").pop() || cwd : "Select folder";
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -271,7 +258,7 @@ export function HomePage() {
         const branchInfo = branches.find(b => b.name === effectiveBranch && !b.isRemote);
         if (branchInfo && branchInfo.behind > 0) {
           setPullPrompt({ behind: branchInfo.behind, branchName: effectiveBranch });
-          return; // Pause — user must choose pull/skip/cancel
+          return; // Pause -- user must choose pull/skip/cancel
         }
       }
     }
@@ -428,116 +415,132 @@ export function HomePage() {
   const canSend = text.trim().length > 0 && !sending;
 
   return (
-    <div className="flex-1 h-full flex items-start justify-center px-3 sm:px-4 pt-[15vh] sm:pt-[20vh] overflow-y-auto">
-      <div className="w-full max-w-2xl">
-        {/* Logo + Title */}
-        <div className="flex flex-col items-center justify-center mb-4 sm:mb-6">
-          <img src={logoSrc} alt="Campfire" className="w-16 h-16 sm:w-20 sm:h-20 mb-2 opacity-70" />
-          <h1 className="text-base sm:text-lg font-mono-code font-medium text-cc-fg tracking-wide uppercase">
-            Campfire
-          </h1>
-        </div>
-
-        {/* Image thumbnails */}
-        {images.length > 0 && (
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            {images.map((img, i) => (
-              <div key={i} className="relative group">
-                <img
-                  src={`data:${img.mediaType};base64,${img.base64}`}
-                  alt={img.name}
-                  className="w-12 h-12 rounded-lg object-cover border border-cc-border"
-                />
-                <button
-                  onClick={() => removeImage(i)}
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
-                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-        />
+    <div className="flex-1 h-full flex items-start justify-center px-3 sm:px-4 pt-[12vh] sm:pt-[18vh] overflow-y-auto">
+      <div className="w-full max-w-xl">
+        {/* Greeting */}
+        <h1 className="text-2xl sm:text-3xl font-light text-cc-fg text-center">
+          What are you working on?
+        </h1>
+        <p className="text-sm text-cc-muted/60 text-center mt-2 mb-6">Describe your task and choose a backend to get started</p>
 
         {/* Linear Integration (only shown when connected + git repo detected) */}
         {gitRepoInfo && (
-          <LinearSection
-            cwd={cwd}
-            repoRoot={gitRepoInfo.repoRoot}
-            onBranchFromIssue={(branch) => {
-              setWorktreeBranch(branch);
-              setIsNewBranch(true);
-              setUseWorktree(true);
-            }}
-          />
+          <div className="mb-4">
+            <LinearSection
+              cwd={cwd}
+              repoRoot={gitRepoInfo.repoRoot}
+              onBranchFromIssue={(branch) => {
+                setWorktreeBranch(branch);
+                setIsNewBranch(true);
+                setUseWorktree(true);
+              }}
+            />
+          </div>
         )}
 
-        {/* Input card */}
-        <div className="bg-cc-card border border-cc-border rounded-xl shadow-sm overflow-hidden">
+        {/* Composer card */}
+        <div className="bg-cc-card rounded-2xl border border-cc-border/50 shadow-lg transition-all duration-300 focus-within:shadow-xl focus-within:border-cc-border">
+          {/* Image thumbnails */}
+          {images.length > 0 && (
+            <div className="flex items-center gap-2 px-4 pt-3 flex-wrap">
+              {images.map((img, i) => (
+                <div key={i} className="relative group">
+                  <img
+                    src={`data:${img.mediaType};base64,${img.base64}`}
+                    alt={img.name}
+                    className="w-14 h-14 rounded-xl object-cover border border-cc-border shadow-sm"
+                  />
+                  <button
+                    onClick={() => removeImage(i)}
+                    aria-label={`Remove ${img.name}`}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
+                      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+            aria-label="Upload images"
+          />
+
+          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={text}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder="Fix a bug, build a feature, refactor code..."
-            rows={4}
-            className="w-full px-4 pt-4 pb-2 text-base sm:text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted"
-            style={{ minHeight: "100px", maxHeight: "300px" }}
+            placeholder="Attach files or start a conversation..."
+            rows={3}
+            aria-label="Task description"
+            className="w-full px-5 pt-5 pb-3 text-[15px] bg-transparent resize-none focus:outline-none text-cc-fg placeholder:text-cc-muted/70"
+            style={{ minHeight: "96px", maxHeight: "300px" }}
           />
 
-          {/* Bottom toolbar */}
-          <div className="flex items-center justify-between px-3 pb-3">
-            {/* Left: mode dropdown */}
-            <div className="relative" ref={modeDropdownRef}>
+          {/* Toolbar */}
+          <div className="flex flex-col gap-3 px-4 pb-4">
+            {/* Backend pills — scrollable row */}
+            {backends.length > 1 && (
+              <div className="flex items-center overflow-x-auto scrollbar-none bg-cc-hover/40 rounded-xl p-1" role="radiogroup" aria-label="Backend">
+                {backends.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => b.available && switchBackend(b.id as BackendType)}
+                    disabled={!b.available}
+                    role="radio"
+                    aria-checked={backend === b.id}
+                    title={b.available ? b.name : `${b.name} CLI not found in PATH`}
+                    className={`px-3 py-1.5 text-[12px] rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+                      !b.available
+                        ? "text-cc-muted/40 cursor-not-allowed"
+                        : backend === b.id
+                          ? "bg-cc-card text-cc-fg font-semibold shadow-md cursor-pointer"
+                          : "text-cc-muted hover:text-cc-fg cursor-pointer"
+                    }`}
+                  >
+                    {b.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Action buttons row */}
+            <div className="flex items-center justify-end gap-2">
+              {/* Options toggle */}
               <button
-                onClick={() => setShowModeDropdown(!showModeDropdown)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-cc-muted hover:text-cc-fg rounded-lg hover:bg-cc-hover transition-colors cursor-pointer"
+                onClick={() => setShowOptions(!showOptions)}
+                aria-expanded={showOptions}
+                aria-controls="options-panel"
+                className={`flex items-center gap-1 px-3 py-2 text-[12px] rounded-xl transition-colors cursor-pointer ${
+                  showOptions
+                    ? "text-cc-fg bg-cc-hover"
+                    : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                }`}
               >
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-                  <path d="M2 4h12M2 8h8M2 12h10" strokeLinecap="round" />
+                  <path d="M8 4v8M4 8h8" strokeLinecap="round" style={{ display: showOptions ? "none" : "block" }} />
+                  <path d="M4 8h8" strokeLinecap="round" style={{ display: showOptions ? "block" : "none" }} />
                 </svg>
-                {selectedMode.label}
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
-                  <path d="M4 6l4 4 4-4" />
-                </svg>
+                Options
               </button>
-              {showModeDropdown && (
-                <div className="absolute left-0 bottom-full mb-1 w-40 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1 overflow-hidden">
-                  {MODES.map((m) => (
-                    <button
-                      key={m.value}
-                      onClick={() => { setMode(m.value); setShowModeDropdown(false); }}
-                      className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
-                        m.value === mode ? "text-cc-primary font-medium" : "text-cc-fg"
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            {/* Right: image placeholder + send */}
-            <div className="flex items-center gap-1.5">
               {/* Image upload */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-                title="Upload image"
+                aria-label="Upload image"
+                className="flex items-center justify-center w-9 h-9 rounded-xl text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
               >
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
                   <rect x="2" y="2" width="12" height="12" rx="2" />
@@ -550,412 +553,363 @@ export function HomePage() {
               <button
                 onClick={handleSend}
                 disabled={!canSend}
-                className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${
+                aria-label="Send message"
+                className={`flex items-center justify-center w-10 h-10 rounded-full shadow-md hover:shadow-lg transition-all ${
                   canSend
                     ? "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
-                    : "bg-cc-hover text-cc-muted cursor-not-allowed"
+                    : "bg-cc-hover text-cc-muted cursor-not-allowed shadow-none"
                 }`}
-                title="Send message"
               >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <path d="M3 2l11 6-11 6V9.5l7-1.5-7-1.5V2z" />
-                </svg>
+                {sending ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                    <path d="M8 2.5a.75.75 0 01.75.75v7.69l2.72-2.72a.75.75 0 111.06 1.06l-4 4a.75.75 0 01-1.06 0l-4-4a.75.75 0 111.06-1.06l2.72 2.72V3.25A.75.75 0 018 2.5z" transform="rotate(180 8 8)" />
+                  </svg>
+                )}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Below-card selectors */}
-        <div className="flex items-center gap-1 sm:gap-2 mt-2 sm:mt-3 px-1 flex-wrap">
-          {/* Backend toggle */}
-          {backends.length > 1 && (
-            <div className="flex items-center bg-cc-hover/50 rounded-lg p-0.5">
-              {backends.map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => b.available && switchBackend(b.id as BackendType)}
-                  disabled={!b.available}
-                  title={b.available ? b.name : `${b.name} CLI not found in PATH`}
-                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
-                    !b.available
-                      ? "text-cc-muted/40 cursor-not-allowed"
-                      : backend === b.id
-                        ? "bg-cc-card text-cc-fg font-medium shadow-sm cursor-pointer"
-                        : "text-cc-muted hover:text-cc-fg cursor-pointer"
-                  }`}
+        {/* Options panel (collapsed by default) */}
+        {showOptions && (
+          <div id="options-panel" className="mt-4 p-4 bg-cc-card rounded-2xl border border-cc-border/50 shadow-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {/* Model selector */}
+              <div>
+                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="model-select">Model</label>
+                <select
+                  id="model-select"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="w-full px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg focus:outline-none focus:border-cc-primary/50 cursor-pointer"
                 >
-                  {b.name}
-                  {!b.available && (
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3 text-cc-error/60">
-                      <circle cx="8" cy="8" r="6" />
-                      <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
+                  {MODELS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Mode selector */}
+              <div>
+                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="mode-select">Permission mode</label>
+                <select
+                  id="mode-select"
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                  className="w-full px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg focus:outline-none focus:border-cc-primary/50 cursor-pointer"
+                >
+                  {MODES.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Environment selector */}
+              <div>
+                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="env-select">Environment</label>
+                <div className="flex gap-1">
+                  <select
+                    id="env-select"
+                    value={selectedEnv}
+                    onChange={(e) => {
+                      setSelectedEnv(e.target.value);
+                      localStorage.setItem("cc-selected-env", e.target.value);
+                    }}
+                    onFocus={() => { api.listEnvs().then(setEnvs).catch(() => {}); }}
+                    className="flex-1 min-w-0 px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg focus:outline-none focus:border-cc-primary/50 cursor-pointer"
+                  >
+                    <option value="">No environment</option>
+                    {envs.map((env) => (
+                      <option key={env.slug} value={env.slug}>{env.name} ({Object.keys(env.variables).length} vars)</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setShowEnvManager(true)}
+                    aria-label="Manage environments"
+                    className="px-3 py-2 text-[12px] text-cc-muted hover:text-cc-fg bg-cc-bg border border-cc-border rounded-xl hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                      <path d="M8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492zM5.754 8a2.246 2.246 0 114.492 0 2.246 2.246 0 01-4.492 0z" />
+                      <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0a1.843 1.843 0 01-2.739 1.049c-1.547-.966-3.317.803-2.35 2.35a1.843 1.843 0 01-1.049 2.74c-1.79.526-1.79 3.064 0 3.59a1.843 1.843 0 011.049 2.74c-.966 1.547.803 3.317 2.35 2.35a1.843 1.843 0 012.74 1.049c.526 1.79 3.064 1.79 3.59 0a1.843 1.843 0 012.74-1.049c1.547.966 3.317-.803 2.35-2.35a1.843 1.843 0 011.049-2.74c1.79-.526 1.79-3.064 0-3.59a1.843 1.843 0 01-1.049-2.74c.966-1.547-.803-3.317-2.35-2.35a1.843 1.843 0 01-2.74-1.049zM8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492z" />
                     </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+                  </button>
+                </div>
+              </div>
 
-          {/* Codex internet access toggle */}
-          {backend === "codex" && (
-            <button
-              onClick={() => {
-                const next = !codexInternetAccess;
-                setCodexInternetAccess(next);
-                localStorage.setItem("cc-codex-internet-access", next ? "1" : "0");
-              }}
-              className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                codexInternetAccess
-                  ? "bg-cc-primary/15 text-cc-primary font-medium"
-                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
-              }`}
-              title="Allow Codex internet/network access for this session"
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-70">
-                <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 1.5c.8 0 1.55.22 2.2.61-.39.54-.72 1.21-.95 1.98H6.75c-.23-.77-.56-1.44-.95-1.98A4.47 4.47 0 018 3.5zm-3.2 1.3c.3.4.57.86.78 1.37H3.83c.24-.53.57-1.01.97-1.37zm-.97 2.87h2.15c.07.44.12.9.12 1.38 0 .48-.05.94-.12 1.38H3.83A4.56 4.56 0 013.5 9c0-.47.12-.92.33-1.33zm2.03 4.08c.39-.54.72-1.21.95-1.98h2.38c.23.77.56 1.44.95 1.98A4.47 4.47 0 018 12.5c-.8 0-1.55-.22-2.2-.61zm4.34-1.37c.07-.44.12-.9.12-1.38 0-.48-.05-.94-.12-1.38h2.15c.21.41.33.86.33 1.33 0 .47-.12.92-.33 1.33H10.2zm1.37-3.58h-1.75c-.21-.51-.48-.97-.78-1.37.4.36.73.84.97 1.37z" />
-              </svg>
-              <span>Internet</span>
-            </button>
-          )}
-
-          {/* Codex reasoning effort selector */}
-          {backend === "codex" && (
-            <div className="flex items-center gap-0.5 rounded-md border border-cc-border overflow-hidden">
-              {(["low", "medium", "high"] as const).map((level) => (
+              {/* Folder / cwd */}
+              <div>
+                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Working directory</label>
                 <button
-                  key={level}
-                  onClick={() => {
-                    setCodexReasoningEffort(level);
-                    localStorage.setItem("cc-codex-reasoning-effort", level);
-                  }}
-                  className={`px-2 py-1 text-[11px] transition-colors cursor-pointer ${
-                    codexReasoningEffort === level
-                      ? "bg-cc-primary/15 text-cc-primary font-medium"
-                      : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
-                  }`}
-                  title={`Set reasoning effort to ${level}`}
+                  onClick={() => setShowFolderPicker(true)}
+                  className="w-full flex items-center gap-1.5 px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer text-left"
                 >
-                  {level.charAt(0).toUpperCase() + level.slice(1)}
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted shrink-0">
+                    <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
+                  </svg>
+                  <span className="truncate font-mono-code">{dirLabel}</span>
                 </button>
-              ))}
-            </div>
-          )}
+                {showFolderPicker && (
+                  <FolderPicker
+                    initialPath={cwd || ""}
+                    onSelect={(path) => { setCwd(path); }}
+                    onClose={() => setShowFolderPicker(false)}
+                  />
+                )}
+              </div>
 
-          {/* Folder selector */}
-          <div>
-            <button
-              onClick={() => setShowFolderPicker(true)}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
-                <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
-              </svg>
-              <span className="max-w-[120px] sm:max-w-[200px] truncate font-mono-code">{dirLabel}</span>
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
-                <path d="M4 6l4 4 4-4" />
-              </svg>
-            </button>
-            {showFolderPicker && (
-              <FolderPicker
-                initialPath={cwd || ""}
-                onSelect={(path) => { setCwd(path); }}
-                onClose={() => setShowFolderPicker(false)}
-              />
-            )}
-          </div>
+              {/* Branch picker */}
+              {gitRepoInfo && (
+                <div className="relative" ref={branchDropdownRef}>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Branch</label>
+                  <button
+                    onClick={() => {
+                      if (!showBranchDropdown && gitRepoInfo) {
+                        api.gitFetch(gitRepoInfo.repoRoot)
+                          .catch(() => {})
+                          .finally(() => {
+                            api.listBranches(gitRepoInfo.repoRoot).then(setBranches).catch(() => setBranches([]));
+                          });
+                      }
+                      setShowBranchDropdown(!showBranchDropdown);
+                      setBranchFilter("");
+                    }}
+                    className="w-full flex items-center gap-1.5 px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer text-left"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted shrink-0">
+                      <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.378A2.5 2.5 0 007.5 8h1a1 1 0 010 2h-1A2.5 2.5 0 005 12.5v.128a2.25 2.25 0 101.5 0V12.5a1 1 0 011-1h1a2.5 2.5 0 000-5h-1a1 1 0 01-1-1V5.372zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
+                    </svg>
+                    <span className="truncate font-mono-code">{worktreeBranch || gitRepoInfo.currentBranch}</span>
+                  </button>
+                  {showBranchDropdown && (
+                    <div className="absolute left-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] bg-cc-card border border-cc-border rounded-2xl shadow-xl z-10 overflow-hidden">
+                      {/* Search/filter input */}
+                      <div className="px-2 py-2 border-b border-cc-border">
+                        <input
+                          type="text"
+                          value={branchFilter}
+                          onChange={(e) => setBranchFilter(e.target.value)}
+                          placeholder="Filter or create branch..."
+                          className="w-full px-2 py-1 text-base sm:text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              setShowBranchDropdown(false);
+                            }
+                          }}
+                        />
+                      </div>
+                      {/* Branch list */}
+                      <div className="max-h-[240px] overflow-y-auto py-1">
+                        {(() => {
+                          const filter = branchFilter.toLowerCase().trim();
+                          const localBranches = branches.filter((b) => !b.isRemote && (!filter || b.name.toLowerCase().includes(filter)));
+                          const remoteBranches = branches.filter((b) => b.isRemote && (!filter || b.name.toLowerCase().includes(filter)));
+                          const exactMatch = branches.some((b) => b.name.toLowerCase() === filter);
+                          const hasResults = localBranches.length > 0 || remoteBranches.length > 0;
 
-          {/* Branch picker (always visible when cwd is a git repo) */}
-          {gitRepoInfo && (
-            <div className="relative" ref={branchDropdownRef}>
-              <button
-                onClick={() => {
-                  if (!showBranchDropdown && gitRepoInfo) {
-                    api.gitFetch(gitRepoInfo.repoRoot)
-                      .catch(() => {})
-                      .finally(() => {
-                        api.listBranches(gitRepoInfo.repoRoot).then(setBranches).catch(() => setBranches([]));
-                      });
-                  }
-                  setShowBranchDropdown(!showBranchDropdown);
-                  setBranchFilter("");
-                }}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
-              >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
-                  <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.378A2.5 2.5 0 007.5 8h1a1 1 0 010 2h-1A2.5 2.5 0 005 12.5v.128a2.25 2.25 0 101.5 0V12.5a1 1 0 011-1h1a2.5 2.5 0 000-5h-1a1 1 0 01-1-1V5.372zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
-                </svg>
-                <span className="max-w-[100px] sm:max-w-[160px] truncate font-mono-code">
-                  {worktreeBranch || gitRepoInfo.currentBranch}
-                </span>
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
-                  <path d="M4 6l4 4 4-4" />
-                </svg>
-              </button>
-              {showBranchDropdown && (
-                <div className="absolute left-0 bottom-full mb-1 w-72 max-w-[calc(100vw-2rem)] bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 overflow-hidden">
-                  {/* Search/filter input */}
-                  <div className="px-2 py-2 border-b border-cc-border">
-                    <input
-                      type="text"
-                      value={branchFilter}
-                      onChange={(e) => setBranchFilter(e.target.value)}
-                      placeholder="Filter or create branch..."
-                      className="w-full px-2 py-1 text-base sm:text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") {
-                          setShowBranchDropdown(false);
-                        }
-                      }}
-                    />
-                  </div>
-                  {/* Branch list */}
-                  <div className="max-h-[240px] overflow-y-auto py-1">
-                    {(() => {
-                      const filter = branchFilter.toLowerCase().trim();
-                      const localBranches = branches.filter((b) => !b.isRemote && (!filter || b.name.toLowerCase().includes(filter)));
-                      const remoteBranches = branches.filter((b) => b.isRemote && (!filter || b.name.toLowerCase().includes(filter)));
-                      const exactMatch = branches.some((b) => b.name.toLowerCase() === filter);
-                      const hasResults = localBranches.length > 0 || remoteBranches.length > 0;
-
-                      return (
-                        <>
-                          {/* Local branches */}
-                          {localBranches.length > 0 && (
+                          return (
                             <>
-                              <div className="px-3 py-1 text-[10px] text-cc-muted uppercase tracking-wider">Local</div>
-                              {localBranches.map((b) => (
-                                <button
-                                  key={b.name}
-                                  onClick={() => {
-                                    setWorktreeBranch(b.name);
-                                    setIsNewBranch(false);
-                                    setShowBranchDropdown(false);
-                                  }}
-                                  className={`w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 ${
-                                    b.name === worktreeBranch ? "text-cc-primary font-medium" : "text-cc-fg"
-                                  }`}
-                                >
-                                  <span className="truncate font-mono-code">{b.name}</span>
-                                  <span className="ml-auto flex items-center gap-1.5 shrink-0">
-                                    {b.ahead > 0 && (
-                                      <span className="text-[9px] text-green-500">{b.ahead}&#8593;</span>
-                                    )}
-                                    {b.behind > 0 && (
-                                      <span className="text-[9px] text-amber-500">{b.behind}&#8595;</span>
-                                    )}
-                                    {b.isCurrent && (
-                                      <span className="text-[9px] px-1 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400">current</span>
-                                    )}
-                                    {b.worktreePath && (
-                                      <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400">wt</span>
-                                    )}
-                                  </span>
-                                </button>
-                              ))}
+                              {/* Local branches */}
+                              {localBranches.length > 0 && (
+                                <>
+                                  <div className="px-3 py-1 text-[10px] text-cc-muted uppercase tracking-wider">Local</div>
+                                  {localBranches.map((b) => (
+                                    <button
+                                      key={b.name}
+                                      onClick={() => {
+                                        setWorktreeBranch(b.name);
+                                        setIsNewBranch(false);
+                                        setShowBranchDropdown(false);
+                                      }}
+                                      className={`w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 ${
+                                        b.name === worktreeBranch ? "text-cc-primary font-medium" : "text-cc-fg"
+                                      }`}
+                                    >
+                                      <span className="truncate font-mono-code">{b.name}</span>
+                                      <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                                        {b.ahead > 0 && (
+                                          <span className="text-[9px] text-green-500">{b.ahead}&#8593;</span>
+                                        )}
+                                        {b.behind > 0 && (
+                                          <span className="text-[9px] text-amber-500">{b.behind}&#8595;</span>
+                                        )}
+                                        {b.isCurrent && (
+                                          <span className="text-[9px] px-1 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400">current</span>
+                                        )}
+                                        {b.worktreePath && (
+                                          <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400">wt</span>
+                                        )}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </>
+                              )}
+                              {/* Remote branches */}
+                              {remoteBranches.length > 0 && (
+                                <>
+                                  <div className="px-3 py-1 text-[10px] text-cc-muted uppercase tracking-wider mt-1">Remote</div>
+                                  {remoteBranches.map((b) => (
+                                    <button
+                                      key={`remote-${b.name}`}
+                                      onClick={() => {
+                                        setWorktreeBranch(b.name);
+                                        setIsNewBranch(false);
+                                        setShowBranchDropdown(false);
+                                      }}
+                                      className={`w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 ${
+                                        b.name === worktreeBranch ? "text-cc-primary font-medium" : "text-cc-fg"
+                                      }`}
+                                    >
+                                      <span className="truncate font-mono-code">{b.name}</span>
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-cc-hover text-cc-muted ml-auto shrink-0">remote</span>
+                                    </button>
+                                  ))}
+                                </>
+                              )}
+                              {/* No results */}
+                              {!hasResults && filter && (
+                                <div className="px-3 py-2 text-xs text-cc-muted text-center">No matching branches</div>
+                              )}
+                              {/* Create new branch option */}
+                              {filter && !exactMatch && (
+                                <div className="border-t border-cc-border mt-1 pt-1">
+                                  <button
+                                    onClick={() => {
+                                      setWorktreeBranch(branchFilter.trim());
+                                      setIsNewBranch(true);
+                                      setShowBranchDropdown(false);
+                                    }}
+                                    className="w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-primary"
+                                  >
+                                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0">
+                                      <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
+                                    </svg>
+                                    <span>Create <span className="font-mono-code font-medium">{branchFilter.trim()}</span></span>
+                                  </button>
+                                </div>
+                              )}
                             </>
-                          )}
-                          {/* Remote branches */}
-                          {remoteBranches.length > 0 && (
-                            <>
-                              <div className="px-3 py-1 text-[10px] text-cc-muted uppercase tracking-wider mt-1">Remote</div>
-                              {remoteBranches.map((b) => (
-                                <button
-                                  key={`remote-${b.name}`}
-                                  onClick={() => {
-                                    setWorktreeBranch(b.name);
-                                    setIsNewBranch(false);
-                                    setShowBranchDropdown(false);
-                                  }}
-                                  className={`w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 ${
-                                    b.name === worktreeBranch ? "text-cc-primary font-medium" : "text-cc-fg"
-                                  }`}
-                                >
-                                  <span className="truncate font-mono-code">{b.name}</span>
-                                  <span className="text-[9px] px-1 py-0.5 rounded bg-cc-hover text-cc-muted ml-auto shrink-0">remote</span>
-                                </button>
-                              ))}
-                            </>
-                          )}
-                          {/* No results */}
-                          {!hasResults && filter && (
-                            <div className="px-3 py-2 text-xs text-cc-muted text-center">No matching branches</div>
-                          )}
-                          {/* Create new branch option */}
-                          {filter && !exactMatch && (
-                            <div className="border-t border-cc-border mt-1 pt-1">
-                              <button
-                                onClick={() => {
-                                  setWorktreeBranch(branchFilter.trim());
-                                  setIsNewBranch(true);
-                                  setShowBranchDropdown(false);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-primary"
-                              >
-                                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0">
-                                  <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
-                                </svg>
-                                <span>Create <span className="font-mono-code font-medium">{branchFilter.trim()}</span></span>
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Worktree toggle */}
+              {gitRepoInfo && (
+                <div>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Worktree</label>
+                  <button
+                    onClick={() => setUseWorktree(!useWorktree)}
+                    className={`w-full flex items-center gap-1.5 px-3 py-2 text-[12px] rounded-xl border transition-colors cursor-pointer ${
+                      useWorktree
+                        ? "bg-cc-primary/10 border-cc-primary/30 text-cc-primary font-medium"
+                        : "bg-cc-bg border-cc-border text-cc-fg hover:bg-cc-hover"
+                    }`}
+                    title="Create an isolated worktree for this session"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0 opacity-70">
+                      <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v5.256a2.25 2.25 0 101.5 0V5.372zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zm7.5-9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V7A2.5 2.5 0 0110 9.5H6a1 1 0 000 2h4a2.5 2.5 0 012.5 2.5v.628a2.25 2.25 0 11-1.5 0V14a1 1 0 00-1-1H6a2.5 2.5 0 01-2.5-2.5V10a2.5 2.5 0 012.5-2.5h4a1 1 0 001-1V5.372a2.25 2.25 0 01-1.5-2.122z" />
+                    </svg>
+                    {useWorktree ? "Enabled" : "Disabled"}
+                  </button>
+                </div>
+              )}
+
+              {/* Container toggle */}
+              <div>
+                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Container</label>
+                <button
+                  onClick={() => setUseContainer(!useContainer)}
+                  className={`w-full flex items-center gap-1.5 px-3 py-2 text-[12px] rounded-xl border transition-colors cursor-pointer ${
+                    useContainer
+                      ? "bg-cc-primary/10 border-cc-primary/30 text-cc-primary font-medium"
+                      : "bg-cc-bg border-cc-border text-cc-fg hover:bg-cc-hover"
+                  }`}
+                  title="Run session in a Docker container"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 shrink-0 opacity-70">
+                    <path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.186.186 0 00-.185.186v1.887c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.888c0 .102.082.185.185.186m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.887c0 .102.082.186.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.186.186 0 00-.185.185v1.887c0 .102.083.186.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.186.186 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.186.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.186v1.887c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.186v1.887c0 .102.083.185.185.185m-2.964 0h2.119a.186.186 0 00.185-.185V9.006a.186.186 0 00-.185-.186H5.136a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.687 11.687 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.228 12.228 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288z" />
+                  </svg>
+                  {useContainer ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+
+              {/* Container image (shown when container mode active) */}
+              {useContainer && (
+                <div>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="container-image">Docker image</label>
+                  <input
+                    id="container-image"
+                    type="text"
+                    value={containerImage}
+                    onChange={(e) => setContainerImage(e.target.value)}
+                    placeholder="Docker image"
+                    className="w-full px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg focus:outline-none focus:border-cc-primary/50"
+                  />
+                </div>
+              )}
+
+              {/* Codex: internet access */}
+              {backend === "codex" && (
+                <div>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Internet access</label>
+                  <button
+                    onClick={() => {
+                      const next = !codexInternetAccess;
+                      setCodexInternetAccess(next);
+                      localStorage.setItem("cc-codex-internet-access", next ? "1" : "0");
+                    }}
+                    className={`w-full flex items-center gap-1.5 px-3 py-2 text-[12px] rounded-xl border transition-colors cursor-pointer ${
+                      codexInternetAccess
+                        ? "bg-cc-primary/10 border-cc-primary/30 text-cc-primary font-medium"
+                        : "bg-cc-bg border-cc-border text-cc-fg hover:bg-cc-hover"
+                    }`}
+                    title="Allow Codex internet/network access for this session"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0 opacity-70">
+                      <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 1.5c.8 0 1.55.22 2.2.61-.39.54-.72 1.21-.95 1.98H6.75c-.23-.77-.56-1.44-.95-1.98A4.47 4.47 0 018 3.5zm-3.2 1.3c.3.4.57.86.78 1.37H3.83c.24-.53.57-1.01.97-1.37zm-.97 2.87h2.15c.07.44.12.9.12 1.38 0 .48-.05.94-.12 1.38H3.83A4.56 4.56 0 013.5 9c0-.47.12-.92.33-1.33zm2.03 4.08c.39-.54.72-1.21.95-1.98h2.38c.23.77.56 1.44.95 1.98A4.47 4.47 0 018 12.5c-.8 0-1.55-.22-2.2-.61zm4.34-1.37c.07-.44.12-.9.12-1.38 0-.48-.05-.94-.12-1.38h2.15c.21.41.33.86.33 1.33 0 .47-.12.92-.33 1.33H10.2zm1.37-3.58h-1.75c-.21-.51-.48-.97-.78-1.37.4.36.73.84.97 1.37z" />
+                    </svg>
+                    {codexInternetAccess ? "Enabled" : "Disabled"}
+                  </button>
+                </div>
+              )}
+
+              {/* Codex: reasoning effort */}
+              {backend === "codex" && (
+                <div>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Reasoning effort</label>
+                  <div className="flex rounded-lg border border-cc-border overflow-hidden">
+                    {(["low", "medium", "high"] as const).map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => {
+                          setCodexReasoningEffort(level);
+                          localStorage.setItem("cc-codex-reasoning-effort", level);
+                        }}
+                        className={`flex-1 px-2 py-1.5 text-[11px] transition-colors cursor-pointer ${
+                          codexReasoningEffort === level
+                            ? "bg-cc-primary/15 text-cc-primary font-medium"
+                            : "bg-cc-bg text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                        }`}
+                      >
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
             </div>
-          )}
-
-          {/* Worktree toggle (only when cwd is a git repo) */}
-          {gitRepoInfo && (
-            <button
-              onClick={() => setUseWorktree(!useWorktree)}
-              className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                useWorktree
-                  ? "bg-cc-primary/15 text-cc-primary font-medium"
-                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
-              }`}
-              title="Create an isolated worktree for this session"
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-70">
-                <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v5.256a2.25 2.25 0 101.5 0V5.372zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zm7.5-9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V7A2.5 2.5 0 0110 9.5H6a1 1 0 000 2h4a2.5 2.5 0 012.5 2.5v.628a2.25 2.25 0 11-1.5 0V14a1 1 0 00-1-1H6a2.5 2.5 0 01-2.5-2.5V10a2.5 2.5 0 012.5-2.5h4a1 1 0 001-1V5.372a2.25 2.25 0 01-1.5-2.122z" />
-              </svg>
-              <span>Worktree</span>
-            </button>
-          )}
-
-          {/* Container toggle */}
-          <button
-            onClick={() => setUseContainer(!useContainer)}
-            className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-              useContainer
-                ? "bg-cc-primary/15 text-cc-primary font-medium"
-                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
-            }`}
-            title="Run session in a Docker container"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 opacity-70">
-              <path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.186.186 0 00-.185.186v1.887c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.888c0 .102.082.185.185.186m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.887c0 .102.082.186.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.186.186 0 00-.185.185v1.887c0 .102.083.186.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.186.186 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.186.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.186v1.887c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.186v1.887c0 .102.083.185.185.185m-2.964 0h2.119a.186.186 0 00.185-.185V9.006a.186.186 0 00-.185-.186H5.136a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.687 11.687 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.228 12.228 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288z" />
-            </svg>
-            <span>Container</span>
-          </button>
-
-          {/* Container image picker (shown when container mode active) */}
-          {useContainer && (
-            <input
-              type="text"
-              value={containerImage}
-              onChange={(e) => setContainerImage(e.target.value)}
-              placeholder="Docker image"
-              className="px-2 py-1 text-xs rounded-md border border-cc-border bg-cc-bg text-cc-fg w-40 focus:outline-none focus:ring-1 focus:ring-cc-primary"
-              title="Docker image to use for the container"
-            />
-          )}
-
-          {/* Environment selector */}
-          <div className="relative" ref={envDropdownRef}>
-            <button
-              onClick={() => {
-                if (!showEnvDropdown) {
-                  api.listEnvs().then(setEnvs).catch(() => {});
-                }
-                setShowEnvDropdown(!showEnvDropdown);
-              }}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
-                <path d="M8 1a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h2V3a2 2 0 012-2zm0 1.5a.5.5 0 00-.5.5v1h1V3a.5.5 0 00-.5-.5zM4 5.5a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V6a.5.5 0 00-.5-.5H4z" />
-              </svg>
-              <span className="max-w-[120px] truncate">
-                {selectedEnv ? envs.find((e) => e.slug === selectedEnv)?.name || "Env" : "No env"}
-              </span>
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
-                <path d="M4 6l4 4 4-4" />
-              </svg>
-            </button>
-            {showEnvDropdown && (
-              <div className="absolute left-0 bottom-full mb-1 w-56 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1 overflow-hidden">
-                <button
-                  onClick={() => {
-                    setSelectedEnv("");
-                    localStorage.setItem("cc-selected-env", "");
-                    setShowEnvDropdown(false);
-                  }}
-                  className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
-                    !selectedEnv ? "text-cc-primary font-medium" : "text-cc-fg"
-                  }`}
-                >
-                  No environment
-                </button>
-                {envs.map((env) => (
-                  <button
-                    key={env.slug}
-                    onClick={() => {
-                      setSelectedEnv(env.slug);
-                      localStorage.setItem("cc-selected-env", env.slug);
-                      setShowEnvDropdown(false);
-                    }}
-                    className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-1 ${
-                      env.slug === selectedEnv ? "text-cc-primary font-medium" : "text-cc-fg"
-                    }`}
-                  >
-                    <span className="truncate">{env.name}</span>
-                    <span className="text-cc-muted ml-auto shrink-0">
-                      {Object.keys(env.variables).length} var{Object.keys(env.variables).length !== 1 ? "s" : ""}
-                    </span>
-                  </button>
-                ))}
-                <div className="border-t border-cc-border mt-1 pt-1">
-                  <button
-                    onClick={() => {
-                      setShowEnvManager(true);
-                      setShowEnvDropdown(false);
-                    }}
-                    className="w-full px-3 py-2 text-xs text-left text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-                  >
-                    Manage environments...
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* Model selector */}
-          <div className="relative" ref={modelDropdownRef}>
-            <button
-              onClick={() => setShowModelDropdown(!showModelDropdown)}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              <span>{selectedModel.icon}</span>
-              <span>{selectedModel.label}</span>
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
-                <path d="M4 6l4 4 4-4" />
-              </svg>
-            </button>
-            {showModelDropdown && (
-              <div className="absolute left-0 bottom-full mb-1 w-48 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1">
-                {MODELS.map((m) => (
-                  <button
-                    key={m.value}
-                    onClick={() => { setModel(m.value); setShowModelDropdown(false); }}
-                    className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 ${
-                      m.value === model ? "text-cc-primary font-medium" : "text-cc-fg"
-                    }`}
-                  >
-                    <span>{m.icon}</span>
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* Branch behind remote warning */}
         {pullPrompt && (
-          <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <div className="mt-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
             <div className="flex items-start gap-2.5">
               <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-amber-500 shrink-0 mt-0.5">
                 <path d="M8.982 1.566a1.13 1.13 0 00-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z" />
@@ -975,21 +929,21 @@ export function HomePage() {
                   <button
                     onClick={handleCancelPull}
                     disabled={pulling}
-                    className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+                    className="px-3 py-1.5 text-[11px] font-medium rounded-lg bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSkipPull}
                     disabled={pulling}
-                    className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+                    className="px-3 py-1.5 text-[11px] font-medium rounded-lg bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
                   >
                     Continue anyway
                   </button>
                   <button
                     onClick={handlePullAndContinue}
                     disabled={pulling}
-                    className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-cc-primary/15 text-cc-primary hover:bg-cc-primary/25 transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="px-3 py-1.5 text-[11px] font-medium rounded-lg bg-cc-primary/15 text-cc-primary hover:bg-cc-primary/25 transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     {pulling ? (
                       <>
@@ -1008,7 +962,7 @@ export function HomePage() {
 
         {/* Error message */}
         {error && (
-          <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-error/5 border border-cc-error/20">
+          <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-2xl bg-cc-error/5 border border-cc-error/20">
             <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-error shrink-0">
               <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm1-3a1 1 0 11-2 0 1 1 0 012 0zM7.5 5.5a.5.5 0 011 0v3a.5.5 0 01-1 0v-3z" clipRule="evenodd" />
             </svg>
@@ -1043,4 +997,3 @@ export function HomePage() {
     </div>
   );
 }
-
