@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="screenshot.png" alt="Campfire" width="100%" />
-</p>
-
 <h1 align="center">Campfire</h1>
 <p align="center"><strong>The collaborative web platform for AI coding agents.</strong></p>
 <p align="center">Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, permission voting, session replay, webhooks, a public gallery, a prompt library, Linear integration, collective intelligence, session folders, skills management, and drag & drop uploads.</p>
@@ -60,7 +56,6 @@
 - [REST API Reference](#rest-api-reference)
 - [WebSocket Protocol](#websocket-protocol)
 - [Development](#development)
-- [Docs](#docs)
 - [License](#license)
 
 ---
@@ -95,7 +90,7 @@ Clone the repository and run directly with Bun:
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-org/campfire.git
+git clone https://github.com/stretchcloud/campfire.git
 cd campfire
 
 # 2. Install dependencies
@@ -126,7 +121,7 @@ Build and run with Docker Compose (no Bun installation needed):
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-org/campfire.git
+git clone https://github.com/stretchcloud/campfire.git
 cd campfire
 
 # 2. Build and start the container
@@ -1227,7 +1222,7 @@ curl -X POST http://localhost:3456/api/sessions/route-task \
 | Capabilities | `POST /sessions/route-task`, `GET /capabilities`, `GET /capabilities/history`, `POST /capabilities/feedback` |
 | Shared Context | `GET /sessions/:id/context/stream`, `GET /sessions/:id/context/consensus`, `GET /sessions/:id/context/thread/:fragmentId` |
 
-Full architecture: [`COLLECTIVE_INTELLIGENCE_ARCHITECTURE.md`](COLLECTIVE_INTELLIGENCE_ARCHITECTURE.md)
+Architecture details are documented in [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
@@ -1559,12 +1554,6 @@ A dropdown in the Composer lets you switch between Claude Code permission modes 
 Switching sends a `set_permission_mode` control message to the CLI. The current mode is displayed as a badge on the mode button. Use `Shift+Tab` in the Composer as a keyboard shortcut to toggle between Plan and your previous mode.
 
 ---
-
-## Screenshots
-
-| Chat + tool timeline | Permission voting |
-|---|---|
-| <img src="screenshot.png" alt="Main workspace" width="100%" /> | <img src="web/docs/screenshots/notification-section.png" alt="Permission and notifications" width="100%" /> |
 
 ---
 
@@ -2133,7 +2122,7 @@ Connect to `ws://localhost:3456/ws/browser/:sessionId` to receive real-time sess
 
 The browser tracks a sequence number (`seq`) for each message. On reconnect, it sends `session_subscribe` with the last received `seq`. The server replies with `event_replay` containing all events since that point, so the browser catches up without missing anything.
 
-Full protocol documentation: [`WEBSOCKET_PROTOCOL_REVERSED.md`](WEBSOCKET_PROTOCOL_REVERSED.md)
+Protocol details are documented in [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
@@ -2263,18 +2252,6 @@ Tests live alongside source files. All backend and frontend code is expected to 
 ### Writing Adapters
 
 See [`web/server/ADAPTERS.md`](web/server/ADAPTERS.md) for a step-by-step guide on adding new agent backends. Community adapters can be published as npm packages with a `campfireAdapter` field in `package.json`.
-
----
-
-## Docs
-
-- Protocol reverse engineering: [`WEBSOCKET_PROTOCOL_REVERSED.md`](WEBSOCKET_PROTOCOL_REVERSED.md)
-- Codex protocol mapping: [`web/CODEX_MAPPING.md`](web/CODEX_MAPPING.md)
-- Writing adapters: [`web/server/ADAPTERS.md`](web/server/ADAPTERS.md)
-- Collective Intelligence architecture: [`COLLECTIVE_INTELLIGENCE_ARCHITECTURE.md`](COLLECTIVE_INTELLIGENCE_ARCHITECTURE.md)
-- TUI client: [`tui/README.md`](tui/README.md)
-- Architecture & contributor guide: [`CLAUDE.md`](CLAUDE.md)
-- Roadmap: [`TODO.md`](TODO.md)
 
 ---
 
