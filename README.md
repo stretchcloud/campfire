@@ -34,7 +34,6 @@
   - [PWA & Mobile](#pwa--mobile)
   - [Auto-Naming](#auto-naming)
   - [Collective Intelligence](#collective-intelligence)
-  - [TUI Client](#tui-client)
   - [dmux Integration](#dmux-integration)
   - [Copy Output Button](#copy-output-button)
   - [Voice Input](#voice-input)
@@ -1226,56 +1225,6 @@ Architecture details are documented in [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
-### TUI Client
-
-A native terminal UI client built with [Ratatui](https://ratatui.rs/) (Rust). Run Campfire sessions from your terminal without opening a browser.
-
-**Build:**
-
-```bash
-cd tui
-cargo build --release
-# Binary at: tui/target/release/campfire-tui
-```
-
-**Run:**
-
-```bash
-# Connect to the default server
-campfire-tui
-
-# Connect to a remote server
-campfire-tui --server http://my-server:3456
-
-# Or via environment variable
-CAMPFIRE_URL=http://my-server:3456 campfire-tui
-```
-
-**Key bindings:**
-
-| Key | Action |
-|-----|--------|
-| `↑` / `↓` | Navigate session list |
-| `Enter` | Open selected session |
-| `n` | Create new session (backend picker) |
-| `i` | Enter insert mode (compose message) |
-| `Esc` | Return to normal mode |
-| `Enter` (insert) | Send message |
-| `y` / `a` / `n` | Permission: allow once / always / deny |
-| `Ctrl+C` | Quit |
-
-**Features:**
-
-- Session list with live status indicators
-- Chat history with streaming output
-- Permission approval prompts as centered modal overlays
-- Backend picker for new sessions
-- Connects to any running Campfire server via `--server` flag or `CAMPFIRE_URL`
-
-See [`tui/README.md`](tui/README.md) for full documentation.
-
----
-
 ### dmux Integration
 
 Run multiple AI coding agents in parallel via [dmux](https://github.com/dimfeld/dmux), a tmux-based multiplexer that gives each agent its own pane and git worktree. Campfire provides a full dashboard for managing dmux sessions from the browser.
@@ -2222,16 +2171,6 @@ web/
 ├── bin/cli.ts              # CLI entry point
 ├── public/                 # PWA assets
 └── package.json
-tui/                        # Ratatui TUI client (Rust)
-├── Cargo.toml
-└── src/
-    ├── main.rs             # CLI entry point
-    ├── protocol.rs         # WebSocket protocol types
-    ├── api.rs              # REST client
-    ├── ws.rs               # WebSocket task
-    ├── events.rs           # Crossterm event handling
-    ├── app.rs              # App state + event loop
-    └── ui/                 # Ratatui UI modules
 ```
 
 ### Testing
