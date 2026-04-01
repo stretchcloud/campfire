@@ -1,6 +1,6 @@
 <h1 align="center">Campfire</h1>
 <p align="center"><strong>The collaborative web platform for AI coding agents.</strong></p>
-<p align="center">Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, permission voting, session replay, webhooks, a public gallery, a prompt library, Linear integration, collective intelligence, session folders, skills management, and drag & drop uploads.</p>
+<p align="center">A collaborative web platform for AI coding agents. Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, permission voting, session replay, scheduled tasks, and 30+ integrations.</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/the-campfire"><img src="https://img.shields.io/npm/v/the-campfire.svg" alt="npm version" /></a>
