@@ -33,6 +33,12 @@ function barColor(pct: number): string {
   return "bg-cc-primary";
 }
 
+function contextBarColor(pct: number): string {
+  if (pct > 80) return "bg-red-500";
+  if (pct > 50) return "bg-yellow-500";
+  return "bg-green-500";
+}
+
 function UsageLimitsSection({ sessionId }: { sessionId: string }) {
   const [limits, setLimits] = useState<UsageLimits | null>(
     limitsCache.get(sessionId) ?? null,
@@ -75,15 +81,15 @@ function UsageLimitsSection({ sessionId }: { sessionId: string }) {
   if (!has5h && !has7d && !hasExtra) return null;
 
   return (
-    <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2.5">
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card px-3 py-2.5 space-y-2">
       {/* 5-hour limit */}
       {limits.five_hour && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">
+            <span className="text-[10px] text-cc-muted font-medium">
               5h Limit
             </span>
-            <span className="text-[11px] text-cc-muted tabular-nums">
+            <span className="text-[10px] text-cc-muted tabular-nums">
               {limits.five_hour.utilization}%
               {limits.five_hour.resets_at && (
                 <span className="ml-1 text-cc-muted">
@@ -107,10 +113,10 @@ function UsageLimitsSection({ sessionId }: { sessionId: string }) {
       {limits.seven_day && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">
+            <span className="text-[10px] text-cc-muted font-medium">
               7d Limit
             </span>
-            <span className="text-[11px] text-cc-muted tabular-nums">
+            <span className="text-[10px] text-cc-muted tabular-nums">
               {limits.seven_day.utilization}%
               {limits.seven_day.resets_at && (
                 <span className="ml-1 text-cc-muted">
@@ -134,10 +140,10 @@ function UsageLimitsSection({ sessionId }: { sessionId: string }) {
       {hasExtra && limits.extra_usage && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">
+            <span className="text-[10px] text-cc-muted font-medium">
               Extra
             </span>
-            <span className="text-[11px] text-cc-muted tabular-nums">
+            <span className="text-[10px] text-cc-muted tabular-nums">
               ${limits.extra_usage.used_credits.toFixed(2)} / $
               {limits.extra_usage.monthly_limit}
             </span>
@@ -193,14 +199,14 @@ function CodexRateLimitsSection({ sessionId }: { sessionId: string }) {
   if (!primary && !secondary) return null;
 
   return (
-    <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2.5">
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card px-3 py-2.5 space-y-2">
       {primary && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">
+            <span className="text-[10px] text-cc-muted font-medium">
               {formatWindowDuration(primary.windowDurationMins)} Limit
             </span>
-            <span className="text-[11px] text-cc-muted tabular-nums">
+            <span className="text-[10px] text-cc-muted tabular-nums">
               {Math.round(primary.usedPercent)}%
               {primary.resetsAt > 0 && (
                 <span className="ml-1">
@@ -220,10 +226,10 @@ function CodexRateLimitsSection({ sessionId }: { sessionId: string }) {
       {secondary && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">
+            <span className="text-[10px] text-cc-muted font-medium">
               {formatWindowDuration(secondary.windowDurationMins)} Limit
             </span>
-            <span className="text-[11px] text-cc-muted tabular-nums">
+            <span className="text-[10px] text-cc-muted tabular-nums">
               {Math.round(secondary.usedPercent)}%
               {secondary.resetsAt > 0 && (
                 <span className="ml-1">
@@ -256,39 +262,56 @@ function CodexTokenDetailsSection({ sessionId }: { sessionId: string }) {
   const details = useStore((s) => s.sessions.get(sessionId)?.codex_token_details);
   // Use the server-computed context percentage (input+output / contextWindow, capped 0-100)
   const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
+  const [open, setOpen] = useState(false);
 
   if (!details) return null;
 
   return (
-    <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2">
-      <span className="text-[11px] text-cc-muted uppercase tracking-wider">Tokens</span>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-cc-muted">Input</span>
-          <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.inputTokens)}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-cc-muted">Output</span>
-          <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.outputTokens)}</span>
-        </div>
-        {details.cachedInputTokens > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Cached</span>
-            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.cachedInputTokens)}</span>
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-[10px] text-cc-muted uppercase tracking-wider hover:text-cc-fg hover:bg-cc-hover/50 transition-colors cursor-pointer w-full px-3 py-2.5"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className={`w-2.5 h-2.5 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        >
+          <path d="M6 3l5 5-5 5V3z" />
+        </svg>
+        Tokens
+      </button>
+      {open && (
+        <div className="px-3 pb-3 border-t border-cc-border/40">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cc-muted">Input</span>
+              <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatTokenCount(details.inputTokens)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cc-muted">Output</span>
+              <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatTokenCount(details.outputTokens)}</span>
+            </div>
+            {details.cachedInputTokens > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-cc-muted">Cached</span>
+                <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatTokenCount(details.cachedInputTokens)}</span>
+              </div>
+            )}
+            {details.reasoningOutputTokens > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-cc-muted">Reasoning</span>
+                <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatTokenCount(details.reasoningOutputTokens)}</span>
+              </div>
+            )}
           </div>
-        )}
-        {details.reasoningOutputTokens > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Reasoning</span>
-            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.reasoningOutputTokens)}</span>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
       {details.modelContextWindow > 0 && (
-        <div className="space-y-1">
+        <div className="px-3 pb-2.5 space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Context</span>
-            <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
+            <span className="text-[10px] text-cc-muted">Context</span>
+            <span className="text-[10px] text-cc-muted tabular-nums">{contextPct}%</span>
           </div>
           <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
             <div
@@ -313,54 +336,80 @@ function formatCostUsd(usd: number): string {
 function ClaudeTokenDetailsSection({ sessionId }: { sessionId: string }) {
   const details = useStore((s) => s.sessions.get(sessionId)?.claude_token_details);
   const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
+  const [open, setOpen] = useState(false);
 
   if (!details) return null;
 
   return (
-    <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2">
-      <span className="text-[11px] text-cc-muted uppercase tracking-wider">Tokens</span>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-cc-muted">Input</span>
-          <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.inputTokens)}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-cc-muted">Output</span>
-          <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.outputTokens)}</span>
-        </div>
-        {details.cacheReadInputTokens > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Cache Read</span>
-            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.cacheReadInputTokens)}</span>
-          </div>
-        )}
-        {details.cacheCreationInputTokens > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Cache Write</span>
-            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.cacheCreationInputTokens)}</span>
-          </div>
-        )}
-        {details.costUsd > 0 && (
-          <div className="flex items-center justify-between col-span-2 pt-1 border-t border-cc-border/50">
-            <span className="text-[11px] text-cc-muted">Cost</span>
-            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatCostUsd(details.costUsd)}</span>
-          </div>
-        )}
-      </div>
-      {details.contextWindow > 0 && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Context</span>
-            <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
-          </div>
-          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
-              style={{ width: `${Math.min(contextPct, 100)}%` }}
-            />
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-[10px] text-cc-muted uppercase tracking-wider hover:text-cc-fg hover:bg-cc-hover/50 transition-colors cursor-pointer w-full px-3 py-2.5"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className={`w-2.5 h-2.5 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        >
+          <path d="M6 3l5 5-5 5V3z" />
+        </svg>
+        Tokens
+      </button>
+      {open && (
+        <div className="px-3 pb-3 border-t border-cc-border/40">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cc-muted">Input</span>
+              <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatTokenCount(details.inputTokens)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cc-muted">Output</span>
+              <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatTokenCount(details.outputTokens)}</span>
+            </div>
+            {details.cacheReadInputTokens > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-cc-muted">Cache Read</span>
+                <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatTokenCount(details.cacheReadInputTokens)}</span>
+              </div>
+            )}
+            {details.cacheCreationInputTokens > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-cc-muted">Cache Write</span>
+                <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatTokenCount(details.cacheCreationInputTokens)}</span>
+              </div>
+            )}
+            {details.costUsd > 0 && (
+              <div className="flex items-center justify-between col-span-2 pt-1 border-t border-cc-border/50">
+                <span className="text-[10px] text-cc-muted">Cost</span>
+                <span className="text-[11px] text-cc-fg tabular-nums font-mono-code">{formatCostUsd(details.costUsd)}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Context Usage Bar ──────────────────────────────────────────────────────
+
+function ContextUsageBar({ sessionId }: { sessionId: string }) {
+  const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
+
+  if (contextPct === 0) return null;
+
+  return (
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card px-3 py-2">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px] text-cc-muted font-medium">Context</span>
+        <span className="text-[10px] text-cc-muted tabular-nums">{contextPct}%</span>
+      </div>
+      <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${contextBarColor(contextPct)}`}
+          style={{ width: `${Math.min(contextPct, 100)}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -381,38 +430,37 @@ function SessionStatsSection({ sessionId }: { sessionId: string }) {
   if (cost === 0 && turns === 0) return null;
 
   return (
-    <div className="shrink-0 px-4 py-3 border-b border-cc-border">
-      <span className="text-[11px] text-cc-muted uppercase tracking-wider">Stats</span>
-      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
-        {cost > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Cost</span>
-            <span className="text-[11px] text-cc-fg tabular-nums font-medium">
-              ${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(2)}
-            </span>
-          </div>
-        )}
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-cc-muted">Turns</span>
-          <span className="text-[11px] text-cc-fg tabular-nums font-medium">{turns}</span>
-        </div>
-        {contextPct > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Context</span>
-            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{contextPct}%</span>
-          </div>
-        )}
-        {(linesAdded > 0 || linesRemoved > 0) && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Lines</span>
-            <span className="text-[11px] tabular-nums font-medium">
-              <span className="text-green-500">+{linesAdded}</span>
-              {" / "}
-              <span className="text-red-400">-{linesRemoved}</span>
-            </span>
-          </div>
-        )}
+    <div className="mx-3 mt-3 grid grid-cols-2 gap-2">
+      {/* Cost */}
+      <div className="rounded-lg border border-cc-border/60 bg-cc-card px-3 py-2">
+        <span className="text-[10px] text-cc-muted uppercase tracking-wider block">Cost</span>
+        <span className="text-[14px] font-semibold text-cc-fg font-mono-code">
+          ${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(2)}
+        </span>
       </div>
+      {/* Turns */}
+      <div className="rounded-lg border border-cc-border/60 bg-cc-card px-3 py-2">
+        <span className="text-[10px] text-cc-muted uppercase tracking-wider block">Turns</span>
+        <span className="text-[14px] font-semibold text-cc-fg font-mono-code">{turns}</span>
+      </div>
+      {/* Context */}
+      {contextPct > 0 && (
+        <div className="rounded-lg border border-cc-border/60 bg-cc-card px-3 py-2">
+          <span className="text-[10px] text-cc-muted uppercase tracking-wider block">Context</span>
+          <span className="text-[14px] font-semibold text-cc-fg font-mono-code">{contextPct}%</span>
+        </div>
+      )}
+      {/* Lines */}
+      {(linesAdded > 0 || linesRemoved > 0) && (
+        <div className="rounded-lg border border-cc-border/60 bg-cc-card px-3 py-2">
+          <span className="text-[10px] text-cc-muted uppercase tracking-wider block">Lines</span>
+          <span className="text-[14px] font-semibold font-mono-code">
+            <span className="text-cc-success">+{linesAdded}</span>
+            {" / "}
+            <span className="text-cc-error">-{linesRemoved}</span>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -433,7 +481,7 @@ export function GitHubPRDisplay({ pr }: { pr: GitHubPRInfo }) {
   const { checksSummary: cs, reviewThreads: rt } = pr;
 
   return (
-    <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2">
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card px-3 py-2.5 space-y-1.5">
       {/* Row 1: PR number + state pill */}
       <div className="flex items-center gap-1.5">
         <a
@@ -444,9 +492,32 @@ export function GitHubPRDisplay({ pr }: { pr: GitHubPRInfo }) {
         >
           PR #{pr.number}
         </a>
-        <span className={`text-[9px] font-medium px-1.5 rounded-full leading-[16px] ${pill.cls}`}>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${pill.cls}`}>
           {pill.label}
         </span>
+        {/* CI checks as colored dots */}
+        {cs.total > 0 && (
+          <div className="flex items-center gap-1 ml-auto">
+            {cs.success > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-cc-success">
+                <span className="w-1.5 h-1.5 rounded-full bg-cc-success inline-block" />
+                {cs.success}
+              </span>
+            )}
+            {cs.pending > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-cc-warning">
+                <span className="w-1.5 h-1.5 rounded-full bg-cc-warning inline-block" />
+                {cs.pending}
+              </span>
+            )}
+            {cs.failure > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-cc-error">
+                <span className="w-1.5 h-1.5 rounded-full bg-cc-error inline-block" />
+                {cs.failure}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Row 2: Title */}
@@ -454,89 +525,27 @@ export function GitHubPRDisplay({ pr }: { pr: GitHubPRInfo }) {
         {pr.title}
       </p>
 
-      {/* Row 3: CI Checks */}
-      {cs.total > 0 && (
-        <div className="flex items-center gap-2 text-[11px]">
-          {cs.failure > 0 ? (
-            <>
-              <span className="flex items-center gap-1 text-cc-error">
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                  <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
-                </svg>
-                {cs.failure} failing
-              </span>
-              {cs.success > 0 && (
-                <span className="flex items-center gap-1 text-cc-success">
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                    <path fillRule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" clipRule="evenodd" />
-                  </svg>
-                  {cs.success} passed
-                </span>
-              )}
-            </>
-          ) : cs.pending > 0 ? (
-            <span className="flex items-center gap-1 text-cc-warning">
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 animate-spin">
-                <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8z" opacity=".2" />
-                <path d="M8 0a8 8 0 018 8h-2A6 6 0 008 2V0z" />
-              </svg>
-              {cs.pending} pending
-              {cs.success > 0 && (
-                <span className="text-cc-success ml-1">{cs.success} passed</span>
-              )}
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-cc-success">
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                <path fillRule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" clipRule="evenodd" />
-              </svg>
-              {cs.total}/{cs.total} checks passed
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Row 4: Review + unresolved comments */}
-      <div className="flex items-center gap-2 text-[11px]">
+      {/* Row 3: Review + unresolved + diff stats */}
+      <div className="flex items-center gap-2 text-[10px] text-cc-muted">
         {pr.reviewDecision === "APPROVED" && (
-          <span className="flex items-center gap-1 text-cc-success">
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-              <path fillRule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" clipRule="evenodd" />
-            </svg>
-            Approved
-          </span>
+          <span className="text-cc-success">Approved</span>
         )}
         {pr.reviewDecision === "CHANGES_REQUESTED" && (
-          <span className="flex items-center gap-1 text-cc-error">
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-              <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 11-2 0 1 1 0 012 0zM8 7a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 018 7z" clipRule="evenodd" />
-            </svg>
-            Changes requested
-          </span>
+          <span className="text-cc-error">Changes requested</span>
         )}
         {(pr.reviewDecision === "REVIEW_REQUIRED" || pr.reviewDecision === null) && pr.state === "OPEN" && (
-          <span className="flex items-center gap-1 text-cc-muted">
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
-              <circle cx="8" cy="8" r="6" />
-            </svg>
-            Review pending
-          </span>
+          <span>Review pending</span>
         )}
         {rt.unresolved > 0 && (
-          <span className="flex items-center gap-1 text-cc-warning">
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-              <path d="M2.5 2A1.5 1.5 0 001 3.5v8A1.5 1.5 0 002.5 13h2v2.5l3.5-2.5h5.5a1.5 1.5 0 001.5-1.5v-8A1.5 1.5 0 0013.5 2h-11z" />
-            </svg>
-            {rt.unresolved} unresolved
-          </span>
+          <span className="text-cc-warning">{rt.unresolved} unresolved</span>
         )}
-      </div>
-
-      {/* Row 5: Diff stats */}
-      <div className="flex items-center gap-1.5 text-[10px] text-cc-muted">
-        <span className="text-green-500">+{pr.additions}</span>
-        <span className="text-red-400">-{pr.deletions}</span>
-        <span>&middot; {pr.changedFiles} files</span>
+        <span className="ml-auto">
+          <span className="text-cc-success">+{pr.additions}</span>
+          {" "}
+          <span className="text-cc-error">-{pr.deletions}</span>
+          {" "}
+          <span>&middot; {pr.changedFiles}f</span>
+        </span>
       </div>
     </div>
   );
@@ -582,16 +591,83 @@ function CostCardSection({ sessionId }: { sessionId: string }) {
   const durationMs = session.total_duration_api_ms ?? 0;
 
   return (
-    <CostCard
-      sessionName={sessionName}
-      cost={cost}
-      turns={turns}
-      durationMs={durationMs}
-      model={session.model || "unknown"}
-      backend={session.backend_type || "claude"}
-      linesAdded={session.total_lines_added ?? 0}
-      linesRemoved={session.total_lines_removed ?? 0}
-    />
+    <div className="mx-3 mt-3">
+      <CostCard
+        sessionName={sessionName}
+        cost={cost}
+        turns={turns}
+        durationMs={durationMs}
+        model={session.model || "unknown"}
+        backend={session.backend_type || "claude"}
+        linesAdded={session.total_lines_added ?? 0}
+        linesRemoved={session.total_lines_removed ?? 0}
+      />
+    </div>
+  );
+}
+
+// ─── Collapsible MCP Section Wrapper ────────────────────────────────────────
+
+function CollapsibleMcpSection({ sessionId }: { sessionId: string }) {
+  const mcpServers = useStore((s) => s.mcpServers.get(sessionId));
+  const [open, setOpen] = useState(false);
+
+  const count = mcpServers?.length ?? 0;
+  if (count === 0) return null;
+
+  return (
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 w-full px-3 py-2.5 text-[10px] text-cc-muted uppercase tracking-wider hover:text-cc-fg hover:bg-cc-hover/50 transition-colors cursor-pointer"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className={`w-2.5 h-2.5 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        >
+          <path d="M6 3l5 5-5 5V3z" />
+        </svg>
+        MCP Servers
+        <span className="rounded-full bg-cc-primary/10 text-cc-primary px-1.5 text-[10px] font-medium leading-[16px] ml-auto">
+          {count}
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-cc-border/40">
+          <McpSection sessionId={sessionId} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Collapsible Workspace Section Wrapper ──────────────────────────────────
+
+function CollapsibleWorkspaceSection({ sessionId }: { sessionId: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 w-full px-3 py-2.5 text-[10px] text-cc-muted uppercase tracking-wider hover:text-cc-fg hover:bg-cc-hover/50 transition-colors cursor-pointer"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className={`w-2.5 h-2.5 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        >
+          <path d="M6 3l5 5-5 5V3z" />
+        </svg>
+        Workspace
+      </button>
+      {open && (
+        <div className="border-t border-cc-border/40">
+          <WorkspaceSection sessionId={sessionId} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -608,20 +684,26 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
 
   if (!taskPanelOpen) return null;
 
-  const completedCount = tasks.filter((t) => t.status === "completed").length;
   const isCodex = (session?.backend_type || sdkBackendType) === "codex";
   const showTasks = !!session && !isCodex;
 
+  // Group tasks: in_progress first, then pending, then completed
+  const inProgress = tasks.filter((t) => t.status === "in_progress");
+  const pending = tasks.filter((t) => t.status !== "in_progress" && t.status !== "completed");
+  const completed = tasks.filter((t) => t.status === "completed");
+  const sortedTasks = [...inProgress, ...pending, ...completed];
+  const completedCount = completed.length;
+
   return (
-    <aside className="w-[280px] h-full flex flex-col overflow-hidden bg-cc-card border-l border-cc-border">
-      {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-cc-border">
-        <span className="text-sm font-semibold text-cc-fg tracking-tight">
+    <aside className="w-[280px] h-full flex flex-col overflow-hidden bg-cc-bg border-l border-cc-border">
+      {/* Header — h-11 to match top bar */}
+      <div className="shrink-0 flex items-center justify-between px-4 h-11 border-b border-cc-border">
+        <span className="text-[13px] font-semibold text-cc-fg">
           Session
         </span>
         <button
           onClick={() => setTaskPanelOpen(false)}
-          className="flex items-center justify-center w-6 h-6 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+          className="flex items-center justify-center w-7 h-7 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all duration-200 cursor-pointer"
         >
           <svg
             viewBox="0 0 16 16"
@@ -635,7 +717,10 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
         </button>
       </div>
 
-      <div data-testid="task-panel-content" className="min-h-0 flex-1 overflow-y-auto">
+      {/* Context usage bar — right below header */}
+      <ContextUsageBar sessionId={sessionId} />
+
+      <div data-testid="task-panel-content" className="min-h-0 flex-1 overflow-y-auto pb-3">
         {/* Usage limits & token details — varies by backend */}
         {isCodex ? (
           <>
@@ -658,16 +743,16 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
         {/* GitHub PR status */}
         <GitHubPRSection sessionId={sessionId} />
 
-        {/* MCP servers */}
-        <McpSection sessionId={sessionId} />
+        {/* MCP servers — collapsible with count badge */}
+        <CollapsibleMcpSection sessionId={sessionId} />
 
-        {/* Workspace file tree */}
-        <WorkspaceSection sessionId={sessionId} />
+        {/* Workspace — collapsible */}
+        <CollapsibleWorkspaceSection sessionId={sessionId} />
 
         {showTasks && (
-          <>
+          <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">
             {/* Task section header */}
-            <div className="px-4 py-2.5 border-b border-cc-border flex items-center justify-between">
+            <div className="px-3 py-2.5 border-b border-cc-border/40 flex items-center justify-between">
               <span className="text-[12px] font-semibold text-cc-fg">Tasks</span>
               <div className="flex items-center gap-2">
                 {tasks.length > 0 && (
@@ -678,7 +763,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
                 {tasks.length > 0 && (
                   <button
                     onClick={() => { window.location.hash = "#/kanban"; }}
-                    className="text-[10px] font-mono-code text-cc-muted hover:text-cc-fg px-1.5 py-0.5 rounded hover:bg-cc-hover transition-colors cursor-pointer"
+                    className="text-[10px] font-mono-code text-cc-muted hover:text-cc-fg px-1.5 py-0.5 rounded hover:bg-cc-hover transition-all duration-200 cursor-pointer"
                     title="View Kanban board"
                   >
                     <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 inline-block mr-0.5 -mt-px">
@@ -690,19 +775,19 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
               </div>
             </div>
 
-            {/* Task list */}
-            <div className="px-3 py-2">
+            {/* Task list — grouped: in_progress, pending, completed */}
+            <div className="px-1">
               {tasks.length === 0 ? (
                 <p className="text-xs text-cc-muted text-center py-8">No tasks yet</p>
               ) : (
-                <div className="space-y-0.5">
-                  {tasks.map((task) => (
+                <div className="divide-y divide-cc-border/30">
+                  {sortedTasks.map((task) => (
                     <TaskRow key={task.id} task={task} />
                   ))}
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
       </div>
     </aside>
@@ -715,14 +800,14 @@ function TaskRow({ task }: { task: TaskItem }) {
 
   return (
     <div
-      className={`px-2.5 py-2 rounded-lg ${isCompleted ? "opacity-50" : ""}`}
+      className="px-2.5 py-2 hover:bg-cc-hover/30 transition-colors"
     >
       <div className="flex items-start gap-2">
         {/* Status icon */}
-        <span className="shrink-0 flex items-center justify-center w-4 h-4 mt-px">
+        <span className="shrink-0 flex items-center justify-center w-[18px] h-[18px] mt-px">
           {isInProgress ? (
             <svg
-              className="w-4 h-4 text-cc-primary animate-spin"
+              className="w-[18px] h-[18px] text-cc-primary animate-spin"
               viewBox="0 0 16 16"
               fill="none"
             >
@@ -741,7 +826,7 @@ function TaskRow({ task }: { task: TaskItem }) {
             <svg
               viewBox="0 0 16 16"
               fill="currentColor"
-              className="w-4 h-4 text-cc-success"
+              className="w-[18px] h-[18px] text-cc-success"
             >
               <path
                 fillRule="evenodd"
@@ -753,7 +838,7 @@ function TaskRow({ task }: { task: TaskItem }) {
             <svg
               viewBox="0 0 16 16"
               fill="none"
-              className="w-4 h-4 text-cc-muted"
+              className="w-[18px] h-[18px] text-cc-muted"
             >
               <circle
                 cx="8"
@@ -766,10 +851,10 @@ function TaskRow({ task }: { task: TaskItem }) {
           )}
         </span>
 
-        {/* Subject — allow wrapping */}
+        {/* Subject */}
         <span
-          className={`text-[13px] leading-snug flex-1 ${
-            isCompleted ? "text-cc-muted line-through" : "text-cc-fg"
+          className={`text-[12px] leading-snug flex-1 ${
+            isCompleted ? "text-cc-muted/60 opacity-60" : "text-cc-fg"
           }`}
         >
           {task.subject}
@@ -778,14 +863,14 @@ function TaskRow({ task }: { task: TaskItem }) {
 
       {/* Active form text (in_progress only) */}
       {isInProgress && task.activeForm && (
-        <p className="mt-1 ml-6 text-[11px] text-cc-muted italic truncate">
+        <p className="mt-1 ml-[26px] text-[11px] text-cc-muted italic truncate">
           {task.activeForm}
         </p>
       )}
 
       {/* Blocked by */}
       {task.blockedBy && task.blockedBy.length > 0 && (
-        <p className="mt-1 ml-6 text-[11px] text-cc-muted flex items-center gap-1">
+        <p className="mt-1 ml-[26px] text-[11px] text-cc-muted flex items-center gap-1">
           <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3 shrink-0">
             <circle
               cx="8"
