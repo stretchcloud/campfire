@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
@@ -16,7 +16,14 @@ export function TopBar() {
     },
     () => window.location.hash,
   );
-  const isSessionView = hash !== "#/settings" && hash !== "#/terminal" && hash !== "#/environments" && hash !== "#/gallery" && hash !== "#/webhooks" && hash !== "#/adapters";
+  const isSessionView =
+    hash !== "#/settings" &&
+    hash !== "#/terminal" &&
+    hash !== "#/environments" &&
+    hash !== "#/gallery" &&
+    hash !== "#/webhooks" &&
+    hash !== "#/adapters";
+
   const currentSessionId = useStore((s) => s.currentSessionId);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionStatus = useStore((s) => s.sessionStatus);
@@ -28,10 +35,17 @@ export function TopBar() {
   const setTaskPanelOpen = useStore((s) => s.setTaskPanelOpen);
   const activeTab = useStore((s) => s.activeTab);
   const setActiveTab = useStore((s) => s.setActiveTab);
+
   const [claudeMdOpen, setClaudeMdOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [forking, setForking] = useState(false);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const overflowRef = useRef<HTMLDivElement>(null);
+
   const changedFilesCount = useStore((s) => {
     if (!currentSessionId) return 0;
     const cwd =
@@ -77,6 +91,16 @@ export function TopBar() {
       `Session ${currentSessionId.slice(0, 8)}`)
     : null;
 
+  // Focus the name input when entering edit mode
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [editingName]);
+
+  // ---- Handlers ----
+
   async function handleFork() {
     if (!currentSessionId || forking) return;
     setForking(true);
@@ -107,7 +131,7 @@ export function TopBar() {
         await navigator.clipboard.writeText(url);
         copied = true;
       } catch {
-        // Clipboard API fails on non-HTTPS — try legacy fallback
+        // Clipboard API fails on non-HTTPS -- try legacy fallback
         try {
           const textarea = document.createElement("textarea");
           textarea.value = url;
@@ -117,15 +141,19 @@ export function TopBar() {
           textarea.select();
           copied = document.execCommand("copy");
           document.body.removeChild(textarea);
-        } catch { /* fallback also failed */ }
+        } catch {
+          /* fallback also failed */
+        }
       }
       if (copied) {
         setShareCopied(true);
         setShareMenuOpen(false);
+        setOverflowOpen(false);
         setTimeout(() => setShareCopied(false), 2000);
       } else {
         // Last resort: show the URL in a prompt so user can manually copy
         setShareMenuOpen(false);
+        setOverflowOpen(false);
         window.prompt("Copy this invite link:", url);
       }
     } catch (err) {
@@ -133,53 +161,106 @@ export function TopBar() {
     }
   }
 
+  function handleNameClick() {
+    if (isSpectator || !currentSessionId) return;
+    setNameInput(sessionName || "");
+    setEditingName(true);
+  }
+
+  async function handleNameSubmit() {
+    setEditingName(false);
+    const trimmed = nameInput.trim();
+    if (!currentSessionId || !trimmed || trimmed === sessionName) return;
+    try {
+      await api.renameSession(currentSessionId, trimmed);
+      useStore.getState().setSessionName(currentSessionId, trimmed);
+    } catch (err) {
+      console.error("[TopBar] Failed to rename session:", err);
+    }
+  }
+
+  function handleCopySessionId() {
+    if (!currentSessionId) return;
+    navigator.clipboard.writeText(currentSessionId).catch(() => {
+      window.prompt("Session ID:", currentSessionId);
+    });
+    setOverflowOpen(false);
+  }
+
   return (
-    <header className="shrink-0 flex items-center justify-between px-3 h-10 bg-cc-bg border-b border-cc-border">
-      <div className="flex items-center gap-2">
-        {/* Sidebar toggle — hidden for spectators */}
+    <header className="shrink-0 flex items-center justify-between px-3 h-11 bg-cc-bg border-b border-cc-border">
+      {/* ---- Left: sidebar toggle + session name + connection dot ---- */}
+      <div className="flex items-center gap-2 min-w-0">
+        {/* Sidebar toggle -- hidden for spectators */}
         {!isSpectator && (
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="flex items-center justify-center w-6 h-6 rounded text-cc-muted/60 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+            aria-label="Toggle sidebar"
+            aria-pressed={sidebarOpen}
+            className="flex items-center justify-center w-7 h-7 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
           >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-              <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+              <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
         )}
 
         {/* Spectator badge */}
         {isSpectator && (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono-code uppercase tracking-wider bg-cc-muted/10 text-cc-muted">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono-code uppercase tracking-wider bg-cc-muted/10 text-cc-muted">
             spectator
           </span>
         )}
 
-        {/* Session breadcrumb */}
+        {/* Session name + connection dot */}
         {currentSessionId && (
-          <div className="flex items-center gap-1.5 text-[11px] font-mono-code">
+          <div className="flex items-center gap-1.5 min-w-0">
             <span
               className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                 isConnected ? "bg-cc-success" : "bg-cc-muted/30"
               }`}
+              title={isConnected ? "Connected" : "Disconnected"}
             />
-            {sessionName && (
-              <span className="font-medium text-cc-fg max-w-[10rem] sm:max-w-none truncate" title={sessionName}>
+            {editingName ? (
+              <input
+                ref={nameInputRef}
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onBlur={handleNameSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleNameSubmit();
+                  if (e.key === "Escape") setEditingName(false);
+                }}
+                className="text-sm font-medium text-cc-fg bg-transparent border-b border-cc-primary/50 outline-none max-w-[12rem] sm:max-w-[20rem]"
+              />
+            ) : (
+              <span
+                onClick={handleNameClick}
+                className={`text-sm font-medium text-cc-fg max-w-[10rem] sm:max-w-[20rem] truncate ${
+                  !isSpectator ? "cursor-pointer hover:text-cc-primary transition-colors" : ""
+                }`}
+                title={sessionName || undefined}
+              >
                 {sessionName}
               </span>
             )}
-            {totalCost > 0 && (
-              <>
-                <span className="text-cc-muted/25">|</span>
-                <span className="text-cc-muted/60 tabular-nums" title={`Session cost: $${totalCost.toFixed(4)}`}>
-                  ${totalCost < 0.01 ? totalCost.toFixed(4) : totalCost.toFixed(2)}
-                </span>
-              </>
+
+            {/* Status indicators -- subtle inline */}
+            {status === "compacting" && (
+              <span className="text-[10px] text-cc-warning/70 font-mono-code animate-pulse ml-1">compacting</span>
             )}
+            {status === "running" && (
+              <div className="flex items-center gap-1 ml-1">
+                <span className="w-1 h-1 rounded-full bg-cc-primary/60 animate-breathing" />
+                <span className="text-[10px] text-cc-primary/70 font-mono-code">running</span>
+              </div>
+            )}
+
+            {/* Reconnect button */}
             {!isConnected && !isSpectator && (
               <button
                 onClick={() => currentSessionId && api.relaunchSession(currentSessionId).catch(console.error)}
-                className="text-cc-warning/80 hover:text-cc-warning font-medium cursor-pointer hidden sm:inline ml-1"
+                className="text-[10px] text-cc-warning/80 hover:text-cc-warning font-medium font-mono-code cursor-pointer ml-1 hidden sm:inline"
               >
                 reconnect
               </button>
@@ -188,27 +269,16 @@ export function TopBar() {
         )}
       </div>
 
-      {/* Right side */}
+      {/* ---- Center/Right: tabs + actions ---- */}
       {currentSessionId && isSessionView && (
-        <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] text-cc-muted font-mono-code">
-          {status === "compacting" && (
-            <span className="text-cc-warning/80 animate-pulse">compacting</span>
-          )}
-
-          {status === "running" && (
-            <div className="flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-cc-primary/70 animate-breathing" />
-              <span className="text-cc-primary/80">running</span>
-            </div>
-          )}
-
-          {/* Presence */}
+        <div className="flex items-center gap-2">
+          {/* Presence avatars */}
           {viewers.length > 1 && (
-            <div className="flex items-center gap-0.5" title={`${viewers.length} viewers`}>
+            <div className="flex items-center gap-0.5 mr-1" title={`${viewers.length} viewers`}>
               {viewers.slice(0, 3).map((v) => (
                 <span
                   key={v.id}
-                  className={`w-4 h-4 rounded flex items-center justify-center text-[8px] font-bold ${
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${
                     v.role === "owner"
                       ? "bg-cc-primary/15 text-cc-primary"
                       : "bg-cc-hover text-cc-muted/60"
@@ -219,148 +289,177 @@ export function TopBar() {
                 </span>
               ))}
               {viewers.length > 3 && (
-                <span className="text-[9px] text-cc-muted/40">+{viewers.length - 3}</span>
+                <span className="text-[9px] text-cc-muted/40 ml-0.5">+{viewers.length - 3}</span>
               )}
             </div>
           )}
 
-          <span className="text-cc-muted/15">|</span>
-
-          {/* Tab toggle */}
-          <div className="flex items-center gap-0.5">
+          {/* Tab pills */}
+          <div className="flex items-center bg-cc-hover/50 rounded-md p-0.5">
             <button
               onClick={() => setActiveTab("chat")}
-              className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer ${
+              aria-pressed={activeTab === "chat"}
+              className={`text-[11px] px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
                 activeTab === "chat"
                   ? "text-cc-fg bg-cc-active"
-                  : "text-cc-muted/50 hover:text-cc-fg"
+                  : "text-cc-muted hover:text-cc-fg"
               }`}
             >
-              log
+              Log
             </button>
             <button
               onClick={() => setActiveTab("diff")}
-              className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer flex items-center gap-1 ${
+              aria-pressed={activeTab === "diff"}
+              className={`text-[11px] px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
                 activeTab === "diff"
                   ? "text-cc-fg bg-cc-active"
-                  : "text-cc-muted/50 hover:text-cc-fg"
+                  : "text-cc-muted hover:text-cc-fg"
               }`}
             >
-              diff
+              Diff
               {changedFilesCount > 0 && (
-                <span className="text-[8px] text-cc-warning tabular-nums">
-                  {changedFilesCount}
-                </span>
+                <span className="text-[9px] text-cc-warning tabular-nums">{changedFilesCount}</span>
               )}
             </button>
           </div>
 
-          {/* Action buttons — hidden for spectators (watch-only) */}
-          {!isSpectator && (
-            <>
-              {/* Fork button */}
-              {cwd && (
-                <button
-                  onClick={handleFork}
-                  disabled={forking}
-                  className="flex items-center justify-center w-6 h-6 rounded text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-40"
-                  title={forking ? "Forking..." : "Fork session onto new worktree"}
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3.5 h-3.5 ${forking ? "animate-pulse" : ""}`}>
-                    <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
-                  </svg>
-                </button>
-              )}
-
-              {/* Add to Gallery */}
-              <button
-                onClick={() => {
-                  if (currentSessionId) {
-                    window.location.hash = `#/gallery?session=${encodeURIComponent(currentSessionId)}`;
-                  } else {
-                    window.location.hash = "#/gallery";
-                  }
-                }}
-                className="flex items-center justify-center w-6 h-6 rounded text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-                title="Add to Gallery"
-              >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v1H2V3zm0 2.5h12v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7zM4 7v3h3V7H4zm5 0v1h3V7H9zm3 2.5H9V11h3V9.5z" />
-                </svg>
-              </button>
-
-              {/* Share button with role selector */}
-              <div className="relative">
-                <button
-                  onClick={() => {
-                    if (shareCopied) return;
-                    setShareMenuOpen(!shareMenuOpen);
-                  }}
-                  className="flex items-center justify-center w-6 h-6 rounded text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer relative"
-                  title={shareCopied ? "Copied!" : "Share session link"}
-                >
-                  {shareCopied ? (
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-cc-success">
-                      <path d="M3 8.5l3 3 6.5-7" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                      <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
-                    </svg>
-                  )}
-                </button>
-                {shareMenuOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShareMenuOpen(false)} />
-                    <div className="absolute right-0 top-full mt-1 z-50 bg-cc-card border border-cc-border rounded-md shadow-panel py-1 min-w-[140px]">
-                      <button
-                        onClick={() => handleShare("collaborator")}
-                        className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code"
-                      >
-                        <span className="font-medium">collaborator</span>
-                        <span className="block text-cc-muted/60 text-[9px]">approve & send</span>
-                      </button>
-                      <button
-                        onClick={() => handleShare("spectator")}
-                        className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code"
-                      >
-                        <span className="font-medium">spectator</span>
-                        <span className="block text-cc-muted/60 text-[9px]">watch only</span>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* CLAUDE.md editor */}
-              {cwd && (
-                <button
-                  onClick={() => setClaudeMdOpen(true)}
-                  className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
-                    claudeMdOpen
-                      ? "text-cc-primary bg-cc-active"
-                      : "text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover"
-                  }`}
-                  title="Edit CLAUDE.md"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                    <path d="M4 1.5a.5.5 0 01.5-.5h7a.5.5 0 01.354.146l2 2A.5.5 0 0114 3.5v11a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5v-13zm1 .5v12h8V4h-1.5a.5.5 0 01-.5-.5V2H5zm6 0v1h1l-1-1zM6.5 7a.5.5 0 000 1h5a.5.5 0 000-1h-5zm0 2a.5.5 0 000 1h5a.5.5 0 000-1h-5zm0 2a.5.5 0 000 1h3a.5.5 0 000-1h-3z" />
-                  </svg>
-                </button>
-              )}
-            </>
+          {/* Cost */}
+          {totalCost > 0 && (
+            <span
+              className="text-[11px] text-cc-muted font-mono-code tabular-nums"
+              title={`Session cost: $${totalCost.toFixed(4)}`}
+            >
+              ${totalCost < 0.01 ? totalCost.toFixed(4) : totalCost.toFixed(2)}
+            </span>
           )}
 
+          {/* Overflow menu -- hidden for spectators */}
+          {!isSpectator && (
+            <div className="relative" ref={overflowRef}>
+              <button
+                onClick={() => setOverflowOpen(!overflowOpen)}
+                aria-label="More actions"
+                className="flex items-center justify-center w-7 h-7 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                  <circle cx="8" cy="3" r="1.5" />
+                  <circle cx="8" cy="8" r="1.5" />
+                  <circle cx="8" cy="13" r="1.5" />
+                </svg>
+              </button>
+              {overflowOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => { setOverflowOpen(false); setShareMenuOpen(false); }} />
+                  <div className="absolute right-0 top-full mt-1 z-50 bg-cc-card border border-cc-border rounded-md shadow-panel py-1 min-w-[180px]">
+                    {/* Fork */}
+                    {cwd && (
+                      <button
+                        onClick={() => { handleFork(); setOverflowOpen(false); }}
+                        disabled={forking}
+                        className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code flex items-center gap-2 disabled:opacity-40"
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 shrink-0">
+                          <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
+                        </svg>
+                        {forking ? "Forking..." : "Fork session"}
+                      </button>
+                    )}
+
+                    {/* Share sub-menu */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShareMenuOpen(!shareMenuOpen)}
+                        className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code flex items-center gap-2"
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 shrink-0">
+                          <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+                        </svg>
+                        {shareCopied ? "Copied!" : "Share"}
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 ml-auto">
+                          <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                      {shareMenuOpen && (
+                        <div className="absolute left-full top-0 ml-1 bg-cc-card border border-cc-border rounded-md shadow-panel py-1 min-w-[150px]">
+                          <button
+                            onClick={() => handleShare("collaborator")}
+                            className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code"
+                          >
+                            <span className="font-medium">Collaborator</span>
+                            <span className="block text-cc-muted/60 text-[9px]">approve & send</span>
+                          </button>
+                          <button
+                            onClick={() => handleShare("spectator")}
+                            className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code"
+                          >
+                            <span className="font-medium">Spectator</span>
+                            <span className="block text-cc-muted/60 text-[9px]">watch only</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="my-1 border-t border-cc-border" />
+
+                    {/* Edit CLAUDE.md */}
+                    {cwd && (
+                      <button
+                        onClick={() => { setClaudeMdOpen(true); setOverflowOpen(false); }}
+                        className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code flex items-center gap-2"
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 shrink-0">
+                          <path d="M4 1.5a.5.5 0 01.5-.5h7a.5.5 0 01.354.146l2 2A.5.5 0 0114 3.5v11a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5v-13zm1 .5v12h8V4h-1.5a.5.5 0 01-.5-.5V2H5zm6 0v1h1l-1-1zM6.5 7a.5.5 0 000 1h5a.5.5 0 000-1h-5zm0 2a.5.5 0 000 1h5a.5.5 0 000-1h-5zm0 2a.5.5 0 000 1h3a.5.5 0 000-1h-3z" />
+                        </svg>
+                        Edit CLAUDE.md
+                      </button>
+                    )}
+
+                    {/* View in gallery */}
+                    <button
+                      onClick={() => {
+                        window.location.hash = currentSessionId
+                          ? `#/gallery?session=${encodeURIComponent(currentSessionId)}`
+                          : "#/gallery";
+                        setOverflowOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code flex items-center gap-2"
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 shrink-0">
+                        <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v1H2V3zm0 2.5h12v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7zM4 7v3h3V7H4zm5 0v1h3V7H9zm3 2.5H9V11h3V9.5z" />
+                      </svg>
+                      View in gallery
+                    </button>
+
+                    <div className="my-1 border-t border-cc-border" />
+
+                    {/* Copy session ID */}
+                    <button
+                      onClick={handleCopySessionId}
+                      className="w-full text-left px-3 py-1.5 text-[11px] text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code flex items-center gap-2"
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 shrink-0">
+                        <path d="M5.75 1a.75.75 0 00-.75.75v1.5a.75.75 0 001.5 0V2.5h5v9h-.75a.75.75 0 000 1.5h1.5a.75.75 0 00.75-.75v-10.5A.75.75 0 0012.25 1h-6.5zM3.75 4a.75.75 0 00-.75.75v10.5a.75.75 0 00.75.75h6.5a.75.75 0 00.75-.75V4.75a.75.75 0 00-.75-.75h-6.5zM4.5 5.5h5v9h-5v-9z" />
+                      </svg>
+                      Copy session ID
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Task panel toggle */}
           <button
             onClick={() => setTaskPanelOpen(!taskPanelOpen)}
-            className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
+            aria-label="Toggle session panel"
+            aria-pressed={taskPanelOpen}
+            className={`flex items-center justify-center w-7 h-7 rounded transition-colors cursor-pointer ${
               taskPanelOpen
                 ? "text-cc-primary bg-cc-active"
-                : "text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover"
+                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
             }`}
-            title="Toggle session panel"
           >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
               <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm1 2v2h3V4H4zm5 0v1h3V4H9zm-5 3v2h3V7H4zm5 0v1h3V7H9zm-5 3v2h2V10H4z" />
             </svg>
           </button>

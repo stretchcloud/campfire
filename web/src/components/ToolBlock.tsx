@@ -58,36 +58,33 @@ export function ToolBlock({
   const iconType = getToolIcon(name);
   const label = getToolLabel(name);
 
-  // Extract the most useful preview
   const preview = getPreview(name, input);
 
   return (
-    <div className="rounded-md overflow-hidden bg-cc-hover/50">
+    <div className={`rounded-lg border border-cc-border/60 bg-cc-card shadow-sm transition-all duration-200 ${open ? "" : "hover:bg-cc-hover/50"}`}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-cc-hover transition-colors cursor-pointer"
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-left rounded-lg transition-all duration-200 cursor-pointer"
       >
         <svg
           viewBox="0 0 16 16"
           fill="currentColor"
-          className={`w-2.5 h-2.5 text-cc-muted/50 transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+          className={`w-4 h-4 text-cc-muted/60 transition-transform duration-200 shrink-0 ${open ? "rotate-90" : ""}`}
         >
           <path d="M6 4l4 4-4 4" />
         </svg>
         <ToolIcon type={iconType} />
-        <span className="text-[11px] font-medium text-cc-fg font-mono-code">{label}</span>
+        <span className="text-[12px] font-medium text-cc-fg font-mono-code">{label}</span>
         {preview && (
-          <span className="text-[11px] text-cc-muted truncate flex-1 font-mono-code">
+          <span className="text-[11px] text-cc-muted/80 font-mono-code truncate flex-1">
             {preview}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="px-3 pb-2.5 pt-0 border-t border-cc-border/50">
-          <div className="mt-1.5">
-            <ToolDetail name={name} input={input} />
-          </div>
+        <div className="border-t border-cc-border/40 px-4 py-3 bg-cc-bg/50 rounded-b-lg">
+          <ToolDetail name={name} input={input} />
         </div>
       )}
     </div>
@@ -135,16 +132,18 @@ function ToolDetail({ name, input }: { name: string; input: Record<string, unkno
 
 function BashDetail({ input }: { input: Record<string, unknown> }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {!!input.description && (
-        <div className="text-[11px] text-cc-muted italic">{String(input.description)}</div>
+        <div className="text-[11px] text-cc-muted italic mb-2">{String(input.description)}</div>
       )}
-      <pre className="px-3 py-2 rounded-lg bg-cc-code-bg text-cc-code-fg text-[12px] font-mono-code leading-relaxed overflow-x-auto">
+      <pre className="px-3 py-2.5 rounded-lg border border-cc-border bg-cc-code-bg text-cc-code-fg text-[12px] font-mono-code leading-relaxed overflow-x-auto">
         <span className="text-cc-muted select-none">$ </span>
         {String(input.command || "")}
       </pre>
       {!!input.timeout && (
-        <div className="text-[10px] text-cc-muted">timeout: {String(input.timeout)}ms</div>
+        <span className="inline-block rounded-full bg-cc-warning/10 text-cc-warning px-2 py-0.5 text-[10px] font-medium">
+          timeout: {String(input.timeout)}ms
+        </span>
       )}
     </div>
   );
@@ -156,12 +155,15 @@ function EditToolDetail({ input }: { input: Record<string, unknown> }) {
   const newStr = String(input.new_string || "");
 
   return (
-    <div className="space-y-1.5">
-      {!!input.replace_all && (
-        <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-cc-warning/10 text-cc-warning">
-          replace all
-        </span>
-      )}
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="rounded-md bg-cc-hover px-2 py-0.5 text-[11px] font-mono-code text-cc-fg truncate">{filePath}</span>
+        {!!input.replace_all && (
+          <span className="shrink-0 rounded-full bg-cc-warning/10 text-cc-warning px-2 py-0.5 text-[10px] font-medium">
+            replace all
+          </span>
+        )}
+      </div>
       <DiffViewer oldText={oldStr} newText={newStr} fileName={filePath} mode="compact" />
     </div>
   );
@@ -171,7 +173,12 @@ function WriteToolDetail({ input }: { input: Record<string, unknown> }) {
   const filePath = String(input.file_path || "");
   const content = String(input.content || "");
 
-  return <DiffViewer newText={content} fileName={filePath} mode="compact" />;
+  return (
+    <div className="space-y-2">
+      <div className="rounded-md bg-cc-hover px-2 py-0.5 text-[11px] font-mono-code text-cc-fg truncate inline-block">{filePath}</div>
+      <DiffViewer newText={content} fileName={filePath} mode="compact" />
+    </div>
+  );
 }
 
 function ReadToolDetail({ input }: { input: Record<string, unknown> }) {
@@ -179,14 +186,17 @@ function ReadToolDetail({ input }: { input: Record<string, unknown> }) {
   const offset = input.offset as number | undefined;
   const limit = input.limit as number | undefined;
 
+  const hasRange = offset != null || limit != null;
+  const start = offset != null ? offset : 1;
+  const end = limit != null ? start + limit - 1 : undefined;
+
   return (
-    <div className="space-y-1">
-      <div className="text-xs text-cc-muted font-mono-code">{filePath}</div>
-      {(offset != null || limit != null) && (
-        <div className="flex gap-2 text-[10px] text-cc-muted">
-          {offset != null && <span>offset: {offset}</span>}
-          {limit != null && <span>limit: {limit}</span>}
-        </div>
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] font-mono-code text-cc-fg truncate">{filePath}</span>
+      {hasRange && (
+        <span className="shrink-0 rounded-full bg-cc-hover px-2 py-0.5 text-[10px] font-medium text-cc-muted">
+          {end != null ? `lines ${start}\u2013${end}` : `from line ${start}`}
+        </span>
       )}
     </div>
   );
@@ -194,11 +204,13 @@ function ReadToolDetail({ input }: { input: Record<string, unknown> }) {
 
 function GlobDetail({ input }: { input: Record<string, unknown> }) {
   return (
-    <div className="space-y-1">
-      <div className="text-xs font-mono-code text-cc-code-fg">{String(input.pattern || "")}</div>
+    <div className="space-y-2">
+      <pre className="inline-block px-2.5 py-1 rounded-lg border border-cc-border bg-cc-code-bg text-cc-code-fg text-[11px] font-mono-code">
+        {String(input.pattern || "")}
+      </pre>
       {!!input.path && (
         <div className="text-[10px] text-cc-muted">
-          in: <span className="font-mono-code">{String(input.path)}</span>
+          path: <span className="font-mono-code">{String(input.path)}</span>
         </div>
       )}
     </div>
@@ -207,20 +219,20 @@ function GlobDetail({ input }: { input: Record<string, unknown> }) {
 
 function GrepDetail({ input }: { input: Record<string, unknown> }) {
   return (
-    <div className="space-y-1">
-      <pre className="px-2 py-1.5 rounded bg-cc-code-bg text-cc-code-fg text-[12px] font-mono-code overflow-x-auto">
+    <div className="space-y-2">
+      <pre className="px-3 py-2 rounded-lg border border-cc-border bg-cc-code-bg text-cc-code-fg text-[12px] font-mono-code overflow-x-auto">
         {String(input.pattern || "")}
       </pre>
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-cc-muted">
+      <div className="flex flex-wrap gap-1.5 text-[10px]">
         {!!input.path && (
-          <span>path: <span className="font-mono-code">{String(input.path)}</span></span>
+          <span className="rounded-full bg-cc-hover px-2 py-0.5 text-cc-muted font-medium">path: <span className="font-mono-code">{String(input.path)}</span></span>
         )}
         {!!input.glob && (
-          <span>glob: <span className="font-mono-code">{String(input.glob)}</span></span>
+          <span className="rounded-full bg-cc-hover px-2 py-0.5 text-cc-muted font-medium">glob: <span className="font-mono-code">{String(input.glob)}</span></span>
         )}
-        {!!input.output_mode && <span>mode: {String(input.output_mode)}</span>}
-        {!!input.context && <span>context: {String(input.context)}</span>}
-        {!!input.head_limit && <span>limit: {String(input.head_limit)}</span>}
+        {!!input.output_mode && <span className="rounded-full bg-cc-hover px-2 py-0.5 text-cc-muted font-medium">mode: {String(input.output_mode)}</span>}
+        {!!input.context && <span className="rounded-full bg-cc-hover px-2 py-0.5 text-cc-muted font-medium">context: {String(input.context)}</span>}
+        {!!input.head_limit && <span className="rounded-full bg-cc-hover px-2 py-0.5 text-cc-muted font-medium">limit: {String(input.head_limit)}</span>}
       </div>
     </div>
   );
@@ -228,11 +240,15 @@ function GrepDetail({ input }: { input: Record<string, unknown> }) {
 
 function WebSearchDetail({ input }: { input: Record<string, unknown> }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className="text-xs text-cc-fg font-medium">{String(input.query || "")}</div>
       {Array.isArray(input.allowed_domains) && input.allowed_domains.length > 0 && (
-        <div className="text-[10px] text-cc-muted">
-          domains: {(input.allowed_domains as string[]).join(", ")}
+        <div className="flex flex-wrap gap-1.5">
+          {(input.allowed_domains as string[]).map((domain, i) => (
+            <span key={i} className="rounded-full bg-cc-hover px-2 py-0.5 text-[10px] text-cc-muted font-medium font-mono-code">
+              {domain}
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -241,7 +257,7 @@ function WebSearchDetail({ input }: { input: Record<string, unknown> }) {
 
 function WebFetchDetail({ input }: { input: Record<string, unknown> }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {!!input.url && (
         <div className="text-xs font-mono-code text-cc-primary truncate">{String(input.url)}</div>
       )}
@@ -254,17 +270,17 @@ function WebFetchDetail({ input }: { input: Record<string, unknown> }) {
 
 function TaskDetail({ input }: { input: Record<string, unknown> }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {!!input.description && (
         <div className="text-xs text-cc-fg font-medium">{String(input.description)}</div>
       )}
       {!!input.subagent_type && (
-        <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-cc-hover text-cc-muted">
+        <span className="inline-block rounded-full bg-cc-primary/10 text-cc-primary px-2 py-0.5 text-[10px] font-medium">
           {String(input.subagent_type)}
         </span>
       )}
       {!!input.prompt && (
-        <pre className="text-[11px] text-cc-muted font-mono-code whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+        <pre className="px-3 py-2.5 rounded-lg border border-cc-border bg-cc-code-bg text-[11px] text-cc-muted font-mono-code whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
           {String(input.prompt)}
         </pre>
       )}
@@ -283,7 +299,7 @@ function TodoWriteDetail({ input }: { input: Record<string, unknown> }) {
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className="rounded-lg border border-cc-border/40 bg-cc-card p-2.5 space-y-1">
       {todos.map((todo, i) => {
         const status = todo.status || "pending";
         return (
@@ -319,15 +335,15 @@ function NotebookEditDetail({ input }: { input: Record<string, unknown> }) {
   const editMode = input.edit_mode as string | undefined;
 
   return (
-    <div className="space-y-1">
-      <div className="text-xs font-mono-code text-cc-muted">{path}</div>
-      <div className="flex gap-2 text-[10px] text-cc-muted">
-        {cellType && <span>type: {cellType}</span>}
-        {editMode && <span>mode: {editMode}</span>}
-        {input.cell_number != null && <span>cell: {String(input.cell_number)}</span>}
+    <div className="space-y-2">
+      <div className="rounded-md bg-cc-hover px-2 py-0.5 text-[11px] font-mono-code text-cc-fg inline-block">{path}</div>
+      <div className="flex gap-1.5 text-[10px]">
+        {cellType && <span className="rounded-full bg-cc-hover px-2 py-0.5 text-cc-muted font-medium">type: {cellType}</span>}
+        {editMode && <span className="rounded-full bg-cc-hover px-2 py-0.5 text-cc-muted font-medium">mode: {editMode}</span>}
+        {input.cell_number != null && <span className="rounded-full bg-cc-hover px-2 py-0.5 text-cc-muted font-medium">cell: {String(input.cell_number)}</span>}
       </div>
       {!!input.new_source && (
-        <pre className="px-2 py-1.5 rounded bg-cc-code-bg text-cc-code-fg text-[11px] font-mono-code leading-relaxed max-h-40 overflow-y-auto">
+        <pre className="px-3 py-2.5 rounded-lg border border-cc-border bg-cc-code-bg text-cc-code-fg text-[11px] font-mono-code leading-relaxed max-h-40 overflow-y-auto">
           {String(input.new_source)}
         </pre>
       )}
@@ -337,7 +353,7 @@ function NotebookEditDetail({ input }: { input: Record<string, unknown> }) {
 
 function SendMessageDetail({ input }: { input: Record<string, unknown> }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {!!input.recipient && (
         <div className="text-[11px] text-cc-muted">
           to: <span className="font-medium text-cc-fg">{String(input.recipient)}</span>
@@ -354,13 +370,22 @@ function SendMessageDetail({ input }: { input: Record<string, unknown> }) {
 
 export function getPreview(name: string, input: Record<string, unknown>): string {
   if (name === "Bash" && typeof input.command === "string") {
-    // Prefer description if short enough, otherwise show command
-    if (input.description && typeof input.description === "string" && input.description.length <= 60) {
-      return input.description;
-    }
-    return input.command.length > 60 ? input.command.slice(0, 60) + "..." : input.command;
+    const cmd = input.command;
+    return cmd.length > 60 ? cmd.slice(0, 60) + "\u2026" : cmd;
   }
-  if ((name === "Read" || name === "Write" || name === "Edit") && input.file_path) {
+  if (name === "Edit" && input.file_path) {
+    const path = String(input.file_path);
+    const shortPath = path.split("/").slice(-2).join("/");
+    const oldStr = typeof input.old_string === "string" ? input.old_string : "";
+    const newStr = typeof input.new_string === "string" ? input.new_string : "";
+    if (oldStr || newStr) {
+      const removed = oldStr.split("\n").length;
+      const added = newStr.split("\n").length;
+      return `${shortPath} +${added}/-${removed}`;
+    }
+    return shortPath;
+  }
+  if ((name === "Read" || name === "Write") && input.file_path) {
     const path = String(input.file_path);
     return path.split("/").slice(-2).join("/");
   }
@@ -369,7 +394,7 @@ export function getPreview(name: string, input: Record<string, unknown>): string
     const p = String(input.pattern);
     const suffix = input.path ? ` in ${String(input.path).split("/").slice(-2).join("/")}` : "";
     const full = p + suffix;
-    return full.length > 60 ? full.slice(0, 60) + "..." : full;
+    return full.length > 60 ? full.slice(0, 60) + "\u2026" : full;
   }
   if ((name === "WebSearch" || name === "web_search") && input.query) return String(input.query);
   if (name === "WebFetch" && input.url) {
@@ -396,7 +421,7 @@ export function getPreview(name: string, input: Record<string, unknown>): string
 // ─── Icons ──────────────────────────────────────────────────────────────────
 
 export function ToolIcon({ type }: { type: string }) {
-  const cls = "w-3.5 h-3.5 text-cc-muted shrink-0";
+  const cls = "w-4 h-4 text-cc-muted/60 shrink-0";
 
   if (type === "terminal") {
     return (
