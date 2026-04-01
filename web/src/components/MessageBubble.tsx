@@ -54,7 +54,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg transition-all"
+      className="w-6 h-6 flex items-center justify-center rounded-md text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-all duration-200"
       title={copied ? "Copied!" : "Copy message"}
     >
       {copied ? (
@@ -75,11 +75,11 @@ export function MessageBubble({ message, onFork }: { message: ChatMessage; onFor
   if (message.role === "system") {
     return (
       <div className="flex items-center gap-3 py-1">
-        <div className="flex-1 h-px bg-cc-border" />
-        <span className="text-[10px] text-cc-muted/50 uppercase tracking-[0.15em] font-mono-code font-medium shrink-0 px-1">
+        <div className="flex-1 h-px bg-cc-border/30" />
+        <span className="text-[10px] text-cc-muted/40 uppercase tracking-[0.15em] font-mono-code shrink-0 px-1">
           {message.content}
         </span>
-        <div className="flex-1 h-px bg-cc-border" />
+        <div className="flex-1 h-px bg-cc-border/30" />
       </div>
     );
   }
@@ -87,26 +87,25 @@ export function MessageBubble({ message, onFork }: { message: ChatMessage; onFor
   if (message.role === "user") {
     return (
       <div className="group/msg animate-[fadeSlideIn_0.15s_ease-out] relative">
-        <div className="absolute right-0 top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-0.5 z-10">
-          {typeof message.content === "string" && message.content && (
-            <CopyButton text={message.content} />
-          )}
-          {onFork && (
-            <button
-              onClick={onFork}
-              className="p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg transition-all"
-              title="Fork session from here"
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-                <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
-              </svg>
-            </button>
-          )}
-        </div>
-        <div className="log-user">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-mono-code text-cc-muted/60 uppercase tracking-wider">you</span>
+        <div className="absolute right-2 top-2 opacity-0 group-hover/msg:opacity-100 transition-all duration-200 z-10">
+          <div className="rounded-lg bg-cc-card border border-cc-border shadow-sm p-0.5 flex items-center gap-0.5">
+            {typeof message.content === "string" && message.content && (
+              <CopyButton text={message.content} />
+            )}
+            {onFork && (
+              <button
+                onClick={onFork}
+                className="w-6 h-6 flex items-center justify-center rounded-md text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-all duration-200"
+                title="Fork session from here"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                  <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
+                </svg>
+              </button>
+            )}
           </div>
+        </div>
+        <div className="bg-cc-primary/[0.04] dark:bg-cc-primary/[0.08] rounded-xl px-4 py-3 border border-cc-primary/10">
           {message.images && message.images.length > 0 && (
             <div className="flex gap-2 flex-wrap mb-2">
               {message.images.map((img, i) => (
@@ -114,7 +113,7 @@ export function MessageBubble({ message, onFork }: { message: ChatMessage; onFor
                   key={i}
                   src={`data:${img.media_type};base64,${img.data}`}
                   alt="attachment"
-                  className="max-w-[150px] sm:max-w-[200px] max-h-[120px] sm:max-h-[150px] rounded-md object-cover border border-cc-border"
+                  className="max-w-[180px] sm:max-w-[240px] max-h-[140px] sm:max-h-[180px] rounded-lg object-cover border border-cc-border overflow-hidden shadow-sm"
                 />
               ))}
             </div>
@@ -131,21 +130,25 @@ export function MessageBubble({ message, onFork }: { message: ChatMessage; onFor
   const textContent = extractTextContent(message);
   return (
     <div className="group/msg animate-[fadeSlideIn_0.15s_ease-out] relative">
-      <div className="absolute right-0 top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-0.5 z-10">
-        {textContent && <CopyButton text={textContent} />}
-        {onFork && (
-          <button
-            onClick={onFork}
-            className="p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg transition-all"
-            title="Fork session from here"
-          >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-              <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
-            </svg>
-          </button>
-        )}
+      <div className="absolute right-0 top-0 opacity-0 group-hover/msg:opacity-100 transition-all duration-200 z-10">
+        <div className="rounded-lg bg-cc-card border border-cc-border shadow-sm p-0.5 flex items-center gap-0.5">
+          {textContent && <CopyButton text={textContent} />}
+          {onFork && (
+            <button
+              onClick={onFork}
+              className="w-6 h-6 flex items-center justify-center rounded-md text-cc-muted/50 hover:text-cc-fg hover:bg-cc-hover transition-all duration-200"
+              title="Fork session from here"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path fillRule="evenodd" d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
-      <AssistantMessage message={message} />
+      <div className="py-1">
+        <AssistantMessage message={message} />
+      </div>
     </div>
   );
 }
@@ -260,7 +263,7 @@ function MarkdownContent({ text }: { text: string }) {
             <li className="text-cc-fg leading-[1.6]">{children}</li>
           ),
           a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" className="text-cc-primary hover:text-cc-primary-hover underline underline-offset-2 decoration-cc-primary/30 hover:decoration-cc-primary/60 transition-colors">
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-cc-primary hover:underline underline-offset-2 decoration-cc-primary/40 transition-colors">
               {children}
             </a>
           ),
@@ -285,8 +288,10 @@ function MarkdownContent({ text }: { text: string }) {
               if (lang === "mermaid") {
                 return (
                   <Suspense fallback={
-                    <div className="my-2 rounded-md overflow-hidden border border-cc-border">
-                      <div className="px-3 py-1 bg-cc-code-bg border-b border-cc-border text-[9px] text-cc-code-fg/40 font-mono-code uppercase tracking-[0.2em]">mermaid</div>
+                    <div className="my-2 rounded-lg overflow-hidden border border-cc-border">
+                      <div className="px-3 py-1 bg-cc-code-bg border-b border-cc-border flex items-center">
+                        <span className="rounded-full bg-cc-hover px-2 py-0.5 text-[9px] text-cc-code-fg/40 font-mono-code uppercase">mermaid</span>
+                      </div>
                       <div className="px-3 py-3 bg-cc-code-bg text-[11px] text-cc-muted animate-pulse">Loading diagram...</div>
                     </div>
                   }>
@@ -296,10 +301,12 @@ function MarkdownContent({ text }: { text: string }) {
               }
 
               return (
-                <div className="my-2 rounded-md overflow-hidden border border-cc-border">
+                <div className="my-2 rounded-lg overflow-hidden border border-cc-border">
                   {lang && (
-                    <div className="px-3 py-1 bg-cc-code-bg border-b border-cc-border text-[9px] text-cc-code-fg/40 font-mono-code uppercase tracking-[0.2em]">
-                      {lang}
+                    <div className="px-3 py-1.5 bg-cc-code-bg border-b border-cc-border flex items-center">
+                      <span className="rounded-full bg-cc-hover px-2 py-0.5 text-[9px] text-cc-code-fg/40 font-mono-code uppercase">
+                        {lang}
+                      </span>
                     </div>
                   )}
                   <pre className="px-3 py-2 bg-cc-code-bg text-cc-code-fg text-[12px] font-mono-code leading-[1.6] overflow-x-auto">
@@ -318,23 +325,28 @@ function MarkdownContent({ text }: { text: string }) {
           pre: ({ children }) => <>{children}</>,
           table: ({ children }) => (
             <div className="overflow-x-auto my-2">
-              <table className="min-w-full text-[12px] border border-cc-border rounded-md overflow-hidden">
+              <table className="min-w-full text-[12px] border-collapse">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-cc-fg/[0.02]">{children}</thead>
+            <thead className="bg-cc-fg/[0.03]">{children}</thead>
           ),
           th: ({ children }) => (
-            <th className="px-2.5 py-1 text-left text-[11px] font-semibold text-cc-fg border-b border-cc-border">
+            <th className="px-2.5 py-1.5 text-left text-[11px] font-semibold text-cc-fg border border-cc-border/60">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-2.5 py-1 text-[11px] text-cc-fg border-b border-cc-border">
+            <td className="px-2.5 py-1.5 text-[11px] text-cc-fg border border-cc-border/40">
               {children}
             </td>
+          ),
+          tr: ({ children }) => (
+            <tr className="hover:bg-cc-hover/40 transition-colors">
+              {children}
+            </tr>
           ),
         }}
       >
@@ -361,10 +373,10 @@ function ContentBlockRenderer({ block }: { block: ContentBlock }) {
     const content = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
     const isError = block.is_error;
     return (
-      <div className={`text-[11px] font-mono-code rounded-md px-3 py-2 ${
+      <div className={`text-[11px] font-mono-code rounded-lg px-3 py-2 border ${
         isError
-          ? "bg-cc-error/5 text-cc-error"
-          : "bg-cc-hover text-cc-muted"
+          ? "bg-cc-error/5 text-cc-error border-cc-error/20"
+          : "bg-cc-hover text-cc-muted border-cc-border/40"
       } max-h-40 overflow-y-auto whitespace-pre-wrap`}>
         {content}
       </div>
@@ -380,31 +392,30 @@ function ToolGroupBlock({ name, items }: { name: string; items: ToolGroupItem[] 
   const label = getToolLabel(name);
 
   return (
-    <div className="rounded-md overflow-hidden bg-cc-hover/50">
+    <div className="rounded-lg overflow-hidden border border-cc-border/60 bg-cc-card">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-cc-hover transition-colors cursor-pointer"
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-cc-hover transition-all duration-200 cursor-pointer"
       >
         <svg
           viewBox="0 0 16 16"
           fill="currentColor"
-          className={`w-2.5 h-2.5 text-cc-muted/50 transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+          className={`w-2.5 h-2.5 text-cc-muted/50 transition-transform duration-200 shrink-0 ${open ? "rotate-90" : ""}`}
         >
           <path d="M6 4l4 4-4 4" />
         </svg>
         <ToolIcon type={iconType} />
-        <span className="text-[11px] font-medium text-cc-fg font-mono-code">{label}</span>
-        <span className="text-[10px] text-cc-muted/60 font-mono-code tabular-nums">
-          x{items.length}
+        <span className="text-[11px] font-medium text-cc-fg font-mono-code">
+          {items.length}x {label}
         </span>
       </button>
 
       {open && (
-        <div className="border-t border-cc-border/50 px-3 py-1.5">
+        <div className="px-3 py-1.5">
           {items.map((item, i) => {
             const preview = getPreview(item.name, item.input);
             return (
-              <div key={item.id || i} className="flex items-center gap-2 py-0.5 text-[11px] text-cc-muted font-mono-code truncate">
+              <div key={item.id || i} className={`flex items-center gap-2 py-0.5 text-[11px] text-cc-muted font-mono-code truncate ${i > 0 ? "border-t border-cc-border/40 pt-1" : ""}`}>
                 <span className="text-cc-muted/30 select-none">-</span>
                 <span className="truncate">{preview || JSON.stringify(item.input).slice(0, 80)}</span>
               </div>
@@ -420,28 +431,37 @@ function ThinkingBlock({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="rounded-md overflow-hidden bg-cc-hover/50">
+    <div className="rounded-lg border border-cc-border/60 bg-cc-card/50 overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-cc-muted hover:bg-cc-hover transition-colors cursor-pointer font-mono-code"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left cursor-pointer hover:bg-cc-hover/50 transition-all duration-200"
       >
+        {/* Brain/thought icon */}
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted/40 shrink-0">
+          <path d="M8 1a5 5 0 00-3.5 8.57V12a1 1 0 001 1h5a1 1 0 001-1V9.57A5 5 0 008 1zm-1.5 13a.5.5 0 000 1h3a.5.5 0 000-1h-3z" />
+        </svg>
+        <span className="text-[11px] font-medium text-cc-muted/60 font-mono-code">Reasoning</span>
+        <span className="rounded-full bg-cc-hover px-2 py-0.5 text-[9px] text-cc-muted/40 font-mono-code tabular-nums">{text.length}c</span>
         <svg
           viewBox="0 0 16 16"
           fill="currentColor"
-          className={`w-2.5 h-2.5 transition-transform ${open ? "rotate-90" : ""}`}
+          className={`w-2.5 h-2.5 text-cc-muted/30 transition-transform duration-200 ml-auto ${open ? "rotate-90" : ""}`}
         >
           <path d="M6 4l4 4-4 4" />
         </svg>
-        <span className="font-medium">thinking</span>
-        <span className="text-cc-muted/40 tabular-nums">{text.length}c</span>
       </button>
-      {open && (
-        <div className="px-3 pb-2.5 pt-0">
-          <pre className="text-[11px] text-cc-muted font-mono-code whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
-            {text}
-          </pre>
+      <div
+        className="overflow-hidden transition-[max-height] duration-200 ease-in-out"
+        style={{ maxHeight: open ? "10rem" : "0" }}
+      >
+        <div className="overflow-y-auto max-h-40 border-t border-cc-border/40">
+          <div className="px-3 py-2">
+            <pre className="text-[12px] text-cc-muted/70 italic font-mono-code whitespace-pre-wrap leading-relaxed">
+              {text}
+            </pre>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

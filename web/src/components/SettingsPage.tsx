@@ -3,11 +3,77 @@ import { api } from "../api.js";
 import { useStore } from "../store.js";
 import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "../analytics.js";
 
+/* ─── Tab Types ─────────────────────────────────────────────────── */
+
+type SettingsTab = "general" | "api-keys" | "notifications" | "appearance" | "updates";
+
+const TABS: { id: SettingsTab; label: string }[] = [
+  { id: "general", label: "General" },
+  { id: "api-keys", label: "API Keys" },
+  { id: "notifications", label: "Notifications" },
+  { id: "appearance", label: "Appearance" },
+  { id: "updates", label: "Updates" },
+];
+
+/* ─── Toggle Switch ─────────────────────────────────────────────── */
+
+function Toggle({ enabled, onToggle, label }: { enabled: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={label}
+      onClick={onToggle}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 cursor-pointer shrink-0 ${
+        enabled ? "bg-cc-primary" : "bg-cc-border"
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+          enabled ? "translate-x-[18px]" : "translate-x-[3px]"
+        }`}
+      />
+    </button>
+  );
+}
+
+/* ─── Section Card ──────────────────────────────────────────────── */
+
+function SettingsCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-cc-card border border-cc-border/60 rounded-xl">
+      <div className="px-5 py-4 border-b border-cc-border/40">
+        <h3 className="text-[13px] font-semibold text-cc-fg">{title}</h3>
+        {description && <p className="mt-0.5 text-[12px] text-cc-fg/60">{description}</p>}
+      </div>
+      <div className="px-5 py-4">{children}</div>
+    </div>
+  );
+}
+
+/* ─── Row ───────────────────────────────────────────────────────── */
+
+function SettingsRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0 border-b border-cc-border/20 last:border-0">
+      <div className="min-w-0">
+        <span className="text-[13px] font-medium text-cc-fg">{label}</span>
+        {description && <p className="text-[11px] text-cc-fg/55 mt-0.5">{description}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+/* ─── Component ─────────────────────────────────────────────────── */
+
 interface SettingsPageProps {
   embedded?: boolean;
 }
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [openrouterApiKey, setOpenrouterApiKey] = useState("");
   const [openrouterModel, setOpenrouterModel] = useState("openrouter/free");
   const [configured, setConfigured] = useState(false);
@@ -110,251 +176,328 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
   return (
     <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased overflow-y-auto`}>
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
-        <div className="flex items-start justify-between gap-3 mb-6">
-          <div>
-            <h1 className="text-xl font-semibold text-cc-fg">Settings</h1>
-            <p className="mt-1 text-sm text-cc-muted">
-              Configure API access, notifications, appearance, and workspace defaults.
-            </p>
-          </div>
-          {!embedded && (
-            <button
-              onClick={() => {
-                window.location.hash = "";
-              }}
-              className="px-3 py-1.5 rounded-lg text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              Back
-            </button>
-          )}
-        </div>
+      <div className="max-w-3xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
 
-        <form
-          onSubmit={onSave}
-          className="bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-4"
-        >
-          <h2 className="text-sm font-semibold text-cc-fg">OpenRouter</h2>
-          <div>
-            <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-key">
-              OpenRouter API Key
-            </label>
-            <input
-              id="openrouter-key"
-              type="password"
-              value={openrouterApiKey}
-              onChange={(e) => setOpenrouterApiKey(e.target.value)}
-              placeholder={configured ? "Configured. Enter a new key to replace." : "sk-or-v1-..."}
-              className="w-full px-3 py-2.5 text-sm bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/60"
-            />
-            <p className="mt-1.5 text-xs text-cc-muted">
-              Auto-renaming is disabled until this key is configured.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-model">
-              OpenRouter Model
-            </label>
-            <input
-              id="openrouter-model"
-              type="text"
-              value={openrouterModel}
-              onChange={(e) => setOpenrouterModel(e.target.value)}
-              placeholder="openrouter/free"
-              className="w-full px-3 py-2.5 text-sm bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/60"
-            />
-          </div>
-
-          <div className="border-t border-cc-border pt-4">
-            <h2 className="text-sm font-semibold text-cc-fg mb-3">Moltbook</h2>
-            <div>
-              <label className="block text-sm font-medium mb-1.5" htmlFor="moltbook-key">
-                Moltbook API Key
-              </label>
-              <input
-                id="moltbook-key"
-                type="password"
-                value={moltbookApiKey}
-                onChange={(e) => setMoltbookApiKey(e.target.value)}
-                placeholder={moltbookConfigured ? "Configured. Enter a new key to replace." : "Paste your Moltbook API key"}
-                className="w-full px-3 py-2.5 text-sm bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/60"
-              />
-              <p className="mt-1.5 text-xs text-cc-muted">
-                Required to post gallery sessions to Moltbook. Get a key by registering an agent at moltbook.com.
-              </p>
-            </div>
-          </div>
-
-          {error && (
-            <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
-              {error}
-            </div>
-          )}
-
-          {saved && (
-            <div className="px-3 py-2 rounded-lg bg-cc-success/10 border border-cc-success/20 text-xs text-cc-success">
-              Settings saved.
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-cc-muted">
-              {loading ? "Loading..." : configured ? "OpenRouter key configured" : "OpenRouter key not configured"}
-              {!loading && (moltbookConfigured ? " • Moltbook configured" : "")}
-            </span>
-            <button
-              type="submit"
-              disabled={saving || loading}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                saving || loading
-                  ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                  : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
-              }`}
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Notifications</h2>
+        {/* ── Header with back button ─────────────────────────────── */}
+        <div className="flex items-center gap-3 mb-1">
           <button
-            type="button"
-            onClick={toggleNotificationSound}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+            onClick={() => { window.location.hash = ""; }}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-cc-fg/60 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+            aria-label="Go back"
           >
-            <span>Sound</span>
-            <span className="text-xs text-cc-muted">{notificationSound ? "On" : "Off"}</span>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4">
+              <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
-          {notificationApiAvailable && (
-            <button
-              type="button"
-              onClick={async () => {
-                if (!notificationDesktop) {
-                  if (Notification.permission !== "granted") {
-                    const result = await Notification.requestPermission();
-                    if (result !== "granted") return;
-                  }
-                  setNotificationDesktop(true);
-                } else {
-                  setNotificationDesktop(false);
-                }
-              }}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-            >
-              <span>Desktop Alerts</span>
-              <span className="text-xs text-cc-muted">{notificationDesktop ? "On" : "Off"}</span>
-            </button>
-          )}
+          <div>
+            <p className="text-[11px] text-cc-fg/50 font-medium">Settings</p>
+            <h1 className="text-xl font-semibold text-cc-fg -mt-0.5">Settings</h1>
+          </div>
         </div>
 
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Updates</h2>
-          {updateInfo ? (
-            <p className="text-xs text-cc-muted">
-              Current version: v{updateInfo.currentVersion}
-              {updateInfo.latestVersion ? ` • Latest: v${updateInfo.latestVersion}` : ""}
-            </p>
-          ) : (
-            <p className="text-xs text-cc-muted">Version information not loaded yet.</p>
-          )}
-
-          {updateError && (
-            <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
-              {updateError}
-            </div>
-          )}
-
-          {updateStatus && (
-            <div className="px-3 py-2 rounded-lg bg-cc-success/10 border border-cc-success/20 text-xs text-cc-success">
-              {updateStatus}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onCheckUpdates}
-              disabled={checkingUpdates}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                checkingUpdates
-                  ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                  : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
-              }`}
-            >
-              {checkingUpdates ? "Checking..." : "Check for updates"}
-            </button>
-
-            {updateInfo?.isServiceMode ? (
+        {/* ── Tab Navigation ──────────────────────────────────────── */}
+        <div className="mt-5 mb-6 border-b border-cc-border/40">
+          <nav className="flex gap-0 -mb-px overflow-x-auto" aria-label="Settings tabs">
+            {TABS.map((tab) => (
               <button
-                type="button"
-                onClick={onTriggerUpdate}
-                disabled={updatingApp || updateInfo.updateInProgress || !updateInfo.updateAvailable}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  updatingApp || updateInfo.updateInProgress || !updateInfo.updateAvailable
-                    ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                    : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2.5 text-[13px] font-medium whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
+                  activeTab === tab.id
+                    ? "border-cc-primary text-cc-fg"
+                    : "border-transparent text-cc-fg/55 hover:text-cc-fg hover:border-cc-border/60"
                 }`}
+                aria-selected={activeTab === tab.id}
+                role="tab"
               >
-                {updatingApp || updateInfo.updateInProgress ? "Updating..." : "Update & Restart"}
+                {tab.label}
               </button>
-            ) : (
-              <p className="text-xs text-cc-muted self-center">
-                Install service mode with <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">campfire install</code> to enable one-click updates.
-              </p>
-            )}
-          </div>
+            ))}
+          </nav>
         </div>
 
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Appearance</h2>
-          <button
-            type="button"
-            onClick={toggleDarkMode}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-          >
-            <span>Theme</span>
-            <span className="text-xs text-cc-muted">{darkMode ? "Dark" : "Light"}</span>
-          </button>
-        </div>
+        {/* ── Tab Content ─────────────────────────────────────────── */}
+        <div className="space-y-5">
 
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Telemetry</h2>
-          <p className="text-xs text-cc-muted">
-            Anonymous product analytics and crash reports via PostHog to improve reliability.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              const next = !telemetryEnabled;
-              setTelemetryPreferenceEnabled(next);
-              setTelemetryEnabled(next);
-            }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-          >
-            <span>Usage analytics and errors</span>
-            <span className="text-xs text-cc-muted">{telemetryEnabled ? "On" : "Off"}</span>
-          </button>
-          <p className="text-xs text-cc-muted">
-            Browser Do Not Track is respected automatically.
-          </p>
-        </div>
+          {/* ── General Tab ───────────────────────────────────────── */}
+          {activeTab === "general" && (
+            <>
+              <SettingsCard title="Telemetry" description="Help improve Campfire with anonymous usage data">
+                <SettingsRow
+                  label="Usage analytics and crash reports"
+                  description="Anonymous product analytics via PostHog. Browser Do Not Track is respected automatically."
+                >
+                  <Toggle
+                    enabled={telemetryEnabled}
+                    label="Toggle telemetry"
+                    onToggle={() => {
+                      const next = !telemetryEnabled;
+                      setTelemetryPreferenceEnabled(next);
+                      setTelemetryEnabled(next);
+                    }}
+                  />
+                </SettingsRow>
+              </SettingsCard>
 
-        <div className="mt-4 bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-cc-fg">Environments</h2>
-          <p className="text-xs text-cc-muted">
-            Manage reusable environment profiles used when creating sessions.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              window.location.hash = "#/environments";
-            }}
-            className="px-3 py-2 rounded-lg text-sm font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
-          >
-            Open Environments Page
-          </button>
+              <SettingsCard title="Environments" description="Manage reusable environment profiles for sessions">
+                <div className="flex items-center justify-between">
+                  <p className="text-[12px] text-cc-fg/60">
+                    Configure named sets of environment variables to use when creating sessions.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { window.location.hash = "#/environments"; }}
+                    className="px-3.5 py-2 rounded-lg text-[12px] font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer shrink-0 ml-4"
+                  >
+                    Manage
+                  </button>
+                </div>
+              </SettingsCard>
+            </>
+          )}
+
+          {/* ── API Keys Tab ──────────────────────────────────────── */}
+          {activeTab === "api-keys" && (
+            <form onSubmit={onSave} className="space-y-5">
+              <SettingsCard title="OpenRouter" description="Used for auto-naming sessions after the first turn">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[12px] font-medium text-cc-fg mb-1.5" htmlFor="openrouter-key">
+                      API Key
+                    </label>
+                    <input
+                      id="openrouter-key"
+                      type="password"
+                      value={openrouterApiKey}
+                      onChange={(e) => setOpenrouterApiKey(e.target.value)}
+                      placeholder={configured ? "Configured — enter a new key to replace" : "sk-or-v1-..."}
+                      className="w-full px-3.5 py-2.5 text-[13px] bg-cc-bg border border-cc-border/60 rounded-lg text-cc-fg placeholder:text-cc-fg/40 focus:outline-none focus:border-cc-primary/60 focus:ring-1 focus:ring-cc-primary/20 transition-all"
+                    />
+                    <div className="flex items-center gap-2 mt-2">
+                      {configured ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-cc-success font-medium">
+                          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                            <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm3.78 4.97a.75.75 0 00-1.06 0L7 8.69 5.28 6.97a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.06 0l4.25-4.25a.75.75 0 000-1.06z" />
+                          </svg>
+                          Configured
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-cc-fg/50">Not configured — auto-naming is disabled</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[12px] font-medium text-cc-fg mb-1.5" htmlFor="openrouter-model">
+                      Model
+                    </label>
+                    <input
+                      id="openrouter-model"
+                      type="text"
+                      value={openrouterModel}
+                      onChange={(e) => setOpenrouterModel(e.target.value)}
+                      placeholder="openrouter/free"
+                      className="w-full px-3.5 py-2.5 text-[13px] bg-cc-bg border border-cc-border/60 rounded-lg text-cc-fg placeholder:text-cc-fg/40 focus:outline-none focus:border-cc-primary/60 focus:ring-1 focus:ring-cc-primary/20 transition-all"
+                    />
+                  </div>
+                </div>
+              </SettingsCard>
+
+              <SettingsCard title="Moltbook" description="Required to post gallery sessions to Moltbook">
+                <div>
+                  <label className="block text-[12px] font-medium text-cc-fg mb-1.5" htmlFor="moltbook-key">
+                    API Key
+                  </label>
+                  <input
+                    id="moltbook-key"
+                    type="password"
+                    value={moltbookApiKey}
+                    onChange={(e) => setMoltbookApiKey(e.target.value)}
+                    placeholder={moltbookConfigured ? "Configured — enter a new key to replace" : "Paste your Moltbook API key"}
+                    className="w-full px-3.5 py-2.5 text-[13px] bg-cc-bg border border-cc-border/60 rounded-lg text-cc-fg placeholder:text-cc-fg/40 focus:outline-none focus:border-cc-primary/60 focus:ring-1 focus:ring-cc-primary/20 transition-all"
+                  />
+                  <div className="flex items-center gap-2 mt-2">
+                    {moltbookConfigured ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-cc-success font-medium">
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                          <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm3.78 4.97a.75.75 0 00-1.06 0L7 8.69 5.28 6.97a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.06 0l4.25-4.25a.75.75 0 000-1.06z" />
+                        </svg>
+                        Configured
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-cc-fg/50">
+                        Get a key at moltbook.com by registering an agent
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </SettingsCard>
+
+              {/* Save bar */}
+              <div className="flex items-center justify-between bg-cc-card border border-cc-border/60 rounded-xl px-5 py-3.5">
+                <div className="text-[12px]">
+                  {error && (
+                    <span className="text-cc-error">{error}</span>
+                  )}
+                  {saved && (
+                    <span className="text-cc-success font-medium">Settings saved successfully</span>
+                  )}
+                  {!error && !saved && (
+                    <span className="text-cc-fg/50">
+                      {loading ? "Loading..." : "Changes are saved immediately"}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={saving || loading}
+                  className={`px-4 py-2 rounded-lg text-[13px] font-medium transition-all ${
+                    saving || loading
+                      ? "bg-cc-hover text-cc-fg/40 cursor-not-allowed"
+                      : "bg-cc-primary hover:bg-cc-primary-hover text-white shadow-sm cursor-pointer"
+                  }`}
+                >
+                  {saving ? "Saving..." : "Save API Keys"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── Notifications Tab ─────────────────────────────────── */}
+          {activeTab === "notifications" && (
+            <SettingsCard title="Notification Preferences" description="Control how Campfire alerts you">
+              <SettingsRow
+                label="Sound"
+                description="Play a notification sound when a permission request arrives"
+              >
+                <Toggle
+                  enabled={notificationSound}
+                  label="Toggle notification sound"
+                  onToggle={toggleNotificationSound}
+                />
+              </SettingsRow>
+              {notificationApiAvailable && (
+                <SettingsRow
+                  label="Desktop Alerts"
+                  description="Show native browser notifications for permission requests"
+                >
+                  <Toggle
+                    enabled={notificationDesktop}
+                    label="Toggle desktop notifications"
+                    onToggle={async () => {
+                      if (!notificationDesktop) {
+                        if (Notification.permission !== "granted") {
+                          const result = await Notification.requestPermission();
+                          if (result !== "granted") return;
+                        }
+                        setNotificationDesktop(true);
+                      } else {
+                        setNotificationDesktop(false);
+                      }
+                    }}
+                  />
+                </SettingsRow>
+              )}
+            </SettingsCard>
+          )}
+
+          {/* ── Appearance Tab ────────────────────────────────────── */}
+          {activeTab === "appearance" && (
+            <SettingsCard title="Theme" description="Choose your preferred color scheme">
+              <SettingsRow
+                label="Dark Mode"
+                description="Switch between light and dark themes"
+              >
+                <Toggle
+                  enabled={darkMode}
+                  label="Toggle dark mode"
+                  onToggle={toggleDarkMode}
+                />
+              </SettingsRow>
+            </SettingsCard>
+          )}
+
+          {/* ── Updates Tab ───────────────────────────────────────── */}
+          {activeTab === "updates" && (
+            <SettingsCard title="Software Updates" description="Keep Campfire up to date">
+              <div className="space-y-4">
+                {/* Version info */}
+                <div className="flex items-center gap-3 py-2">
+                  <div className="w-10 h-10 rounded-xl bg-cc-primary/10 flex items-center justify-center shrink-0">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5 text-cc-primary">
+                      <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 4a.75.75 0 01.75.75v3.5h2.5a.75.75 0 010 1.5h-3.25a.75.75 0 01-.75-.75v-4.25A.75.75 0 018 4z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-medium text-cc-fg">
+                      {updateInfo ? `v${updateInfo.currentVersion}` : "Loading..."}
+                    </p>
+                    <p className="text-[11px] text-cc-fg/55">
+                      {updateInfo?.latestVersion
+                        ? updateInfo.updateAvailable
+                          ? `v${updateInfo.latestVersion} available`
+                          : "You're on the latest version"
+                        : "Check for updates to see the latest version"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status messages */}
+                {updateError && (
+                  <div className="px-3.5 py-2.5 rounded-lg bg-cc-error/8 border border-cc-error/15 text-[12px] text-cc-error">
+                    {updateError}
+                  </div>
+                )}
+                {updateStatus && (
+                  <div className="px-3.5 py-2.5 rounded-lg bg-cc-success/8 border border-cc-success/15 text-[12px] text-cc-success">
+                    {updateStatus}
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={onCheckUpdates}
+                    disabled={checkingUpdates}
+                    className={`px-4 py-2 rounded-lg text-[13px] font-medium transition-all ${
+                      checkingUpdates
+                        ? "bg-cc-hover text-cc-fg/40 cursor-not-allowed"
+                        : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
+                    }`}
+                  >
+                    {checkingUpdates ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-3.5 h-3.5 border-2 border-cc-fg/20 border-t-cc-fg/60 rounded-full animate-spin" />
+                        Checking...
+                      </span>
+                    ) : (
+                      "Check for Updates"
+                    )}
+                  </button>
+
+                  {updateInfo?.isServiceMode ? (
+                    <button
+                      type="button"
+                      onClick={onTriggerUpdate}
+                      disabled={updatingApp || updateInfo.updateInProgress || !updateInfo.updateAvailable}
+                      className={`px-4 py-2 rounded-lg text-[13px] font-medium transition-all ${
+                        updatingApp || updateInfo.updateInProgress || !updateInfo.updateAvailable
+                          ? "bg-cc-hover text-cc-fg/40 cursor-not-allowed"
+                          : "bg-cc-primary hover:bg-cc-primary-hover text-white shadow-sm cursor-pointer"
+                      }`}
+                    >
+                      {updatingApp || updateInfo.updateInProgress ? "Updating..." : "Update & Restart"}
+                    </button>
+                  ) : (
+                    <p className="text-[11px] text-cc-fg/55 self-center">
+                      Run <code className="font-mono-code bg-cc-code-bg px-1.5 py-0.5 rounded text-cc-code-fg text-[10px]">campfire install</code> to enable one-click updates
+                    </p>
+                  )}
+                </div>
+              </div>
+            </SettingsCard>
+          )}
         </div>
       </div>
     </div>
