@@ -147,41 +147,6 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
     }
   });
 
-  // Detect running Claude Code processes that could be adopted
-  api.get("/sessions/detect", async (c) => {
-    try {
-      const detected = await launcher.detectRunningProcesses();
-      return c.json(detected);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return c.json({ error: msg }, 500);
-    }
-  });
-
-  // Adopt an existing running Claude Code process
-  api.post("/sessions/adopt", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    try {
-      const session = await launcher.adopt({
-        pid: body.pid ? Number(body.pid) : undefined,
-        cwd: body.cwd,
-        model: body.model,
-        cliSessionId: body.cliSessionId,
-      });
-
-      // Set a name if provided
-      if (body.name) {
-        sessionNames.setName(session.sessionId, body.name);
-      }
-
-      return c.json(session);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[routes] Failed to adopt session:", msg);
-      return c.json({ error: msg }, 500);
-    }
-  });
-
   api.get("/sessions", (c) => {
     const sessions = launcher.listSessions();
     const names = sessionNames.getAllNames();
