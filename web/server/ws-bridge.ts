@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from "bun";
 import { randomUUID } from "node:crypto";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import type {
   CLIMessage,
@@ -149,119 +149,122 @@ function makeDefaultState(sessionId: string, backendType: BackendType = "claude"
 
 // ─── Git info helper ─────────────────────────────────────────────────────────
 
+const BIN_GIT = "/usr/bin/git";
+
+/** Run a git command in the given directory, returning trimmed output or null on failure. */
+function gitExec(args: string, cwd: string, timeout = 3000): string | null {
+  try {
+    return execFileSync(BIN_GIT, args.split(" "), { cwd, encoding: "utf-8", timeout }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/** Parse insertions/deletions from `git diff --shortstat` output. */
+function parseShortstat(stat: string): { added: number; removed: number } {
+  const ins = /\b(\d+) insertion/.exec(stat);
+  const del = /\b(\d+) deletion/.exec(stat);
+  return {
+    added: ins ? Number.parseInt(ins[1], 10) : 0,
+    removed: del ? Number.parseInt(del[1], 10) : 0,
+  };
+}
+
+/** Resolve the base ref for diffing (upstream tracking branch, or main/master). */
+function resolveBaseRef(cwd: string): string {
+  const upstream = gitExec("rev-parse --abbrev-ref @{upstream}", cwd);
+  if (upstream) return upstream;
+  // No upstream — try main or master
+  for (const candidate of ["main", "master"]) {
+    if (gitExec(`rev-parse --verify ${candidate}`, cwd) !== null) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
+/** Compute total lines added/removed (committed + uncommitted). */
+function resolveLineChanges(cwd: string): { added: number; removed: number } {
+  let totalAdded = 0;
+  let totalRemoved = 0;
+
+  // 1) Committed changes: diff from merge-base with upstream or main/master
+  const baseRef = resolveBaseRef(cwd);
+  if (baseRef) {
+    const mergeBase = gitExec(`merge-base ${baseRef} HEAD`, cwd);
+    if (mergeBase) {
+      const stat = gitExec(`diff --shortstat ${mergeBase} HEAD`, cwd, 5000);
+      if (stat) {
+        const { added, removed } = parseShortstat(stat);
+        totalAdded += added;
+        totalRemoved += removed;
+      }
+    }
+  }
+
+  // 2) Uncommitted changes (staged + unstaged) on top of HEAD
+  const uncommittedStat = gitExec("diff --shortstat HEAD", cwd, 5000);
+  if (uncommittedStat) {
+    const { added, removed } = parseShortstat(uncommittedStat);
+    totalAdded += added;
+    totalRemoved += removed;
+  }
+
+  return { added: totalAdded, removed: totalRemoved };
+}
+
 function resolveGitInfo(state: SessionState): void {
   if (!state.cwd) return;
-  try {
-    state.git_branch = execSync("git rev-parse --abbrev-ref HEAD", {
-      cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-    }).trim();
+  const cwd = state.cwd;
 
-    // Capture starting commit once (used as diff base for the session)
-    if (!state.git_start_commit) {
-      try {
-        state.git_start_commit = execSync("git rev-parse HEAD", {
-          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-        }).trim();
-      } catch { /* ignore — initial commit may not exist */ }
-    }
-
-    try {
-      const gitDir = execSync("git rev-parse --git-dir", {
-        cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-      }).trim();
-      state.is_worktree = gitDir.includes("/worktrees/");
-    } catch { /* ignore */ }
-
-    try {
-      if (state.is_worktree) {
-        // For worktrees, --show-toplevel returns the worktree dir, not the original repo.
-        // Use --git-common-dir to find the shared .git dir, then derive the repo root.
-        const commonDir = execSync("git rev-parse --git-common-dir", {
-          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-        }).trim();
-        state.repo_root = resolve(state.cwd, commonDir, "..");
-      } else {
-        state.repo_root = execSync("git rev-parse --show-toplevel", {
-          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-        }).trim();
-      }
-    } catch { /* ignore */ }
-
-    try {
-      const counts = execSync(
-        "git rev-list --left-right --count @{upstream}...HEAD",
-        { cwd: state.cwd, encoding: "utf-8", timeout: 3000 },
-      ).trim();
-      const [behind, ahead] = counts.split(/\s+/).map(Number);
-      state.git_ahead = ahead || 0;
-      state.git_behind = behind || 0;
-    } catch {
-      state.git_ahead = 0;
-      state.git_behind = 0;
-    }
-
-    // Compute lines added/removed: committed changes (vs upstream/main) + uncommitted
-    try {
-      let totalAdded = 0;
-      let totalRemoved = 0;
-
-      // 1) Committed changes: diff from merge-base with upstream or main/master
-      //    This captures all commits the session has made on this branch.
-      let baseRef = "";
-      try {
-        // Try upstream tracking branch first
-        baseRef = execSync("git rev-parse --abbrev-ref @{upstream}", {
-          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-        }).trim();
-      } catch {
-        // No upstream — try main or master
-        for (const candidate of ["main", "master"]) {
-          try {
-            execSync(`git rev-parse --verify ${candidate}`, {
-              cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-            });
-            baseRef = candidate;
-            break;
-          } catch { /* try next */ }
-        }
-      }
-
-      if (baseRef) {
-        try {
-          const mergeBase = execSync(`git merge-base ${baseRef} HEAD`, {
-            cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-          }).trim();
-          const committedStat = execSync(`git diff --shortstat ${mergeBase} HEAD`, {
-            cwd: state.cwd, encoding: "utf-8", timeout: 5000,
-          }).trim();
-          const cInsert = committedStat.match(/(\d+) insertion/);
-          const cDelete = committedStat.match(/(\d+) deletion/);
-          totalAdded += cInsert ? parseInt(cInsert[1], 10) : 0;
-          totalRemoved += cDelete ? parseInt(cDelete[1], 10) : 0;
-        } catch { /* merge-base can fail for unrelated histories */ }
-      }
-
-      // 2) Uncommitted changes (staged + unstaged) on top of HEAD
-      const uncommittedStat = execSync("git diff --shortstat HEAD", {
-        cwd: state.cwd, encoding: "utf-8", timeout: 5000,
-      }).trim();
-      const uInsert = uncommittedStat.match(/(\d+) insertion/);
-      const uDelete = uncommittedStat.match(/(\d+) deletion/);
-      totalAdded += uInsert ? parseInt(uInsert[1], 10) : 0;
-      totalRemoved += uDelete ? parseInt(uDelete[1], 10) : 0;
-
-      state.total_lines_added = totalAdded;
-      state.total_lines_removed = totalRemoved;
-    } catch {
-      // git diff can fail if there's no HEAD commit yet
-    }
-  } catch {
+  const branch = gitExec("rev-parse --abbrev-ref HEAD", cwd);
+  if (branch === null) {
     // Not a git repo or git not available
     state.git_branch = "";
     state.is_worktree = false;
     state.repo_root = "";
     state.git_ahead = 0;
     state.git_behind = 0;
+    return;
+  }
+
+  state.git_branch = branch;
+
+  // Capture starting commit once (used as diff base for the session)
+  if (!state.git_start_commit) {
+    state.git_start_commit = gitExec("rev-parse HEAD", cwd) ?? "";
+  }
+
+  const gitDir = gitExec("rev-parse --git-dir", cwd);
+  if (gitDir) {
+    state.is_worktree = gitDir.includes("/worktrees/");
+  }
+
+  if (state.is_worktree) {
+    const commonDir = gitExec("rev-parse --git-common-dir", cwd);
+    if (commonDir) {
+      state.repo_root = resolve(cwd, commonDir, "..");
+    }
+  } else {
+    state.repo_root = gitExec("rev-parse --show-toplevel", cwd) ?? "";
+  }
+
+  const counts = gitExec("rev-list --left-right --count @{upstream}...HEAD", cwd);
+  if (counts) {
+    const [behind, ahead] = counts.split(/\s+/).map(Number);
+    state.git_ahead = ahead || 0;
+    state.git_behind = behind || 0;
+  } else {
+    state.git_ahead = 0;
+    state.git_behind = 0;
+  }
+
+  try {
+    const { added, removed } = resolveLineChanges(cwd);
+    state.total_lines_added = added;
+    state.total_lines_removed = removed;
+  } catch {
+    // git diff can fail if there's no HEAD commit yet
   }
 }
 
@@ -282,9 +285,9 @@ export class WsBridge {
     "mcp_set_servers",
   ]);
   private static readonly VOTE_DEADLINE_MS = 30_000; // 30 seconds to vote
-  private sessions = new Map<string, Session>();
-  private inviteTokens = new Map<string, string>(); // token → sessionId
-  private inviteTokenRoles = new Map<string, SessionRole>(); // token → role
+  private readonly sessions = new Map<string, Session>();
+  private readonly inviteTokens = new Map<string, string>(); // token → sessionId
+  private readonly inviteTokenRoles = new Map<string, SessionRole>(); // token → role
   private viewerCounter = 0;
   private votingPolicy: VotingPolicy = "majority-rules";
   private store: SessionStore | null = null;
@@ -294,7 +297,7 @@ export class WsBridge {
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
   private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
-  private autoNamingAttempted = new Set<string>();
+  private readonly autoNamingAttempted = new Set<string>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private static readonly GIT_SESSION_KEYS: GitSessionKey[] = [
@@ -339,7 +342,7 @@ export class WsBridge {
     if (!this.sessions.has(sessionId)) return null;
 
     // Generate a 12-char URL-safe token (always new — different roles may be desired)
-    const token = randomUUID().replace(/-/g, "").substring(0, 12);
+    const token = randomUUID().replaceAll("-", "").substring(0, 12);
     this.inviteTokens.set(token, sessionId);
     this.inviteTokenRoles.set(token, role);
     return token;
@@ -428,6 +431,34 @@ export class WsBridge {
 
   private collectiveIntelligence: CollectiveIntelligenceLayer | null = null;
 
+  /** Hydrate a persisted session record into a live Session object. */
+  private hydrateSession(p: ReturnType<SessionStore["loadAll"]>[number]): Session {
+    const clientMsgIds = Array.isArray(p.processedClientMessageIds)
+      ? p.processedClientMessageIds
+      : [];
+    const session: Session = {
+      id: p.id,
+      backendType: p.state.backend_type || "claude",
+      cliSocket: null,
+      adapter: null,
+      browserSockets: new Set(),
+      state: p.state,
+      pendingPermissions: new Map(p.pendingPermissions || []),
+      pendingControlRequests: new Map(),
+      messageHistory: p.messageHistory || [],
+      pendingMessages: p.pendingMessages || [],
+      nextEventSeq: p.nextEventSeq && p.nextEventSeq > 0 ? p.nextEventSeq : 1,
+      eventBuffer: Array.isArray(p.eventBuffer) ? p.eventBuffer : [],
+      lastAckSeq: typeof p.lastAckSeq === "number" ? p.lastAckSeq : 0,
+      processedClientMessageIds: clientMsgIds,
+      processedClientMessageIdSet: new Set(clientMsgIds),
+      pendingVotes: new Map(),
+    };
+    session.state.backend_type = session.backendType;
+    resolveGitInfo(session.state);
+    return session;
+  }
+
   /** Restore sessions from disk (call once at startup). */
   restoreFromDisk(): number {
     if (!this.store) return 0;
@@ -435,29 +466,7 @@ export class WsBridge {
     let count = 0;
     for (const p of persisted) {
       if (this.sessions.has(p.id)) continue; // don't overwrite live sessions
-      const session: Session = {
-        id: p.id,
-        backendType: p.state.backend_type || "claude",
-        cliSocket: null,
-        adapter: null,
-        browserSockets: new Set(),
-        state: p.state,
-        pendingPermissions: new Map(p.pendingPermissions || []),
-        pendingControlRequests: new Map(),
-        messageHistory: p.messageHistory || [],
-        pendingMessages: p.pendingMessages || [],
-        nextEventSeq: p.nextEventSeq && p.nextEventSeq > 0 ? p.nextEventSeq : 1,
-        eventBuffer: Array.isArray(p.eventBuffer) ? p.eventBuffer : [],
-        lastAckSeq: typeof p.lastAckSeq === "number" ? p.lastAckSeq : 0,
-        processedClientMessageIds: Array.isArray(p.processedClientMessageIds) ? p.processedClientMessageIds : [],
-        processedClientMessageIdSet: new Set(
-          Array.isArray(p.processedClientMessageIds) ? p.processedClientMessageIds : [],
-        ),
-        pendingVotes: new Map(),
-      };
-      session.state.backend_type = session.backendType;
-      // Resolve git info for restored sessions (may have been persisted without it)
-      resolveGitInfo(session.state);
+      const session = this.hydrateSession(p);
       this.sessions.set(p.id, session);
       // Restored sessions with completed turns don't need auto-naming re-triggered
       if (session.state.num_turns > 0) {
@@ -600,7 +609,7 @@ export class WsBridge {
 
   getCodexRateLimits(sessionId: string) {
     const session = this.sessions.get(sessionId);
-    if (!session || session.backendType !== "codex" || !session.adapter) return null;
+    if (session?.backendType !== "codex" || !session.adapter) return null;
     return (session.adapter as CodexAdapter).getRateLimits();
   }
 
@@ -669,90 +678,7 @@ export class WsBridge {
 
     // Forward translated messages to browsers
     adapter.onBrowserMessage((msg) => {
-      if (msg.type === "session_init") {
-        // Preserve persisted cost/turns when adapter reinitializes with zero values
-        // (happens on server restart — fresh adapter has no cost history).
-        const preservedCost = session.state.total_cost_usd || 0;
-        const preservedTurns = session.state.num_turns || 0;
-        const preservedDuration = session.state.total_duration_api_ms || 0;
-        const preservedLinesAdded = session.state.total_lines_added || 0;
-        const preservedLinesRemoved = session.state.total_lines_removed || 0;
-        const preservedCodexDetails = session.state.codex_token_details;
-        const preservedClaudeDetails = session.state.claude_token_details;
-        session.state = { ...session.state, ...msg.session, backend_type: backendType };
-        if (!session.state.total_cost_usd && preservedCost > 0) {
-          session.state.total_cost_usd = preservedCost;
-        }
-        if (!session.state.num_turns && preservedTurns > 0) {
-          session.state.num_turns = preservedTurns;
-        }
-        if (!session.state.total_duration_api_ms && preservedDuration > 0) {
-          session.state.total_duration_api_ms = preservedDuration;
-        }
-        if (!session.state.total_lines_added && preservedLinesAdded > 0) {
-          session.state.total_lines_added = preservedLinesAdded;
-        }
-        if (!session.state.total_lines_removed && preservedLinesRemoved > 0) {
-          session.state.total_lines_removed = preservedLinesRemoved;
-        }
-        if (!session.state.codex_token_details && preservedCodexDetails) {
-          session.state.codex_token_details = preservedCodexDetails;
-        }
-        if (!session.state.claude_token_details && preservedClaudeDetails) {
-          session.state.claude_token_details = preservedClaudeDetails;
-        }
-        this.refreshGitInfo(session, { notifyPoller: true });
-        this.persistSession(session);
-      } else if (msg.type === "session_update") {
-        session.state = { ...session.state, ...msg.session, backend_type: backendType };
-        this.refreshGitInfo(session, { notifyPoller: true });
-        this.persistSession(session);
-      } else if (msg.type === "status_change") {
-        session.state.is_compacting = msg.status === "compacting";
-        this.persistSession(session);
-      }
-
-      // Store assistant/result messages in history for replay
-      if (msg.type === "assistant") {
-        session.messageHistory.push({ ...msg, timestamp: msg.timestamp || Date.now() });
-        this.persistSession(session);
-      } else if (msg.type === "result") {
-        // For adapter-originated results, persist cost/turns into session.state
-        // so they survive reconnects (mirrors handleResultMessage for Claude CLI).
-        const resultData = (msg as { data?: CLIResultMessage }).data;
-        if (resultData) {
-          if (typeof resultData.total_cost_usd === "number" && resultData.total_cost_usd > (session.state.total_cost_usd || 0)) {
-            session.state.total_cost_usd = resultData.total_cost_usd;
-          }
-          if (typeof resultData.num_turns === "number") {
-            session.state.num_turns = resultData.num_turns;
-          }
-        }
-        session.messageHistory.push(msg);
-        this.persistSession(session);
-      }
-
-      // Handle permission requests
-      if (msg.type === "permission_request") {
-        session.pendingPermissions.set(msg.request.request_id, msg.request);
-        this.persistSession(session);
-      }
-
-      this.broadcastToBrowsers(session, msg);
-
-      // Trigger auto-naming after the first result
-      if (
-        msg.type === "result" &&
-        !(msg.data as { is_error?: boolean }).is_error &&
-        this.onFirstTurnCompleted &&
-        !this.autoNamingAttempted.has(session.id)
-      ) {
-        this.autoNamingAttempted.add(session.id);
-        const firstUserMsg = session.messageHistory.find((m) => m.type === "user_message");
-        if (firstUserMsg && firstUserMsg.type === "user_message") {
-          this.onFirstTurnCompleted(session.id, firstUserMsg.content);
-        }
-      }
+      this.handleAdapterBrowserMessage(session, msg, backendType);
     });
 
     // Handle session metadata updates
@@ -796,6 +722,118 @@ export class WsBridge {
     // Notify browsers that the backend is connected
     this.broadcastToBrowsers(session, { type: "cli_connected" });
     console.log(`[ws-bridge] ${backendType} adapter attached for session ${sessionId}`);
+  }
+
+  // ── Adapter message dispatch (extracted for reduced complexity) ────────
+
+  /**
+   * Preserve persisted session stats when adapter reinitializes with zero values.
+   * Happens on server restart when a fresh adapter has no cost history.
+   */
+  private preserveSessionStatsOnInit(
+    session: Session,
+    newState: Partial<SessionState>,
+    backendType: BackendType,
+  ): void {
+    const preserved = {
+      cost: session.state.total_cost_usd || 0,
+      turns: session.state.num_turns || 0,
+      duration: session.state.total_duration_api_ms || 0,
+      linesAdded: session.state.total_lines_added || 0,
+      linesRemoved: session.state.total_lines_removed || 0,
+      codexDetails: session.state.codex_token_details,
+      claudeDetails: session.state.claude_token_details,
+    };
+
+    session.state = { ...session.state, ...newState, backend_type: backendType };
+
+    if (!session.state.total_cost_usd && preserved.cost > 0) {
+      session.state.total_cost_usd = preserved.cost;
+    }
+    if (!session.state.num_turns && preserved.turns > 0) {
+      session.state.num_turns = preserved.turns;
+    }
+    if (!session.state.total_duration_api_ms && preserved.duration > 0) {
+      session.state.total_duration_api_ms = preserved.duration;
+    }
+    if (!session.state.total_lines_added && preserved.linesAdded > 0) {
+      session.state.total_lines_added = preserved.linesAdded;
+    }
+    if (!session.state.total_lines_removed && preserved.linesRemoved > 0) {
+      session.state.total_lines_removed = preserved.linesRemoved;
+    }
+    if (!session.state.codex_token_details && preserved.codexDetails) {
+      session.state.codex_token_details = preserved.codexDetails;
+    }
+    if (!session.state.claude_token_details && preserved.claudeDetails) {
+      session.state.claude_token_details = preserved.claudeDetails;
+    }
+  }
+
+  /** Persist adapter result cost/turns into session state so they survive reconnects. */
+  private persistAdapterResultData(session: Session, msg: BrowserIncomingMessage): void {
+    const resultData = (msg as { data?: CLIResultMessage }).data;
+    if (!resultData) return;
+    if (typeof resultData.total_cost_usd === "number" && resultData.total_cost_usd > (session.state.total_cost_usd || 0)) {
+      session.state.total_cost_usd = resultData.total_cost_usd;
+    }
+    if (typeof resultData.num_turns === "number") {
+      session.state.num_turns = resultData.num_turns;
+    }
+  }
+
+  /** Try to trigger auto-naming after the first successful result in a session. */
+  private tryAutoNaming(session: Session, msg: BrowserIncomingMessage): void {
+    if (msg.type !== "result") return;
+    if ((msg as { data?: { is_error?: boolean } }).data?.is_error) return;
+    if (!this.onFirstTurnCompleted) return;
+    if (this.autoNamingAttempted.has(session.id)) return;
+
+    this.autoNamingAttempted.add(session.id);
+    const firstUserMsg = session.messageHistory.find((m) => m.type === "user_message");
+    if (firstUserMsg?.type === "user_message") {
+      this.onFirstTurnCompleted(session.id, firstUserMsg.content);
+    }
+  }
+
+  /** Handle a message from an adapter (Codex/Goose/etc.) and route to browsers. */
+  private handleAdapterBrowserMessage(
+    session: Session,
+    msg: BrowserIncomingMessage,
+    backendType: BackendType,
+  ): void {
+    // Update session state based on message type
+    if (msg.type === "session_init") {
+      this.preserveSessionStatsOnInit(session, msg.session, backendType);
+      this.refreshGitInfo(session, { notifyPoller: true });
+      this.persistSession(session);
+    } else if (msg.type === "session_update") {
+      session.state = { ...session.state, ...msg.session, backend_type: backendType };
+      this.refreshGitInfo(session, { notifyPoller: true });
+      this.persistSession(session);
+    } else if (msg.type === "status_change") {
+      session.state.is_compacting = msg.status === "compacting";
+      this.persistSession(session);
+    }
+
+    // Store assistant/result messages in history for replay
+    if (msg.type === "assistant") {
+      session.messageHistory.push({ ...msg, timestamp: msg.timestamp || Date.now() });
+      this.persistSession(session);
+    } else if (msg.type === "result") {
+      this.persistAdapterResultData(session, msg);
+      session.messageHistory.push(msg);
+      this.persistSession(session);
+    }
+
+    // Handle permission requests
+    if (msg.type === "permission_request") {
+      session.pendingPermissions.set(msg.request.request_id, msg.request);
+      this.persistSession(session);
+    }
+
+    this.broadcastToBrowsers(session, msg);
+    this.tryAutoNaming(session, msg);
   }
 
   // ── CLI WebSocket handlers ──────────────────────────────────────────────
@@ -865,14 +903,15 @@ export class WsBridge {
     browserData.lastAckSeq = 0;
     // Assign viewer identity
     const viewerNum = ++this.viewerCounter;
-    browserData.viewerId = randomUUID().replace(/-/g, "").substring(0, 8);
-    browserData.viewerName = `Viewer ${viewerNum}`;
-    // First browser is the owner, subsequent ones get the role from invite token or default to collaborator
-    browserData.role = session.browserSockets.size === 0
+    const viewerId = randomUUID().replaceAll("-", "").substring(0, 8);
+    const role: SessionRole = session.browserSockets.size === 0
       ? "owner"
       : (browserData._joinRole || "collaborator");
+    browserData.viewerId = viewerId;
+    browserData.viewerName = `Viewer ${viewerNum}`;
+    browserData.role = role;
     session.browserSockets.add(ws);
-    console.log(`[ws-bridge] Browser connected for session ${sessionId} (${session.browserSockets.size} browsers, role=${browserData.role})`);
+    console.log(`[ws-bridge] Browser connected for session ${sessionId} (${session.browserSockets.size} browsers, role=${role})`);
 
     // Refresh git state on browser connect so branch changes made mid-session are reflected.
     this.refreshGitInfo(session, { notifyPoller: true });
@@ -906,8 +945,8 @@ export class WsBridge {
     // so the frontend knows whether to enable/disable voting controls.
     this.sendToBrowser(ws, {
       type: "role_assigned",
-      role: browserData.role!,
-      viewerId: browserData.viewerId!,
+      role,
+      viewerId,
     });
 
     // Send any pending permission requests
@@ -976,7 +1015,7 @@ export class WsBridge {
       return;
     }
 
-    const messageId = `openclaw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const messageId = `openclaw-${Date.now()}-${randomUUID().slice(0, 4)}`;
     this.broadcastToBrowsers(session, {
       type: "assistant",
       message: {
@@ -1121,6 +1160,40 @@ export class WsBridge {
     }
   }
 
+  // Regex to extract heredoc content from: cat > file <<'EOF'\n...\nEOF
+  // Matches both <<'EOF' and <<EOF variants
+  private static readonly HEREDOC_RE = /cat\s+>\s+\S+\s+<<'?EOF'?\n([\s\S]*?)\nEOF/g;
+
+  /** Count lines added/removed from a single tool_use block. */
+  private countLinesFromToolBlock(
+    block: { name: string; input: Record<string, unknown> },
+  ): { added: number; removed: number } {
+    const input = block.input;
+
+    if (block.name === "Write" && typeof input.content === "string") {
+      return { added: input.content.split("\n").length, removed: 0 };
+    }
+
+    if (block.name === "Edit" && typeof input.old_string === "string" && typeof input.new_string === "string") {
+      const oldLines = input.old_string.split("\n").length;
+      const newLines = input.new_string.split("\n").length;
+      const diff = newLines - oldLines;
+      return diff > 0 ? { added: diff, removed: 0 } : { added: 0, removed: -diff };
+    }
+
+    if (block.name === "Bash" && typeof input.command === "string") {
+      let addedLines = 0;
+      WsBridge.HEREDOC_RE.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = WsBridge.HEREDOC_RE.exec(input.command)) !== null) {
+        addedLines += match[1].split("\n").length;
+      }
+      return { added: addedLines, removed: 0 };
+    }
+
+    return { added: 0, removed: 0 };
+  }
+
   /**
    * Compute lines added/removed by scanning tool_use blocks in message history.
    * Handles Claude (Write/Edit), Codex (Bash heredocs), and other backends.
@@ -1130,51 +1203,24 @@ export class WsBridge {
     let added = 0;
     let removed = 0;
 
-    // Regex to extract heredoc content from: cat > file <<'EOF'\n...\nEOF
-    // Matches both <<'EOF' and <<EOF variants
-    const heredocRe = /cat\s+>\s+\S+\s+<<'?EOF'?\n([\s\S]*?)\nEOF/g;
-
     for (const histMsg of session.messageHistory) {
       if ((histMsg as any).type !== "assistant") continue;
-      const msg = histMsg as any;
-      const content = msg.message?.content;
+      const content = (histMsg as any).message?.content;
       if (!Array.isArray(content)) continue;
 
       for (const block of content) {
         if (block.type !== "tool_use") continue;
-        const input = block.input as Record<string, unknown>;
-
-        if (block.name === "Write" && typeof input.content === "string") {
-          // Write creates a new file — all lines are additions
-          const lines = (input.content as string).split("\n").length;
-          added += lines;
-        } else if (block.name === "Edit" && typeof input.old_string === "string" && typeof input.new_string === "string") {
-          // Claude Edit: replaces old_string with new_string
-          const oldLines = (input.old_string as string).split("\n").length;
-          const newLines = (input.new_string as string).split("\n").length;
-          if (newLines > oldLines) {
-            added += newLines - oldLines;
-          } else if (oldLines > newLines) {
-            removed += oldLines - newLines;
-          }
-        } else if (block.name === "Bash" && typeof input.command === "string") {
-          // Codex often creates files via: cat > file <<'EOF'\n...\nEOF
-          const cmd = input.command as string;
-          let match: RegExpExecArray | null;
-          heredocRe.lastIndex = 0;
-          while ((match = heredocRe.exec(cmd)) !== null) {
-            const heredocContent = match[1];
-            added += heredocContent.split("\n").length;
-          }
-        }
+        const delta = this.countLinesFromToolBlock(block);
+        added += delta.added;
+        removed += delta.removed;
       }
     }
 
     return { added, removed };
   }
 
-  private handleResultMessage(session: Session, msg: CLIResultMessage) {
-    // Update session cost/turns
+  /** Update session state fields from a CLI result message (cost, turns, duration, lines). */
+  private applyResultToSessionState(session: Session, msg: CLIResultMessage): void {
     // Only update cost if the new value is higher — slash commands like /cost
     // can emit result messages with total_cost_usd: 0, which would erase the
     // accumulated cost. The CLI's total_cost_usd is cumulative and should only rise.
@@ -1196,34 +1242,61 @@ export class WsBridge {
     if (typeof msg.total_lines_removed === "number") {
       session.state.total_lines_removed = msg.total_lines_removed;
     }
+  }
 
-    // Compute context usage from modelUsage and store Claude token details
-    if (msg.modelUsage) {
-      let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreation = 0;
-      let contextWindow = 0, totalCostUsd = 0;
-      for (const usage of Object.values(msg.modelUsage)) {
-        totalInput += usage.inputTokens;
-        totalOutput += usage.outputTokens;
-        totalCacheRead += usage.cacheReadInputTokens;
-        totalCacheCreation += usage.cacheCreationInputTokens;
-        totalCostUsd += usage.costUSD ?? 0;
-        if (usage.contextWindow > 0) {
-          contextWindow = usage.contextWindow;
-          const pct = Math.round(
-            ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
-          );
-          session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
-        }
+  /** Compute context usage from modelUsage and store Claude token details. */
+  private applyModelUsage(session: Session, msg: CLIResultMessage): void {
+    if (!msg.modelUsage) return;
+
+    let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreation = 0;
+    let contextWindow = 0, totalCostUsd = 0;
+    for (const usage of Object.values(msg.modelUsage)) {
+      totalInput += usage.inputTokens;
+      totalOutput += usage.outputTokens;
+      totalCacheRead += usage.cacheReadInputTokens;
+      totalCacheCreation += usage.cacheCreationInputTokens;
+      totalCostUsd += usage.costUSD ?? 0;
+      if (usage.contextWindow > 0) {
+        contextWindow = usage.contextWindow;
+        const pct = Math.round(
+          ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
+        );
+        session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
       }
-      session.state.claude_token_details = {
-        inputTokens: totalInput,
-        outputTokens: totalOutput,
-        cacheReadInputTokens: totalCacheRead,
-        cacheCreationInputTokens: totalCacheCreation,
-        contextWindow,
-        costUsd: totalCostUsd,
-      };
     }
+    session.state.claude_token_details = {
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      cacheReadInputTokens: totalCacheRead,
+      cacheCreationInputTokens: totalCacheCreation,
+      contextWindow,
+      costUsd: totalCostUsd,
+    };
+  }
+
+  /** Emit result-related webhooks (turn.completed, session.completed/failed, cost threshold). */
+  private emitResultWebhooks(session: Session, msg: CLIResultMessage): void {
+    if (!this.webhookManager) return;
+    const webhookData = {
+      backendType: session.backendType,
+      cwd: session.state.cwd,
+      model: session.state.model,
+      totalCostUsd: msg.total_cost_usd,
+      numTurns: msg.num_turns,
+      isError: msg.is_error,
+    };
+    this.webhookManager.emit("turn.completed", session.id, webhookData);
+    if (msg.is_error) {
+      this.webhookManager.emit("session.failed", session.id, webhookData);
+    } else {
+      this.webhookManager.emit("session.completed", session.id, webhookData);
+    }
+    this.webhookManager.checkCostThreshold(session.id, msg.total_cost_usd);
+  }
+
+  private handleResultMessage(session: Session, msg: CLIResultMessage) {
+    this.applyResultToSessionState(session, msg);
+    this.applyModelUsage(session, msg);
 
     // Re-check git state after each turn (also computes lines added/removed).
     this.refreshGitInfo(session, { broadcastUpdate: true, notifyPoller: true });
@@ -1256,41 +1329,10 @@ export class WsBridge {
     this.broadcastToBrowsers(session, browserMsg);
     this.persistSession(session);
 
-    // Webhook emissions
-    if (this.webhookManager) {
-      const webhookData = {
-        backendType: session.backendType,
-        cwd: session.state.cwd,
-        model: session.state.model,
-        totalCostUsd: msg.total_cost_usd,
-        numTurns: msg.num_turns,
-        isError: msg.is_error,
-      };
-      this.webhookManager.emit("turn.completed", session.id, webhookData);
-      if (!msg.is_error) {
-        this.webhookManager.emit("session.completed", session.id, webhookData);
-      } else {
-        this.webhookManager.emit("session.failed", session.id, webhookData);
-      }
-      this.webhookManager.checkCostThreshold(session.id, msg.total_cost_usd);
-    }
+    this.emitResultWebhooks(session, msg);
 
-    // Trigger auto-naming after the first successful result for this session.
-    // Note: num_turns counts all internal tool-use turns, so it's typically > 1
-    // even on the first user interaction. We track per-session instead.
-    if (
-      !msg.is_error &&
-      this.onFirstTurnCompleted &&
-      !this.autoNamingAttempted.has(session.id)
-    ) {
-      this.autoNamingAttempted.add(session.id);
-      const firstUserMsg = session.messageHistory.find(
-        (m) => m.type === "user_message",
-      );
-      if (firstUserMsg && firstUserMsg.type === "user_message") {
-        this.onFirstTurnCompleted(session.id, firstUserMsg.content);
-      }
-    }
+    // Trigger auto-naming after the first successful result
+    this.tryAutoNaming(session, browserMsg);
   }
 
   private handleStreamEvent(session: Session, msg: CLIStreamEventMessage) {
@@ -1376,6 +1418,99 @@ export class WsBridge {
     "inject_thought",
   ]);
 
+  private static readonly CI_MESSAGE_TYPES = new Set([
+    "memory_query", "memory_store", "deliberation_respond",
+    "deliberation_resolve", "route_task", "inject_thought",
+    "capability_probe_response",
+  ]);
+
+  /** Intercept CI-specific messages. Returns true if the message was consumed by CI. */
+  private interceptCIMessage(session: Session, msg: BrowserOutgoingMessage): boolean {
+    if (!this.collectiveIntelligence) return false;
+    if (!WsBridge.CI_MESSAGE_TYPES.has(msg.type)) return false;
+
+    // These are fully consumed by CI — don't forward to agent
+    this.collectiveIntelligence.processBrowserMessage(session.id, msg).catch((err) => {
+      console.warn("[ws-bridge] CI processBrowserMessage error:", err);
+    });
+    return true;
+  }
+
+  /** Route a browser message to an adapter-based backend (Codex, Goose, etc.). */
+  private routeToAdapter(
+    session: Session,
+    msg: BrowserOutgoingMessage,
+    ws?: ServerWebSocket<SocketData>,
+  ): void {
+    // Store user messages in history for replay with stable ID for dedup on reconnect
+    if (msg.type === "user_message") {
+      const ts = Date.now();
+      session.messageHistory.push({
+        type: "user_message",
+        content: msg.content,
+        timestamp: ts,
+        id: `user-${ts}-${this.userMsgCounter++}`,
+      });
+      this.persistSession(session);
+    }
+
+    // Permission responses go through voting system for multi-viewer sessions
+    if (msg.type === "permission_response") {
+      const eligibleVoters = this.countEligibleVoters(session);
+      if (eligibleVoters > 1) {
+        this.recordVote(session, msg.request_id, ws, msg.behavior, msg);
+        return;
+      }
+      session.pendingPermissions.delete(msg.request_id);
+      this.persistSession(session);
+    }
+
+    if (session.adapter) {
+      session.adapter.sendBrowserMessage(msg);
+    } else {
+      // Adapter not yet attached — queue for when it's ready.
+      console.log(`[ws-bridge] ${session.backendType} adapter not yet attached for session ${session.id}, queuing ${msg.type}`);
+      session.pendingMessages.push(JSON.stringify(msg));
+    }
+  }
+
+  /** Route a browser message to the Claude Code CLI backend. */
+  private routeToClaude(
+    session: Session,
+    msg: BrowserOutgoingMessage,
+    ws?: ServerWebSocket<SocketData>,
+  ): void {
+    switch (msg.type) {
+      case "user_message":
+        this.handleUserMessage(session, msg);
+        break;
+      case "permission_response":
+        this.handlePermissionResponse(session, msg, ws);
+        break;
+      case "interrupt":
+        this.handleInterrupt(session);
+        break;
+      case "set_model":
+        this.handleSetModel(session, msg.model);
+        break;
+      case "set_permission_mode":
+        this.handleSetPermissionMode(session, msg.mode);
+        break;
+      case "mcp_get_status":
+        this.handleMcpGetStatus(session);
+        break;
+      case "mcp_toggle":
+        this.handleMcpToggle(session, msg.serverName, msg.enabled);
+        break;
+      case "mcp_reconnect":
+        this.handleMcpReconnect(session, msg.serverName);
+        break;
+      case "mcp_set_servers":
+        this.handleMcpSetServers(session, msg.servers);
+        break;
+    }
+  }
+
   private routeBrowserMessage(
     session: Session,
     msg: BrowserOutgoingMessage,
@@ -1391,20 +1526,7 @@ export class WsBridge {
       return;
     }
 
-    // CI Layer 1-4: intercept CI-specific messages and enrich user prompts
-    if (this.collectiveIntelligence) {
-      // processBrowserMessage is async; for CI-consumed messages (returns null) we return early.
-      // For passthrough messages it returns the (possibly enriched) message synchronously-ish.
-      // We handle this with a fire-and-forget for non-blocking CI messages.
-      const ciTypes = new Set(["memory_query", "memory_store", "deliberation_respond", "deliberation_resolve", "route_task", "inject_thought", "capability_probe_response"]);
-      if (ciTypes.has(msg.type)) {
-        // These are fully consumed by CI — don't forward to agent
-        this.collectiveIntelligence.processBrowserMessage(session.id, msg).catch((err) => {
-          console.warn("[ws-bridge] CI processBrowserMessage error:", err);
-        });
-        return;
-      }
-    }
+    if (this.interceptCIMessage(session, msg)) return;
 
     // RBAC enforcement: spectators can only subscribe/ack and read MCP status
     if (ws) {
@@ -1429,79 +1551,10 @@ export class WsBridge {
       this.rememberClientMessage(session, msg.client_msg_id);
     }
 
-    // For adapter-based sessions (Codex, Goose, etc.), delegate to the adapter
-    if (session.backendType !== "claude") {
-      // Store user messages in history for replay with stable ID for dedup on reconnect
-      if (msg.type === "user_message") {
-        const ts = Date.now();
-        session.messageHistory.push({
-          type: "user_message",
-          content: msg.content,
-          timestamp: ts,
-          id: `user-${ts}-${this.userMsgCounter++}`,
-        });
-        this.persistSession(session);
-      }
-      // Permission responses go through voting system for multi-viewer sessions
-      if (msg.type === "permission_response") {
-        const eligibleVoters = this.countEligibleVoters(session);
-        if (eligibleVoters > 1) {
-          this.recordVote(session, msg.request_id, ws, msg.behavior, msg);
-          return;
-        }
-        session.pendingPermissions.delete(msg.request_id);
-        this.persistSession(session);
-      }
-
-      if (session.adapter) {
-        session.adapter.sendBrowserMessage(msg);
-      } else {
-        // Adapter not yet attached — queue for when it's ready.
-        // The adapter itself also queues during init, but this covers
-        // the window between session creation and adapter attachment.
-        console.log(`[ws-bridge] ${session.backendType} adapter not yet attached for session ${session.id}, queuing ${msg.type}`);
-        session.pendingMessages.push(JSON.stringify(msg));
-      }
-      return;
-    }
-
-    // Claude Code path (existing logic)
-    switch (msg.type) {
-      case "user_message":
-        this.handleUserMessage(session, msg);
-        break;
-
-      case "permission_response":
-        this.handlePermissionResponse(session, msg, ws);
-        break;
-
-      case "interrupt":
-        this.handleInterrupt(session);
-        break;
-
-      case "set_model":
-        this.handleSetModel(session, msg.model);
-        break;
-
-      case "set_permission_mode":
-        this.handleSetPermissionMode(session, msg.mode);
-        break;
-
-      case "mcp_get_status":
-        this.handleMcpGetStatus(session);
-        break;
-
-      case "mcp_toggle":
-        this.handleMcpToggle(session, msg.serverName, msg.enabled);
-        break;
-
-      case "mcp_reconnect":
-        this.handleMcpReconnect(session, msg.serverName);
-        break;
-
-      case "mcp_set_servers":
-        this.handleMcpSetServers(session, msg.servers);
-        break;
+    if (session.backendType === "claude") {
+      this.routeToClaude(session, msg, ws);
+    } else {
+      this.routeToAdapter(session, msg, ws);
     }
   }
 
