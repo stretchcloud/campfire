@@ -705,7 +705,7 @@ export interface InstalledAdapterInfo {
   npmPackage: string;
 }
 
-export interface AuthStatus {
+export interface LoginAuthStatus {
   enabled: boolean;
   hasPassword: boolean;
   activeSessions: number;
@@ -749,11 +749,12 @@ export interface SessionFolder {
 
 export const api = {
   // Auth
-  getAuthStatus: () => get<AuthStatus>("/auth/status"),
+  getAuthStatus: () => get<LoginAuthStatus>("/auth/status"),
   login: (password: string) => post<{ token: string }>("/auth/login", { password }),
   logout: () => post("/auth/logout"),
   setupAuth: (password: string) => post<AuthStatus & { ok: boolean }>("/auth/setup", { password }),
   disableAuth: () => post<{ ok: boolean }>("/auth/disable"),
+  setAuthPassword: (password: string) => post<{ ok: boolean }>("/auth/set-password", { password }),
 
   createSession: (opts?: CreateSessionOpts) =>
     post<{ sessionId: string; state: string; cwd: string }>(
