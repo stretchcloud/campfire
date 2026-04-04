@@ -110,23 +110,14 @@ cd campfire
 cd web
 bun install
 
-# 3a. Development mode (hot reload, frontend on :4567, backend on :14567)
-bun run dev
-
-# 3b. OR production mode (single server on :4567)
+# 3. Build and start
 bun run build
 bun run start
 ```
 
-**Development mode** starts two processes:
-- Backend on `http://localhost:14567` (auto-restarts on file changes)
-- Frontend on `http://localhost:4567` (Vite HMR, proxies API/WS to backend)
+Open [http://localhost:4567](http://localhost:4567). That's it.
 
-Open [http://localhost:4567](http://localhost:4567) in development mode.
-
-**Production mode** builds the frontend into static files and serves everything from a single server:
-
-Open [http://localhost:4567](http://localhost:4567) in production mode.
+> **Contributing?** Use `bun run dev` for hot reload during frontend development. See the [Development](#development) section for details.
 
 ### Option 3: Docker
 
@@ -155,9 +146,9 @@ docker build -t campfire:latest .
 # Run the container
 docker run -d \
   --name campfire \
-  -p 3456:4567 \
+  -p 4567:4567 \
   -v campfire-data:/home/campfire/.campfire \
-  -v campfire-sessions:/tmp/vibe-sessions \
+  --restart unless-stopped \
   campfire:latest
 ```
 
@@ -1808,7 +1799,7 @@ All state is file-based — no database required:
 
 | Data | Location | Format |
 |------|----------|--------|
-| Sessions | `$TMPDIR/vibe-sessions/` (override: `CAMPFIRE_SESSION_DIR`) | JSON per session |
+| Sessions | `~/.campfire/sessions/` | JSON per session |
 | Recordings | `~/.campfire/recordings/` | JSONL per session |
 | Environments | `~/.campfire/envs/` | JSON per profile |
 | Cron jobs | `~/.campfire/cron/` | JSON per job |
@@ -1839,7 +1830,7 @@ The included `Dockerfile` uses a multi-stage build:
 docker build -t campfire:latest .
 
 # Verify it works
-docker run --rm -p 3456:4567 campfire:latest
+docker run --rm -p 4567:4567 campfire:latest
 ```
 
 ### Using Docker Compose
@@ -1874,10 +1865,9 @@ services:
   campfire:
     build: .
     ports:
-      - "3456:4567"
+      - "4567:4567"
     volumes:
       - campfire-data:/home/campfire/.campfire
-      - campfire-sessions:/tmp/vibe-sessions
     environment:
       - NODE_ENV=production
       - PORT=4567
@@ -1892,19 +1882,18 @@ volumes:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3456` | Server port |
+| `PORT` | `4567` | Server port |
 | `NODE_ENV` | `production` | Environment mode |
 | `CAMPFIRE_RECORD` | `1` | Enable protocol recording (`0` to disable) |
 | `CAMPFIRE_RECORDINGS_DIR` | `~/.campfire/recordings` | Recording output directory |
 | `CAMPFIRE_RECORDINGS_MAX_LINES` | `100000` | Auto-rotation threshold |
-| `CAMPFIRE_SESSION_DIR` | `$TMPDIR/vibe-sessions` | Override session persistence directory |
+| `CAMPFIRE_SESSION_DIR` | `~/.campfire/sessions` | Override session persistence directory |
 
 ### Volumes
 
 | Path | Purpose |
 |------|---------|
-| `/home/campfire/.campfire` | Persistent data (envs, cron, gallery, webhooks, adapters, settings) |
-| `/tmp/vibe-sessions` | Session state (survives container restarts) |
+| `/home/campfire/.campfire` | All persistent data (sessions, settings, envs, agents, recordings, webhooks, gallery) |
 
 ### Running with Agent CLIs
 
@@ -1917,10 +1906,9 @@ services:
   campfire:
     build: .
     ports:
-      - "3456:4567"
+      - "4567:4567"
     volumes:
       - campfire-data:/home/campfire/.campfire
-      - campfire-sessions:/tmp/vibe-sessions
       # Mount agent CLIs from host
       - /usr/local/bin/claude:/usr/local/bin/claude:ro
       - /usr/local/bin/codex:/usr/local/bin/codex:ro
@@ -2011,7 +1999,7 @@ Commands:
   help                          Show help
 
 Options:
-  --port <n>                    Override default port (default: 3456)
+  --port <n>                    Override default port (default: 4567)
 ```
 
 ### Examples

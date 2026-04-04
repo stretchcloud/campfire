@@ -73,7 +73,7 @@ Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJS
   - `index.ts` — Server bootstrap, Bun.serve with dual WebSocket upgrade (CLI vs browser)
   - `ws-bridge.ts` — Core message router. Maintains per-session state (CLI socket, browser sockets, message history, pending permissions). Parses NDJSON from CLI, translates to typed JSON for browsers.
   - `cli-launcher.ts` — Spawns/kills/relaunches Claude Code CLI processes. Handles `--resume` for session recovery. Persists session state across server restarts.
-  - `session-store.ts` — JSON file persistence to `$TMPDIR/vibe-sessions/`. Debounced writes.
+  - `session-store.ts` — JSON file persistence to `~/.campfire/sessions/`. Debounced writes.
   - `session-types.ts` — All TypeScript types for CLI messages (NDJSON), browser messages, session state, permissions.
   - `routes.ts` — REST API: session CRUD, filesystem browsing, environment management.
   - `env-manager.ts` — CRUD for environment profiles stored in `~/.campfire/envs/`.
@@ -96,7 +96,7 @@ Full protocol documentation is in `WEBSOCKET_PROTOCOL_REVERSED.md`.
 
 ### Session Lifecycle
 
-Sessions persist to disk (`$TMPDIR/vibe-sessions/`) and survive server restarts. On restart, live CLI processes are detected by PID and given a grace period to reconnect their WebSocket. If they don't, they're killed and relaunched with `--resume` using the CLI's internal session ID.
+Sessions persist to disk (`~/.campfire/sessions/`) and survive server restarts. On restart, live CLI processes are detected by PID and given a grace period to reconnect their WebSocket. If they don't, they're killed and relaunched with `--resume` using the CLI's internal session ID.
 
 ### Raw Protocol Recordings
 
@@ -240,7 +240,7 @@ Browser (React 19) ←→ WebSocket ←→ Hono Server (Bun) ←→ Agent Backen
 - Creates git worktrees for branch isolation
 
 **`session-store.ts`** - Disk Persistence
-- Debounced JSON writes to `$TMPDIR/vibe-sessions/` (150ms delay to batch rapid changes)
+- Debounced JSON writes to `~/.campfire/sessions/` (150ms delay to batch rapid changes)
 - Persists per session: state, message history, pending permissions, event buffer, processed client message IDs
 - Sessions survive server restarts
 - `launcher.json` stores launcher state separately
@@ -454,7 +454,7 @@ All state is file-based (no database):
 
 | Data | Location | Format |
 |------|----------|--------|
-| Sessions | `$TMPDIR/vibe-sessions/` | JSON per session |
+| Sessions | `~/.campfire/sessions/` | JSON per session |
 | Recordings | `~/.campfire/recordings/` | JSONL per session |
 | Environments | `~/.campfire/envs/` | JSON per profile |
 | Cron jobs | `~/.campfire/cron/` | JSON per job |
