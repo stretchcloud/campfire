@@ -9,6 +9,8 @@ import type { RecorderManager } from "../recorder.js";
 import type { CronScheduler } from "../cron-scheduler.js";
 import type { WebhookManager } from "../webhook-manager.js";
 import type { AdapterRegistry } from "../adapter-registry.js";
+import type { AgentExecutor } from "../agent-executor.js";
+import type { ProtocolMonitor } from "../protocol-monitor.js";
 
 export interface RouteDeps {
   launcher: CliLauncher;
@@ -21,6 +23,8 @@ export interface RouteDeps {
   cronScheduler?: CronScheduler;
   webhookManager?: WebhookManager;
   adapterRegistry?: AdapterRegistry;
+  agentExecutor?: AgentExecutor;
+  protocolMonitor?: ProtocolMonitor;
 }
 
 export type RegisterRoutes = (api: Hono, deps: RouteDeps) => void;

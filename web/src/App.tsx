@@ -10,7 +10,13 @@ import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
 import { DiffPanel } from "./components/DiffPanel.js";
+import { FilesPanel } from "./components/FilesPanel.js";
 import { Playground } from "./components/Playground.js";
+import { SessionLaunchProgress } from "./components/SessionLaunchProgress.js";
+import { RecordingHub } from "./components/RecordingHub.js";
+import { ProtocolMonitorPage } from "./components/ProtocolMonitorPage.js";
+import { CommandsPage } from "./components/CommandsPage.js";
+import { OnboardingWizard } from "./components/OnboardingWizard.js";
 // UpdateBanner removed — not relevant for the Campfire fork
 import { SettingsPage } from "./components/SettingsPage.js";
 import { EnvManager } from "./components/EnvManager.js";
@@ -21,7 +27,7 @@ import { GalleryPage } from "./components/GalleryPage.js";
 import { WebhookManager } from "./components/WebhookManager.js";
 import { AdapterManager } from "./components/AdapterManager.js";
 import { ClawHubBrowser } from "./components/ClawHubBrowser.js";
-import { AgentProfilesPage } from "./components/AgentProfilesPage.js";
+import { AgentsPage } from "./components/AgentsPage.js";
 import { PublicReplayPage } from "./components/PublicReplayPage.js";
 import { PromptsPage } from "./components/PromptsPage.js";
 import { IntegrationsPage } from "./components/IntegrationsPage.js";
@@ -45,6 +51,7 @@ function useHash() {
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     api.getAuthStatus().then((status) => {
@@ -62,6 +69,13 @@ export default function App() {
       // If we can't reach the server, just show the app
       setAuthChecked(true);
     });
+  }, []);
+
+  // Check if onboarding is needed
+  useEffect(() => {
+    api.getSettings().then((s) => {
+      if (!s.onboardingCompleted) setShowOnboarding(true);
+    }).catch(() => {});
   }, []);
 
   const darkMode = useStore((s) => s.darkMode);
@@ -84,6 +98,9 @@ export default function App() {
   const isTerminalPage = hash === "#/terminal";
   const isEnvironmentsPage = hash === "#/environments";
   const isScheduledPage = hash === "#/scheduled";
+  const isHubPage = hash === "#/hub";
+  const isMonitorPage = hash === "#/monitor";
+  const isCommandsPage = hash === "#/commands";
   const isGalleryPage = hash === "#/gallery" || hash.startsWith("#/gallery?");
   const gallerySessionId = isGalleryPage
     ? new URLSearchParams(hash.replace(/^#\/gallery\??/, "")).get("session") || undefined
@@ -97,7 +114,7 @@ export default function App() {
   const isWebhooksPage = hash === "#/webhooks";
   const isAdaptersPage = hash === "#/adapters";
   const isClawHubPage = hash === "#/clawhub";
-  const isAgentProfilesPage = hash === "#/agents";
+  const isAgentsPage = hash === "#/agents";
   const isPromptsPage = hash === "#/prompts";
   const isIntegrationsPage = hash === "#/integrations";
   const isLinearSettingsPage = hash === "#/integrations/linear";
@@ -118,7 +135,7 @@ export default function App() {
   const publicReplayMatch = hash.match(/^#\/public-replay\/(.+)$/);
   const isPublicReplayPage = !!publicReplayMatch;
 
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentProfilesPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isKanbanPage && !isSkillsPage && !isReplayPage && !isPublicReplayPage;
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentsPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isKanbanPage && !isSkillsPage && !isReplayPage && !isPublicReplayPage && !isHubPage && !isMonitorPage && !isCommandsPage;
 
   useEffect(() => {
     capturePageView(hash || "#/");
@@ -258,6 +275,21 @@ export default function App() {
               <GalleryPage embedded prefillSessionId={gallerySessionId} prefillName={gallerySessionName} />
             </div>
           )}
+          {isHubPage && (
+            <div className="absolute inset-0 overflow-y-auto">
+              <RecordingHub embedded />
+            </div>
+          )}
+          {isMonitorPage && (
+            <div className="absolute inset-0 overflow-y-auto">
+              <ProtocolMonitorPage embedded />
+            </div>
+          )}
+          {isCommandsPage && (
+            <div className="absolute inset-0 overflow-y-auto">
+              <CommandsPage embedded />
+            </div>
+          )}
 
           {isWebhooksPage && (
             <div className="absolute inset-0">
@@ -277,9 +309,9 @@ export default function App() {
             </div>
           )}
 
-          {isAgentProfilesPage && (
+          {isAgentsPage && (
             <div className="absolute inset-0">
-              <AgentProfilesPage embedded />
+              <AgentsPage embedded />
             </div>
           )}
 
@@ -370,6 +402,13 @@ export default function App() {
                   <DiffPanel sessionId={currentSessionId} />
                 </div>
               )}
+
+              {/* Files tab */}
+              {currentSessionId && activeTab === "files" && (
+                <div className="absolute inset-0">
+                  <FilesPanel sessionId={currentSessionId} />
+                </div>
+              )}
             </>
           )}
         </div>
@@ -398,6 +437,11 @@ export default function App() {
           </div>
         </>
       )}
+      {/* Global session launch progress toast */}
+      <SessionLaunchProgress />
+
+      {/* Onboarding wizard (first run only) */}
+      {showOnboarding && <OnboardingWizard onComplete={() => setShowOnboarding(false)} />}
     </div>
   );
 }

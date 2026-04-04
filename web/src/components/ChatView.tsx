@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { MessageFeed } from "./MessageFeed.js";
 import { Composer } from "./Composer.js";
 import { PermissionBanner } from "./PermissionBanner.js";
+import { SessionPulse } from "./SessionPulse.js";
 
 export function ChatView({ sessionId }: { sessionId: string }) {
   const sessionPerms = useStore((s) => s.pendingPermissions.get(sessionId));
@@ -18,7 +19,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
   );
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 relative">
       {/* CLI disconnected banner */}
       {connStatus === "connected" && !cliConnected && (
         <div className="px-4 py-1.5 bg-cc-warning/5 border-b border-cc-border text-center flex items-center justify-center gap-3">
@@ -59,6 +60,9 @@ export function ChatView({ sessionId }: { sessionId: string }) {
 
       {/* Composer */}
       <Composer sessionId={sessionId} />
+
+      {/* Floating background sessions indicator */}
+      <SessionPulse />
     </div>
   );
 }

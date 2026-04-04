@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, McpServerDetail, SessionRole, PresenceViewer, PermissionVote, VotingPolicy } from "./types.js";
+import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, BackgroundAgentItem, McpServerDetail, SessionRole, PresenceViewer, PermissionVote, VotingPolicy } from "./types.js";
 import type { UpdateInfo, PRStatusResponse } from "./api.js";
 
 interface AppState {
@@ -33,6 +33,9 @@ interface AppState {
 
   // Tasks per session
   sessionTasks: Map<string, TaskItem[]>;
+
+  // Background agents per session (Agent tool calls with run_in_background)
+  sessionBackgroundAgents: Map<string, BackgroundAgentItem[]>;
 
   // Files changed by the agent per session (Edit/Write tool calls)
   changedFiles: Map<string, Set<string>>;
@@ -87,7 +90,7 @@ interface AppState {
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
-  activeTab: "chat" | "diff";
+  activeTab: "chat" | "diff" | "files";
   diffPanelSelectedFile: Map<string, string>;
 
   // Actions
@@ -123,6 +126,10 @@ interface AppState {
   addTask: (sessionId: string, task: TaskItem) => void;
   setTasks: (sessionId: string, tasks: TaskItem[]) => void;
   updateTask: (sessionId: string, taskId: string, updates: Partial<TaskItem>) => void;
+
+  // Background agent actions
+  addBackgroundAgent: (sessionId: string, agent: BackgroundAgentItem) => void;
+  updateBackgroundAgent: (sessionId: string, toolUseId: string, updates: Partial<BackgroundAgentItem>) => void;
 
   // Changed files actions
   addChangedFile: (sessionId: string, filePath: string) => void;
@@ -181,7 +188,7 @@ interface AppState {
   dismissUpdate: (version: string) => void;
 
   // Diff panel actions
-  setActiveTab: (tab: "chat" | "diff") => void;
+  setActiveTab: (tab: "chat" | "diff" | "files") => void;
   setDiffPanelSelectedFile: (sessionId: string, filePath: string | null) => void;
 
   // Terminal state
@@ -270,6 +277,7 @@ export const useStore = create<AppState>((set) => ({
   sessionStatus: new Map(),
   previousPermissionMode: new Map(),
   sessionTasks: new Map(),
+  sessionBackgroundAgents: new Map(),
   changedFiles: new Map(),
   sessionNames: getInitialSessionNames(),
   recentlyRenamed: new Set(),
@@ -391,6 +399,8 @@ export const useStore = create<AppState>((set) => ({
       pendingPermissions.delete(sessionId);
       const sessionTasks = new Map(s.sessionTasks);
       sessionTasks.delete(sessionId);
+      const sessionBackgroundAgents = new Map(s.sessionBackgroundAgents);
+      sessionBackgroundAgents.delete(sessionId);
       const changedFiles = new Map(s.changedFiles);
       changedFiles.delete(sessionId);
       const sessionNames = new Map(s.sessionNames);
@@ -433,6 +443,7 @@ export const useStore = create<AppState>((set) => ({
         previousPermissionMode,
         pendingPermissions,
         sessionTasks,
+        sessionBackgroundAgents,
         changedFiles,
         sessionNames,
         recentlyRenamed,
@@ -577,6 +588,27 @@ export const useStore = create<AppState>((set) => ({
         );
       }
       return { sessionTasks };
+    }),
+
+  addBackgroundAgent: (sessionId, agent) =>
+    set((s) => {
+      const sessionBackgroundAgents = new Map(s.sessionBackgroundAgents);
+      const agents = [...(sessionBackgroundAgents.get(sessionId) || []), agent];
+      sessionBackgroundAgents.set(sessionId, agents);
+      return { sessionBackgroundAgents };
+    }),
+
+  updateBackgroundAgent: (sessionId, toolUseId, updates) =>
+    set((s) => {
+      const sessionBackgroundAgents = new Map(s.sessionBackgroundAgents);
+      const agents = sessionBackgroundAgents.get(sessionId);
+      if (agents) {
+        sessionBackgroundAgents.set(
+          sessionId,
+          agents.map((a) => (a.toolUseId === toolUseId ? { ...a, ...updates } : a)),
+        );
+      }
+      return { sessionBackgroundAgents };
     }),
 
   addChangedFile: (sessionId, filePath) =>
@@ -850,6 +882,7 @@ export const useStore = create<AppState>((set) => ({
       sessionStatus: new Map(),
       previousPermissionMode: new Map(),
       sessionTasks: new Map(),
+      sessionBackgroundAgents: new Map(),
       changedFiles: new Map(),
       sessionNames: new Map(),
       recentlyRenamed: new Set(),

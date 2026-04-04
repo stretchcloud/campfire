@@ -3,6 +3,8 @@ import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import type { SessionRole, PresenceViewer } from "../types.js";
+import { ModelSwitcher } from "./ModelSwitcher.js";
+import { ProviderSwitcher } from "./ProviderSwitcher.js";
 
 // Stable empty references to avoid infinite re-renders from Zustand selectors
 // (Object.is([], []) is false, so returning new [] on every selector call triggers re-renders)
@@ -321,6 +323,17 @@ export function TopBar() {
                 <span className="text-[9px] text-cc-warning tabular-nums">{changedFilesCount}</span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab("files")}
+              aria-pressed={activeTab === "files"}
+              className={`text-[11px] px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                activeTab === "files"
+                  ? "text-cc-fg bg-cc-active"
+                  : "text-cc-muted hover:text-cc-fg"
+              }`}
+            >
+              Files
+            </button>
           </div>
 
           {/* Cost */}
@@ -331,6 +344,15 @@ export function TopBar() {
             >
               ${totalCost < 0.01 ? totalCost.toFixed(4) : totalCost.toFixed(2)}
             </span>
+          )}
+
+          {/* Provider + Model switcher */}
+          {!isSpectator && (
+            <div className="flex items-center gap-0.5">
+              <ProviderSwitcher sessionId={currentSessionId} />
+              <span className="text-cc-border text-[10px] select-none">/</span>
+              <ModelSwitcher sessionId={currentSessionId} />
+            </div>
           )}
 
           {/* Overflow menu -- hidden for spectators */}
@@ -380,7 +402,7 @@ export function TopBar() {
                         </svg>
                       </button>
                       {shareMenuOpen && (
-                        <div className="absolute left-full top-0 ml-1 bg-cc-card border border-cc-border rounded-md shadow-panel py-1 min-w-[150px]">
+                        <div className="absolute right-full top-0 mr-1 bg-cc-card border border-cc-border rounded-md shadow-panel py-1 min-w-[150px]">
                           <button
                             onClick={() => handleShare("collaborator")}
                             className="w-full text-left px-3 py-1.5 text-[11px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer font-mono-code"
