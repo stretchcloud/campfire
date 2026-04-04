@@ -70,6 +70,8 @@ export interface SdkSessionInfo {
   cronJobId?: string;
   /** Human-readable name of the cron job that spawned this session */
   cronJobName?: string;
+  /** Environment variables injected at session creation (persisted for relaunch) */
+  sessionEnv?: Record<string, string>;
 }
 
 export interface LaunchOptions {
@@ -289,6 +291,11 @@ export class CliLauncher {
       info.codexReasoningEffort = options.codexReasoningEffort;
     }
 
+    // Persist env vars so they survive server restarts and relaunches
+    if (options.env && Object.keys(options.env).length > 0) {
+      info.sessionEnv = options.env;
+    }
+
     // Store worktree metadata if provided
     if (options.worktreeInfo) {
       info.isWorktree = options.worktreeInfo.isWorktree;
@@ -344,6 +351,9 @@ export class CliLauncher {
 
     info.state = "starting";
 
+    // Persisted env vars are re-injected on every relaunch
+    const relaunchEnv = info.sessionEnv;
+
     if (info.backendType === "codex") {
       this.spawnCodex(sessionId, info, {
         model: info.model,
@@ -352,36 +362,42 @@ export class CliLauncher {
         codexSandbox: info.codexSandbox,
         codexInternetAccess: info.codexInternetAccess,
         codexReasoningEffort: info.codexReasoningEffort,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "goose") {
       this.spawnGoose(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "aider") {
       this.spawnAider(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "openhands") {
       this.spawnOpenHands(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "openclaw") {
       this.spawnOpenClaw(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "opencode") {
       this.spawnOpenCode(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else {
       this.spawnCLI(sessionId, info, {
@@ -389,6 +405,7 @@ export class CliLauncher {
         permissionMode: info.permissionMode,
         cwd: info.cwd,
         resumeSessionId: info.cliSessionId,
+        env: relaunchEnv,
       });
     }
     return true;

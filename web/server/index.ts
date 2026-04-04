@@ -100,6 +100,7 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   if (info && info.state !== "starting") {
     relaunchingSet.add(sessionId);
     console.log(`[server] Auto-relaunching CLI for session ${sessionId}`);
+    wsBridge.notifyLaunching(sessionId);
     try {
       await launcher.relaunch(sessionId);
     } finally {
@@ -314,6 +315,7 @@ if (starting.length > 0) {
     for (const info of stale) {
       if (info.archived) continue;
       console.log(`[server] CLI for session ${info.sessionId} did not reconnect, relaunching...`);
+      wsBridge.notifyLaunching(info.sessionId);
       await launcher.relaunch(info.sessionId);
     }
   }, RECONNECT_GRACE_MS);
