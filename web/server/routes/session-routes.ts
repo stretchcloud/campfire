@@ -9,6 +9,156 @@ import { seedClaudeAuth } from "../claude-container-auth.js";
 import { seedCodexAuth } from "../codex-container-auth.js";
 import { pullImage, imageExistsLocally } from "../image-pull-manager.js";
 
+/**
+ * Resolve environment variables from an envSlug and inject global provider tokens.
+ * Returns the merged env vars (or undefined if none).
+ */
+function resolveEnvVars(
+  envSlug: string | undefined,
+  bodyEnv: Record<string, string> | undefined,
+  backend: string,
+): Record<string, string> | undefined {
+  let envVars: Record<string, string> | undefined = bodyEnv;
+
+  if (envSlug) {
+    const campfireEnv = envManager.getEnv(envSlug);
+    if (campfireEnv) {
+      console.log(
+        `[routes] Injecting env "${campfireEnv.name}" (${Object.keys(campfireEnv.variables).length} vars):`,
+        Object.keys(campfireEnv.variables).join(", "),
+      );
+      envVars = { ...campfireEnv.variables, ...bodyEnv };
+    } else {
+      console.warn(
+        `[routes] Environment "${envSlug}" not found, ignoring`,
+      );
+    }
+  }
+
+  const globalSettings = getSettings();
+  if (backend === "claude" && globalSettings.claudeOAuthToken && !envVars?.["CLAUDE_CODE_OAUTH_TOKEN"]) {
+    envVars = { ...envVars, CLAUDE_CODE_OAUTH_TOKEN: globalSettings.claudeOAuthToken };
+  }
+  if (backend === "codex" && globalSettings.openaiApiKey && !envVars?.["OPENAI_API_KEY"]) {
+    envVars = { ...envVars, OPENAI_API_KEY: globalSettings.openaiApiKey };
+  }
+  if (globalSettings.anthropicApiKey && !envVars?.["ANTHROPIC_API_KEY"]) {
+    envVars = { ...envVars, ANTHROPIC_API_KEY: globalSettings.anthropicApiKey };
+  }
+
+  return envVars;
+}
+
+interface WorktreeResult {
+  cwd: string;
+  worktreeInfo?: {
+    isWorktree: boolean;
+    repoRoot: string;
+    branch: string;
+    actualBranch: string;
+    worktreePath: string;
+  };
+}
+
+/**
+ * Set up a git worktree (or checkout a branch in-place) for a session.
+ * Returns the resolved cwd and optional worktreeInfo.
+ */
+function setupWorktree(
+  cwd: string,
+  branch: string | undefined,
+  useWorktree: boolean | undefined,
+  createBranch: boolean | undefined,
+): WorktreeResult {
+  if (!branch) return { cwd };
+
+  if (useWorktree) {
+    return createWorktreeForBranch(cwd, branch, createBranch);
+  }
+
+  checkoutBranchInPlace(cwd, branch);
+  return { cwd };
+}
+
+/** Create a git worktree for the given branch, returning updated cwd and worktreeInfo. */
+function createWorktreeForBranch(
+  cwd: string,
+  branch: string,
+  createBranch: boolean | undefined,
+): WorktreeResult {
+  const repoInfo = gitUtils.getRepoInfo(cwd);
+  if (!repoInfo) return { cwd };
+
+  const result = gitUtils.ensureWorktree(
+    repoInfo.repoRoot,
+    branch,
+    {
+      baseBranch: repoInfo.defaultBranch,
+      createBranch,
+      forceNew: true,
+    },
+  );
+  return {
+    cwd: result.worktreePath,
+    worktreeInfo: {
+      isWorktree: true,
+      repoRoot: repoInfo.repoRoot,
+      branch,
+      actualBranch: result.actualBranch,
+      worktreePath: result.worktreePath,
+    },
+  };
+}
+
+/** Checkout a branch in-place (fetch, checkout, pull). */
+function checkoutBranchInPlace(cwd: string, branch: string): void {
+  const repoInfo = gitUtils.getRepoInfo(cwd);
+  if (!repoInfo) return;
+
+  const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
+  if (!fetchResult.success) {
+    throw new Error(`git fetch failed before session create: ${fetchResult.output}`);
+  }
+  if (repoInfo.currentBranch !== branch) {
+    gitUtils.checkoutBranch(repoInfo.repoRoot, branch);
+  }
+  const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
+  if (!pullResult.success) {
+    console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
+  }
+}
+
+/**
+ * Create a container and seed authentication credentials.
+ * Returns the ContainerInfo if a container was requested, undefined otherwise.
+ */
+function setupContainer(
+  containerOpts: { image?: string; ports?: unknown[]; volumes?: string[]; env?: Record<string, string> } | undefined,
+  cwd: string,
+  backend: string,
+): ContainerInfo | undefined {
+  if (!containerOpts) return undefined;
+
+  const cConfig: ContainerConfig = {
+    image: containerOpts.image || "campfire-dev:latest",
+    ports: Array.isArray(containerOpts.ports)
+      ? containerOpts.ports.map(Number).filter((n: number) => n > 0)
+      : [],
+    volumes: containerOpts.volumes,
+    env: containerOpts.env,
+  };
+  const containerId = crypto.randomUUID().slice(0, 8);
+  const containerInfo = containerManager.createContainer(containerId, cwd, cConfig);
+
+  if (backend === "claude") {
+    seedClaudeAuth(containerInfo.containerId);
+  } else if (backend === "codex") {
+    seedCodexAuth(containerInfo.containerId);
+  }
+
+  return containerInfo;
+}
+
 export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
   const { launcher, wsBridge, sessionStore, worktreeTracker, prPoller } = deps;
 
@@ -21,111 +171,15 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
         return c.json({ error: `Invalid backend: ${String(backend)}` }, 400);
       }
 
-      // Resolve environment variables from envSlug
-      let envVars: Record<string, string> | undefined = body.env;
-      if (body.envSlug) {
-        const campfireEnv = envManager.getEnv(body.envSlug);
-        if (campfireEnv) {
-          console.log(
-            `[routes] Injecting env "${campfireEnv.name}" (${Object.keys(campfireEnv.variables).length} vars):`,
-            Object.keys(campfireEnv.variables).join(", "),
-          );
-          envVars = { ...campfireEnv.variables, ...body.env };
-        } else {
-          console.warn(
-            `[routes] Environment "${body.envSlug}" not found, ignoring`,
-          );
-        }
-      }
+      const envVars = resolveEnvVars(body.envSlug, body.env, backend);
 
-      // Auto-inject provider tokens from global settings (if not already set by env profile)
-      const globalSettings = getSettings();
-      if (backend === "claude" && globalSettings.claudeOAuthToken && !envVars?.["CLAUDE_CODE_OAUTH_TOKEN"]) {
-        envVars = { ...envVars, CLAUDE_CODE_OAUTH_TOKEN: globalSettings.claudeOAuthToken };
-      }
-      if (backend === "codex" && globalSettings.openaiApiKey && !envVars?.["OPENAI_API_KEY"]) {
-        envVars = { ...envVars, OPENAI_API_KEY: globalSettings.openaiApiKey };
-      }
-      if (globalSettings.anthropicApiKey && !envVars?.["ANTHROPIC_API_KEY"]) {
-        envVars = { ...envVars, ANTHROPIC_API_KEY: globalSettings.anthropicApiKey };
-      }
+      const worktreeResult: WorktreeResult = body.cwd
+        ? setupWorktree(body.cwd, body.branch, body.useWorktree, body.createBranch)
+        : { cwd: body.cwd };
+      const cwd = worktreeResult.cwd;
+      const worktreeInfo = worktreeResult.worktreeInfo;
 
-      let cwd = body.cwd;
-      let worktreeInfo:
-        | {
-            isWorktree: boolean;
-            repoRoot: string;
-            branch: string;
-            actualBranch: string;
-            worktreePath: string;
-          }
-        | undefined;
-
-      // If worktree is requested, set up a worktree for the selected branch
-      if (body.useWorktree && body.branch && cwd) {
-        const repoInfo = gitUtils.getRepoInfo(cwd);
-        if (repoInfo) {
-          const result = gitUtils.ensureWorktree(
-            repoInfo.repoRoot,
-            body.branch,
-            {
-              baseBranch: repoInfo.defaultBranch,
-              createBranch: body.createBranch,
-              forceNew: true,
-            },
-          );
-          cwd = result.worktreePath;
-          worktreeInfo = {
-            isWorktree: true,
-            repoRoot: repoInfo.repoRoot,
-            branch: body.branch,
-            actualBranch: result.actualBranch,
-            worktreePath: result.worktreePath,
-          };
-        }
-      } else if (body.branch && cwd) {
-        // Non-worktree: checkout the selected branch in-place
-        const repoInfo = gitUtils.getRepoInfo(cwd);
-        if (repoInfo) {
-          const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
-          if (!fetchResult.success) {
-            throw new Error(`git fetch failed before session create: ${fetchResult.output}`);
-          }
-
-          if (repoInfo.currentBranch !== body.branch) {
-            gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
-          }
-
-          const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
-          if (!pullResult.success) {
-            console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
-          }
-        }
-      }
-
-      // If container mode requested, create and start the container
-      let containerInfo: ContainerInfo | undefined;
-      if (body.container) {
-        const cConfig: ContainerConfig = {
-          image: body.container.image || "campfire-dev:latest",
-          ports: Array.isArray(body.container.ports)
-            ? body.container.ports.map(Number).filter((n: number) => n > 0)
-            : [],
-          volumes: body.container.volumes,
-          env: body.container.env,
-        };
-        const containerId = crypto.randomUUID().slice(0, 8);
-        containerInfo = containerManager.createContainer(containerId, cwd, cConfig);
-      }
-
-      // Seed auth BEFORE launch so the container has credentials ready
-      if (containerInfo) {
-        if (backend === "claude") {
-          seedClaudeAuth(containerInfo.containerId);
-        } else if (backend === "codex") {
-          seedCodexAuth(containerInfo.containerId);
-        }
-      }
+      const containerInfo = setupContainer(body.container, cwd, backend);
 
       const session = launcher.launch({
         model: body.model,
@@ -164,7 +218,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
 
       return c.json(session);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : "Unknown error";
       console.error("[routes] Failed to create session:", msg);
       return c.json({ error: msg }, 500);
     }
@@ -318,7 +372,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
       wsBridge.seedMessageHistory(session.sessionId, forkedHistory);
       return c.json({ ...session, forkedFrom: sourceId });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : "Unknown error";
       console.error("[routes] Failed to fork session:", msg);
       return c.json({ error: msg }, 500);
     }
@@ -404,43 +458,19 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
             }
           }
 
-          // Step 3: Create container
+          // Step 3: Create container and seed auth
           sendEvent("step", { step: "creating_container", message: "Creating container..." });
           const cwd = body.cwd || process.cwd();
-          let containerInfo: ContainerInfo | undefined;
-          if (body.container) {
-            const cConfig: ContainerConfig = {
-              image,
-              ports: Array.isArray(body.container.ports)
-                ? body.container.ports.map(Number).filter((n: number) => n > 0)
-                : [],
-              volumes: body.container.volumes,
-              env: body.container.env,
-            };
-            const containerId = crypto.randomUUID().slice(0, 8);
-            containerInfo = containerManager.createContainer(containerId, cwd, cConfig);
-          }
+          const containerInfo = setupContainer(body.container, cwd, backend);
 
-          // Step 4: Seed auth
           if (containerInfo) {
             sendEvent("step", { step: "seeding_auth", message: "Seeding authentication..." });
-            if (backend === "claude") {
-              seedClaudeAuth(containerInfo.containerId);
-            } else if (backend === "codex") {
-              seedCodexAuth(containerInfo.containerId);
-            }
           }
 
-          // Step 5: Launch agent
+          // Step 4: Launch agent
           sendEvent("step", { step: "launching_agent", message: "Launching agent..." });
 
-          let envVars: Record<string, string> | undefined = body.env;
-          if (body.envSlug) {
-            const campfireEnv = envManager.getEnv(body.envSlug);
-            if (campfireEnv) {
-              envVars = { ...campfireEnv.variables, ...body.env };
-            }
-          }
+          const envVars = resolveEnvVars(body.envSlug, body.env, backend);
 
           const session = launcher.launch({
             model: body.model,
@@ -465,7 +495,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
 
           sendEvent("done", { sessionId: session.sessionId, session });
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
+          const msg = err instanceof Error ? err.message : "Unknown error";
           sendEvent("error", { error: msg });
         } finally {
           controller.close();
