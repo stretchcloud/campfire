@@ -254,8 +254,8 @@ function BashDisplay({ input }: { input: Record<string, unknown> }) {
   return (
     <div className="space-y-1.5">
       {desc && <div className="text-xs text-cc-muted">{desc}</div>}
-      <pre className="text-sm text-cc-fg font-mono-code bg-cc-code-bg rounded-xl border border-cc-border px-4 py-3 max-h-40 overflow-y-auto overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
-        <span className="text-cc-muted select-none">$ </span>{command}
+      <pre className="text-sm text-cc-code-fg font-mono-code bg-cc-code-bg rounded-xl border border-cc-border px-4 py-3 max-h-40 overflow-y-auto overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
+        <span className="text-cc-code-fg/50 select-none">$ </span>{command}
       </pre>
     </div>
   );

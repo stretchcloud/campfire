@@ -289,6 +289,7 @@ export class WsBridge {
   private votingPolicy: VotingPolicy = "majority-rules";
   private store: SessionStore | null = null;
   private recorder: RecorderManager | null = null;
+  private protocolMonitor: import("./protocol-monitor.js").ProtocolMonitor | null = null;
   private webhookManager: import("./webhook-manager.js").WebhookManager | null = null;
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
@@ -394,6 +395,11 @@ export class WsBridge {
   /** Attach a persistent store. Call restoreFromDisk() after. */
   setStore(store: SessionStore): void {
     this.store = store;
+  }
+
+  /** Attach a protocol monitor for real-time metrics. */
+  setProtocolMonitor(monitor: import("./protocol-monitor.js").ProtocolMonitor): void {
+    this.protocolMonitor = monitor;
   }
 
   /** Attach a recorder for raw message capture. */
@@ -818,6 +824,7 @@ export class WsBridge {
 
     // Record raw incoming CLI message before any parsing
     this.recorder?.record(sessionId, "in", data, "cli", session.backendType, session.state.cwd);
+    this.protocolMonitor?.recordMessage(sessionId, "in", "cli", "cli_message", session.backendType);
 
     // NDJSON: split on newlines, parse each line
     const lines = data.split("\n").filter((l) => l.trim());
@@ -936,6 +943,7 @@ export class WsBridge {
 
     // Record raw incoming browser message
     this.recorder?.record(sessionId, "in", data, "browser", session.backendType, session.state.cwd);
+    this.protocolMonitor?.recordMessage(sessionId, "in", "browser", "browser_message", session.backendType);
 
     let msg: BrowserOutgoingMessage;
     try {
@@ -1990,6 +1998,7 @@ export class WsBridge {
 
     // Record raw outgoing browser message
     this.recorder?.record(session.id, "out", json, "browser", session.backendType, session.state.cwd);
+    this.protocolMonitor?.recordMessage(session.id, "out", "browser", msg.type, session.backendType);
 
     for (const ws of session.browserSockets) {
       try {

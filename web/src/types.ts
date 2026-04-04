@@ -48,6 +48,27 @@ export interface TaskItem {
   blockedBy?: string[];
 }
 
+export type BackgroundAgentStatus = "running" | "completed" | "failed";
+
+export interface BackgroundAgentItem {
+  /** The tool_use_id of the Agent tool call that spawned this */
+  toolUseId: string;
+  /** Agent name (from the `name` or `description` input field) */
+  name: string;
+  /** Short description (from the `description` input field) */
+  description: string;
+  /** Agent type (e.g., "Explore", "general-purpose") */
+  agentType: string;
+  /** Current status */
+  status: BackgroundAgentStatus;
+  /** Timestamp when detected */
+  startedAt: number;
+  /** Timestamp when completed/failed */
+  completedAt?: number;
+  /** Result summary (truncated) */
+  summary?: string;
+}
+
 export interface SdkSessionInfo {
   sessionId: string;
   pid?: number;

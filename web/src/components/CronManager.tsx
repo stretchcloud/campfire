@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { api, type CronJobInfo } from "../api.js";
+
+const CodeEditor = lazy(() => import("./CodeEditor.js").then((m) => ({ default: m.CodeEditor })));
 import { getModelsForBackend, getDefaultModel, toModelOptions, type ModelOption } from "../utils/backends.js";
 import { FolderPicker } from "./FolderPicker.js";
 
@@ -603,15 +605,20 @@ function JobForm({
         className="w-full px-3 py-2 text-sm bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
       />
 
-      {/* Prompt */}
-      <textarea
-        value={form.prompt}
-        onChange={(e) => update({ prompt: e.target.value })}
-        placeholder="Prompt for the session (e.g. Run the test suite and fix any failures)"
-        rows={4}
-        className="w-full px-3 py-2 text-sm bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50 resize-y"
-        style={{ minHeight: "100px" }}
-      />
+      {/* Prompt (Monaco Editor) */}
+      <div>
+        <Suspense fallback={<div className="h-[150px] rounded-xl border border-cc-border flex items-center justify-center text-cc-muted text-[12px]">Loading editor...</div>}>
+          <CodeEditor
+            value={form.prompt}
+            onChange={(val) => update({ prompt: val })}
+            language="markdown"
+            height="150px"
+            minimap={false}
+            wordWrap
+            ariaLabel="Cron job prompt editor"
+          />
+        </Suspense>
+      </div>
 
       {/* Schedule type toggle */}
       <div className="space-y-2">

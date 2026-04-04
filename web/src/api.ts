@@ -193,6 +193,16 @@ export interface ContainerStatus {
   version: string | null;
 }
 
+export interface ContainerInfoApi {
+  containerId: string;
+  name: string;
+  image: string;
+  portMappings: Array<{ containerPort: number; hostPort: number }>;
+  hostCwd: string;
+  containerCwd: string;
+  state: "creating" | "running" | "stopped" | "removed";
+}
+
 export interface CloudProviderPlan {
   provider: "modal";
   sessionId: string;
@@ -314,6 +324,15 @@ export interface AppSettings {
   openrouterModel: string;
   moltbookApiKeyConfigured: boolean;
   linearApiKeyConfigured: boolean;
+  claudeOAuthTokenConfigured: boolean;
+  openaiApiKeyConfigured: boolean;
+  anthropicApiKeyConfigured: boolean;
+  onboardingCompleted: boolean;
+}
+
+export interface AuthStatus {
+  claude: { authenticated: boolean; method: string | null };
+  codex: { authenticated: boolean; method: string | null };
 }
 
 export interface GitHubPRInfo {
@@ -366,6 +385,146 @@ export interface CronJobExecution {
   success?: boolean;
   error?: string;
   costUsd?: number;
+}
+
+// ─── Agent Profiles ──────────────────────────────────────────────────────────
+
+export interface AgentProfileInfo {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  backendType: "claude" | "codex" | "goose" | "aider" | "openhands" | "openclaw" | "opencode";
+  model: string;
+  permissionMode: string;
+  cwd: string;
+  prompt: string;
+  triggers?: {
+    webhook?: { enabled: boolean };
+    schedule?: { enabled: boolean; expression: string; recurring: boolean };
+  };
+  envSlug?: string;
+  env?: Record<string, string>;
+  mcpServers?: Record<string, unknown>;
+  codexInternetAccess?: boolean;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastRunAt?: number;
+  lastSessionId?: string;
+  totalRuns: number;
+  consecutiveFailures: number;
+  isRunning?: boolean;
+  nextRunAt?: number | null;
+}
+
+export interface AgentExecutionInfo {
+  executionId: string;
+  agentId: string;
+  sessionId: string;
+  input?: string;
+  trigger: "manual" | "webhook" | "schedule";
+  startedAt: number;
+  completedAt?: number;
+  success?: boolean;
+  error?: string;
+  costUsd?: number;
+}
+
+// ─── Recording Hub ──────────────────────────────────────────────────────────
+
+export interface HubRecordingMeta {
+  id: string;
+  filename: string;
+  filePath: string;
+  sessionId: string;
+  backendType: string;
+  startedAt: number;
+  duration: number;
+  entryCount: number;
+  tags: string[];
+  importedAt: number;
+  messageTypeSummary: Record<string, number>;
+}
+
+export interface HubRecordingSummary extends HubRecordingMeta {
+  toolNames: string[];
+  permissionCount: number;
+}
+
+export interface ValidationResult {
+  compatible: boolean;
+  backendType: string;
+  totalMessages: number;
+  checkedMessages: number;
+  diffs: Array<{ entryIndex: number; messageType: string; kind: string; field?: string; details: string }>;
+  messageTypeBreakdown: Record<string, { count: number; issues: number }>;
+}
+
+export interface DiagnosticsReport {
+  sessionId: string;
+  backendType: string;
+  totalDuration: number;
+  totalMessages: number;
+  messageRate: number;
+  disconnections: Array<{ ts: number; channel: string; gapMs: number; messagesLostEstimate: number }>;
+  dataGaps: Array<{ startTs: number; endTs: number; gapMs: number; channel: string }>;
+  patterns: string[];
+  permissionTimings: Array<{ requestTs: number; responseTs: number | null; responseTimeMs: number | null; toolName: string }>;
+  avgPermissionResponseMs: number | null;
+  messageTypeDistribution: Record<string, number>;
+}
+
+// ─── Protocol Monitor ────────────────────────────────────────────────────────
+
+export interface MonitorSnapshot {
+  uptime: number;
+  totalMessages: number;
+  totalErrors: number;
+  globalMessagesPerMinute: number;
+  activeSessions: number;
+  sessionStats: Array<{
+    sessionId: string;
+    backendType: string;
+    messageCount: number;
+    errorCount: number;
+    messagesPerMinute: number;
+    lastMessageAt: number;
+    messageTypes: Record<string, number>;
+  }>;
+  recentDrifts: Array<{
+    sessionId: string;
+    backendType: string;
+    direction: string;
+    messageType: string;
+    details: string;
+    timestamp: number;
+  }>;
+  messageTypeGlobal: Record<string, number>;
+  backendBreakdown: Record<string, { messages: number; errors: number }>;
+}
+
+// ─── Commands Discovery ─────────────────────────────────────────────────────
+
+export interface DiscoveredCommand {
+  name: string;
+  description: string;
+  source: "user" | "project";
+  path: string;
+}
+
+export interface DiscoveredSkill {
+  slug: string;
+  name: string;
+  description: string;
+  path: string;
+}
+
+export interface CommandsDiscoveryResult {
+  commands: DiscoveredCommand[];
+  skills: DiscoveredSkill[];
+  slashCommandNames: string[];
+  skillSlugs: string[];
 }
 
 export interface GalleryEntryInfo {
@@ -651,8 +810,9 @@ export const api = {
 
   // Settings
   getSettings: () => get<AppSettings>("/settings"),
-  updateSettings: (data: { openrouterApiKey?: string; openrouterModel?: string; moltbookApiKey?: string; linearApiKey?: string }) =>
+  updateSettings: (data: Record<string, string | boolean>) =>
     put<AppSettings>("/settings", data),
+  getProviderAuthStatus: () => get<AuthStatus>("/settings/auth-status"),
 
   // Git operations
   getRepoInfo: (path: string) =>
@@ -724,6 +884,8 @@ export const api = {
   // Containers
   getContainerStatus: () => get<ContainerStatus>("/containers/status"),
   getContainerImages: () => get<string[]>("/containers/images"),
+  listContainers: () => get<ContainerInfoApi[]>("/containers/list"),
+  stopContainer: (sessionId: string) => post<{ ok: boolean }>(`/containers/${encodeURIComponent(sessionId)}/stop`),
   getCloudProviderPlan: (provider: "modal", cwd: string, sessionId: string) =>
     get<CloudProviderPlan>(
       `/cloud/providers/${encodeURIComponent(provider)}/plan?cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}`,
@@ -819,6 +981,44 @@ export const api = {
   runCronJob: (id: string) => post(`/cron/jobs/${encodeURIComponent(id)}/run`),
   getCronJobExecutions: (id: string) =>
     get<CronJobExecution[]>(`/cron/jobs/${encodeURIComponent(id)}/executions`),
+
+  // Agent profiles
+  listAgents: () => get<AgentProfileInfo[]>("/agents"),
+  getAgentProfile: (id: string) => get<AgentProfileInfo>(`/agents/${encodeURIComponent(id)}`),
+  createAgent: (data: Partial<AgentProfileInfo>) => post<AgentProfileInfo>("/agents", data),
+  updateAgentProfile: (id: string, data: Partial<AgentProfileInfo>) =>
+    put<AgentProfileInfo>(`/agents/${encodeURIComponent(id)}`, data),
+  deleteAgent: (id: string) => del(`/agents/${encodeURIComponent(id)}`),
+  toggleAgent: (id: string) => post<AgentProfileInfo>(`/agents/${encodeURIComponent(id)}/toggle`),
+  runAgent: (id: string, input?: string) =>
+    post<{ ok: boolean; executionId: string; sessionId: string }>(`/agents/${encodeURIComponent(id)}/run`, { input }),
+  getAgentExecutions: (id: string) =>
+    get<AgentExecutionInfo[]>(`/agents/${encodeURIComponent(id)}/executions`),
+  exportAgent: (id: string) => get<Partial<AgentProfileInfo>>(`/agents/${encodeURIComponent(id)}/export`),
+  importAgent: (data: Record<string, unknown>) => post<AgentProfileInfo>("/agents/import", data),
+
+  // Commands Discovery
+  discoverCommands: (cwd?: string) =>
+    get<CommandsDiscoveryResult>(`/commands${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`),
+  readCommand: (path: string) =>
+    get<{ path: string; content: string }>(`/commands/read?path=${encodeURIComponent(path)}`),
+  getSlashCommands: () =>
+    get<{ commands: string[]; source: string }>("/commands/slash"),
+
+  // Protocol Monitor
+  getMonitorStats: () => get<MonitorSnapshot>("/monitor/stats"),
+
+  // Recording Hub
+  listHubRecordings: () => get<HubRecordingMeta[]>("/hub/recordings"),
+  getHubRecording: (id: string) => get<HubRecordingMeta>(`/hub/recordings/${encodeURIComponent(id)}`),
+  getHubSummary: (id: string) => get<HubRecordingSummary>(`/hub/recordings/${encodeURIComponent(id)}/summary`),
+  updateHubTags: (id: string, tags: string[]) => put<HubRecordingMeta>(`/hub/recordings/${encodeURIComponent(id)}/tags`, { tags }),
+  deleteHubRecording: (id: string) => del(`/hub/recordings/${encodeURIComponent(id)}`),
+  uploadHubRecording: (content: string, filename?: string) => post<HubRecordingMeta>("/hub/recordings/upload", { content, filename }),
+  importHubRecording: (filename: string) => post<HubRecordingMeta>("/hub/recordings/import", { filename }),
+  indexAllRecordings: () => post<{ ok: boolean; imported: number }>("/hub/recordings/index-all"),
+  validateRecording: (id: string) => get<ValidationResult>(`/hub/recordings/${encodeURIComponent(id)}/validate`),
+  getRecordingDiagnostics: (id: string) => get<DiagnosticsReport>(`/hub/recordings/${encodeURIComponent(id)}/diagnostics`),
 
   // Voting policy
   getVotingPolicy: () =>

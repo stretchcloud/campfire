@@ -5,10 +5,11 @@ import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "..
 
 /* ─── Tab Types ─────────────────────────────────────────────────── */
 
-type SettingsTab = "general" | "api-keys" | "notifications" | "appearance" | "updates";
+type SettingsTab = "general" | "providers" | "api-keys" | "notifications" | "appearance" | "updates";
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: "general", label: "General" },
+  { id: "providers", label: "Providers" },
   { id: "api-keys", label: "API Keys" },
   { id: "notifications", label: "Notifications" },
   { id: "appearance", label: "Appearance" },
@@ -79,6 +80,15 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [configured, setConfigured] = useState(false);
   const [moltbookApiKey, setMoltbookApiKey] = useState("");
   const [moltbookConfigured, setMoltbookConfigured] = useState(false);
+  // Provider tokens
+  const [claudeOAuthToken, setClaudeOAuthToken] = useState("");
+  const [claudeConfigured, setClaudeConfigured] = useState(false);
+  const [openaiApiKey, setOpenaiApiKey] = useState("");
+  const [openaiConfigured, setOpenaiConfigured] = useState(false);
+  const [anthropicApiKey, setAnthropicApiKey] = useState("");
+  const [anthropicConfigured, setAnthropicConfigured] = useState(false);
+  const [providerSaving, setProviderSaving] = useState(false);
+  const [providerSaved, setProviderSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -105,6 +115,9 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         setConfigured(s.openrouterApiKeyConfigured);
         setOpenrouterModel(s.openrouterModel || "openrouter/free");
         setMoltbookConfigured(s.moltbookApiKeyConfigured);
+        setClaudeConfigured(s.claudeOAuthTokenConfigured ?? false);
+        setOpenaiConfigured(s.openaiApiKeyConfigured ?? false);
+        setAnthropicConfigured(s.anthropicApiKeyConfigured ?? false);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -254,6 +267,118 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 </div>
               </SettingsCard>
             </>
+          )}
+
+          {/* ── Providers Tab ─────────────────────────────────────── */}
+          {activeTab === "providers" && (
+            <div className="space-y-5">
+              <SettingsCard title="AI Provider Tokens" description="Tokens are auto-injected into sessions for matching backends. Environment profiles take precedence.">
+                <div className="space-y-4">
+                  {/* Claude Code OAuth Token */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor="claude-oauth" className="text-[12px] font-medium text-cc-fg">Claude Code OAuth Token</label>
+                      <span className={`text-[10px] font-medium px-1.5 rounded-full ${claudeConfigured ? "text-cc-success bg-cc-success/10" : "text-cc-muted bg-cc-hover"}`}>
+                        {claudeConfigured ? "Configured" : "Not set"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-cc-muted mb-1.5">Injected as <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">CLAUDE_CODE_OAUTH_TOKEN</code> for Claude sessions</p>
+                    <input
+                      id="claude-oauth"
+                      type="password"
+                      value={claudeOAuthToken}
+                      onChange={(e) => setClaudeOAuthToken(e.target.value)}
+                      placeholder={claudeConfigured ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (configured)" : "Paste token from claude setup-token"}
+                      className="w-full h-9 px-3 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-fg font-mono-code"
+                    />
+                  </div>
+
+                  {/* OpenAI API Key */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor="openai-key" className="text-[12px] font-medium text-cc-fg">OpenAI API Key</label>
+                      <span className={`text-[10px] font-medium px-1.5 rounded-full ${openaiConfigured ? "text-cc-success bg-cc-success/10" : "text-cc-muted bg-cc-hover"}`}>
+                        {openaiConfigured ? "Configured" : "Not set"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-cc-muted mb-1.5">Injected as <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">OPENAI_API_KEY</code> for Codex sessions</p>
+                    <input
+                      id="openai-key"
+                      type="password"
+                      value={openaiApiKey}
+                      onChange={(e) => setOpenaiApiKey(e.target.value)}
+                      placeholder={openaiConfigured ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (configured)" : "sk-..."}
+                      className="w-full h-9 px-3 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-fg font-mono-code"
+                    />
+                  </div>
+
+                  {/* Anthropic API Key */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor="anthropic-key" className="text-[12px] font-medium text-cc-fg">Anthropic API Key</label>
+                      <span className={`text-[10px] font-medium px-1.5 rounded-full ${anthropicConfigured ? "text-cc-success bg-cc-success/10" : "text-cc-muted bg-cc-hover"}`}>
+                        {anthropicConfigured ? "Configured" : "Not set"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-cc-muted mb-1.5">Injected as <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">ANTHROPIC_API_KEY</code> for all sessions (Goose, Aider, etc.)</p>
+                    <input
+                      id="anthropic-key"
+                      type="password"
+                      value={anthropicApiKey}
+                      onChange={(e) => setAnthropicApiKey(e.target.value)}
+                      placeholder={anthropicConfigured ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (configured)" : "sk-ant-api03-..."}
+                      className="w-full h-9 px-3 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-fg font-mono-code"
+                    />
+                  </div>
+                </div>
+              </SettingsCard>
+
+              {/* Save button */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setProviderSaving(true);
+                    setError("");
+                    try {
+                      const patch: Record<string, string> = {};
+                      if (claudeOAuthToken.trim()) patch.claudeOAuthToken = claudeOAuthToken.trim();
+                      if (openaiApiKey.trim()) patch.openaiApiKey = openaiApiKey.trim();
+                      if (anthropicApiKey.trim()) patch.anthropicApiKey = anthropicApiKey.trim();
+                      if (Object.keys(patch).length === 0) return;
+                      const res = await api.updateSettings(patch);
+                      setClaudeConfigured(res.claudeOAuthTokenConfigured ?? false);
+                      setOpenaiConfigured(res.openaiApiKeyConfigured ?? false);
+                      setAnthropicConfigured(res.anthropicApiKeyConfigured ?? false);
+                      setClaudeOAuthToken("");
+                      setOpenaiApiKey("");
+                      setAnthropicApiKey("");
+                      setProviderSaved(true);
+                      setTimeout(() => setProviderSaved(false), 1800);
+                    } catch (err: unknown) {
+                      setError(err instanceof Error ? err.message : "Save failed");
+                    } finally {
+                      setProviderSaving(false);
+                    }
+                  }}
+                  disabled={providerSaving}
+                  className="px-4 py-1.5 rounded-lg bg-cc-primary text-white text-[12px] font-medium hover:bg-cc-primary-hover transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  {providerSaving ? "Saving..." : "Save Providers"}
+                </button>
+                {providerSaved && <span className="text-[11px] text-cc-success">Saved</span>}
+                {error && activeTab === "providers" && <span className="text-[11px] text-cc-error">{error}</span>}
+              </div>
+
+              {/* Info note */}
+              <div className="rounded-lg border border-cc-border/40 bg-cc-hover/30 px-4 py-3">
+                <p className="text-[11px] text-cc-muted leading-relaxed">
+                  Provider tokens are automatically injected into new sessions for the matching backend.
+                  If an environment profile already sets the same variable, the profile value takes precedence.
+                  Tokens are stored in <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">~/.campfire/settings.json</code>.
+                </p>
+              </div>
+            </div>
           )}
 
           {/* ── API Keys Tab ──────────────────────────────────────── */}

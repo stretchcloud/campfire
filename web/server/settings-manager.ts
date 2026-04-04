@@ -16,11 +16,20 @@ export interface CampfireSettings {
   openrouterModel: string;
   moltbookApiKey: string;
   linearApiKey: string;
+  // Provider tokens — auto-injected into sessions for matching backends
+  /** Claude Code OAuth token (injected as CLAUDE_CODE_OAUTH_TOKEN for Claude sessions) */
+  claudeOAuthToken: string;
+  /** OpenAI API key (injected as OPENAI_API_KEY for Codex sessions) */
+  openaiApiKey: string;
+  /** Anthropic API key (injected as ANTHROPIC_API_KEY — used by Claude, Goose, Aider, etc.) */
+  anthropicApiKey: string;
   // Collective Intelligence: embedding provider for semantic memory
   embeddingProvider: EmbeddingProvider;
   embeddingApiKey: string;    // OpenAI API key (if provider = "openai")
   embeddingModel: string;     // e.g. "text-embedding-3-small" or "nomic-embed-text"
   embeddingBaseUrl: string;   // Ollama base URL (if provider = "ollama"), default http://localhost:11434
+  /** Whether the onboarding wizard has been completed or skipped */
+  onboardingCompleted: boolean;
   updatedAt: number;
 }
 
@@ -33,10 +42,14 @@ let settings: CampfireSettings = {
   openrouterModel: DEFAULT_OPENROUTER_MODEL,
   moltbookApiKey: "",
   linearApiKey: "",
+  claudeOAuthToken: "",
+  openaiApiKey: "",
+  anthropicApiKey: "",
   embeddingProvider: "none",
   embeddingApiKey: "",
   embeddingModel: "",
   embeddingBaseUrl: "http://localhost:11434",
+  onboardingCompleted: false,
   updatedAt: 0,
 };
 
@@ -49,12 +62,16 @@ function normalize(raw: Partial<CampfireSettings> | null | undefined): CampfireS
         : DEFAULT_OPENROUTER_MODEL,
     moltbookApiKey: typeof raw?.moltbookApiKey === "string" ? raw.moltbookApiKey : "",
     linearApiKey: typeof raw?.linearApiKey === "string" ? raw.linearApiKey : "",
+    claudeOAuthToken: typeof raw?.claudeOAuthToken === "string" ? raw.claudeOAuthToken : "",
+    openaiApiKey: typeof raw?.openaiApiKey === "string" ? raw.openaiApiKey : "",
+    anthropicApiKey: typeof raw?.anthropicApiKey === "string" ? raw.anthropicApiKey : "",
     embeddingProvider: (raw?.embeddingProvider === "openai" || raw?.embeddingProvider === "ollama") ? raw.embeddingProvider : "none",
     embeddingApiKey: typeof raw?.embeddingApiKey === "string" ? raw.embeddingApiKey : "",
     embeddingModel: typeof raw?.embeddingModel === "string" ? raw.embeddingModel : "",
     embeddingBaseUrl: typeof raw?.embeddingBaseUrl === "string" && raw.embeddingBaseUrl.trim()
       ? raw.embeddingBaseUrl
       : "http://localhost:11434",
+    onboardingCompleted: raw?.onboardingCompleted === true,
     updatedAt: typeof raw?.updatedAt === "number" ? raw.updatedAt : 0,
   };
 }
@@ -83,7 +100,7 @@ export function getSettings(): CampfireSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CampfireSettings, "openrouterApiKey" | "openrouterModel" | "moltbookApiKey" | "linearApiKey" | "embeddingProvider" | "embeddingApiKey" | "embeddingModel" | "embeddingBaseUrl">>,
+  patch: Partial<Pick<CampfireSettings, "openrouterApiKey" | "openrouterModel" | "moltbookApiKey" | "linearApiKey" | "claudeOAuthToken" | "openaiApiKey" | "anthropicApiKey" | "embeddingProvider" | "embeddingApiKey" | "embeddingModel" | "embeddingBaseUrl" | "onboardingCompleted">>,
 ): CampfireSettings {
   ensureLoaded();
   settings = {

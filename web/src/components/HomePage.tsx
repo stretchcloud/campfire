@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "../store.js";
 import { api, type CampfireEnv, type GitRepoInfo, type GitBranchInfo, type BackendInfo } from "../api.js";
-import { connectSession, waitForConnection, sendToSession } from "../ws.js";
-import { disconnectSession } from "../ws.js";
+import { connectSession, waitForConnection, sendToSession, disconnectSession } from "../ws.js";
 import { generateUniqueSessionName } from "../utils/names.js";
 import { getRecentDirs, addRecentDir } from "../utils/recent-dirs.js";
 import { getModelsForBackend, getModesForBackend, getDefaultModel, getDefaultMode, toModelOptions, type ModelOption } from "../utils/backends.js";
@@ -32,6 +31,13 @@ function readFileAsBase64(file: File): Promise<{ base64: string; mediaType: stri
 }
 
 let idCounter = 0;
+
+function backendButtonClass(available: boolean, isSelected: boolean): string {
+  if (!available) return "text-cc-muted/40 cursor-not-allowed";
+  if (isSelected) return "bg-cc-card text-cc-fg font-semibold shadow-md cursor-pointer";
+  return "text-cc-muted hover:text-cc-fg cursor-pointer";
+}
+
 
 export function HomePage() {
   const [text, setText] = useState("");
@@ -87,11 +93,30 @@ export function HomePage() {
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState("");
 
-  // Container mode state
-  const [useContainer, setUseContainer] = useState(false);
-  const [containerImage, setContainerImage] = useState("campfire-dev:latest");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
+
+  // Dynamic slash commands — fetched from CLI (server handles session lookup or temp spin-up)
+  const [slashCommands, setSlashCommands] = useState<string[]>([]);
+  const slashFetched = useRef(false);
+  useEffect(() => {
+    if (slashFetched.current) return;
+    slashFetched.current = true;
+    api.getSlashCommands().then((r) => {
+      if (r.commands.length > 0) setSlashCommands(r.commands);
+    }).catch(() => {});
+  }, []);
+
+  const slashFiltered = useMemo(() => {
+    if (!slashOpen) return [];
+    const match = text.match(/^\/(\S*)$/);
+    if (!match) return [];
+    const q = match[1].toLowerCase();
+    if (q === "") return slashCommands;
+    return slashCommands.filter((c) => c.toLowerCase().includes(q));
+  }, [text, slashOpen, slashCommands]);
   const branchDropdownRef = useRef<HTMLDivElement>(null);
 
   const setCurrentSession = useStore((s) => s.setCurrentSession);
@@ -99,7 +124,7 @@ export function HomePage() {
 
   // Auto-focus textarea (desktop only -- on mobile it triggers the keyboard immediately)
   useEffect(() => {
-    const isDesktop = window.matchMedia("(min-width: 640px)").matches;
+    const isDesktop = globalThis.matchMedia("(min-width: 640px)").matches;
     if (isDesktop) {
       textareaRef.current?.focus();
     }
@@ -181,8 +206,6 @@ export function HomePage() {
   }, [gitRepoInfo]);
 
 
-  const selectedModel = MODELS.find((m) => m.value === model) || MODELS[0];
-  const selectedMode = MODES.find((m) => m.value === mode) || MODES[0];
   const dirLabel = cwd ? cwd.split("/").pop() || cwd : "Select folder";
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -220,13 +243,47 @@ export function HomePage() {
   }
 
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    setText(e.target.value);
+    const val = e.target.value;
+    setText(val);
     const ta = e.target;
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 300) + "px";
+    // Open slash menu if text starts with /
+    setSlashOpen(val.match(/^\/\S*$/) !== null);
+    setSlashIndex(0);
+  }
+
+  function selectSlashCommand(cmd: string) {
+    setText(`/${cmd} `);
+    setSlashOpen(false);
+    textareaRef.current?.focus();
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    // Slash menu keyboard navigation
+    if (slashOpen && slashFiltered.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashIndex((i) => Math.min(i + 1, slashFiltered.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        selectSlashCommand(slashFiltered[slashIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSlashOpen(false);
+        return;
+      }
+    }
+
     if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
       const currentModes = getModesForBackend(backend);
@@ -292,41 +349,8 @@ export function HomePage() {
         codexReasoningEffort: backend === "codex" ? codexReasoningEffort : undefined,
       };
 
-      let sessionId: string;
-
-      if (useContainer) {
-        // Container mode: use SSE creation with progress overlay
-        const store = useStore.getState();
-        store.setSessionCreating(true);
-        store.setCreationProgress(null);
-        store.setCreationError(null);
-
-        try {
-          const result = await api.createSessionWithProgress(
-            { ...baseOpts, container: { image: containerImage } },
-            ({ type, data }) => {
-              if (type === "step") {
-                useStore.getState().setCreationProgress({
-                  step: data.step as string,
-                  message: data.message as string,
-                  percent: data.percent as number | undefined,
-                });
-              }
-            },
-          );
-          if (!result) throw new Error("Session creation returned no result");
-          sessionId = result.sessionId;
-          useStore.getState().setSessionCreating(false);
-        } catch (e) {
-          useStore.getState().setCreationError(e instanceof Error ? e.message : String(e));
-          setSending(false);
-          return;
-        }
-      } else {
-        // Standard session creation
-        const result = await api.createSession(baseOpts);
-        sessionId = result.sessionId;
-      }
+      const result = await api.createSession(baseOpts);
+      const sessionId = result.sessionId;
 
       // Assign a random session name
       const existingNames = new Set(useStore.getState().sessionNames.values());
@@ -363,7 +387,7 @@ export function HomePage() {
         timestamp: Date.now(),
       });
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : "Unknown error");
       setSending(false);
     }
   }
@@ -394,7 +418,7 @@ export function HomePage() {
       setPulling(false);
       await doCreateSession(text.trim());
     } catch (e: unknown) {
-      setPullError(e instanceof Error ? e.message : String(e));
+      setPullError(e instanceof Error ? e.message : "Unknown error");
       setPulling(false);
     }
   }
@@ -443,15 +467,15 @@ export function HomePage() {
           {/* Image thumbnails */}
           {images.length > 0 && (
             <div className="flex items-center gap-2 px-4 pt-3 flex-wrap">
-              {images.map((img, i) => (
-                <div key={i} className="relative group">
+              {images.map((img, imgIdx) => (
+                <div key={img.name} className="relative group">
                   <img
                     src={`data:${img.mediaType};base64,${img.base64}`}
                     alt={img.name}
                     className="w-14 h-14 rounded-xl object-cover border border-cc-border shadow-sm"
                   />
                   <button
-                    onClick={() => removeImage(i)}
+                    onClick={() => removeImage(imgIdx)}
                     aria-label={`Remove ${img.name}`}
                     className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                   >
@@ -474,6 +498,25 @@ export function HomePage() {
             className="hidden"
             aria-label="Upload images"
           />
+
+          {/* Slash command autocomplete */}
+          {slashOpen && slashFiltered.length > 0 && (
+            <ul className="mx-4 mb-1 max-h-48 overflow-y-auto rounded-xl border border-cc-border bg-cc-card shadow-float py-1 list-none m-0 p-0 py-1" aria-label="Slash commands">
+              {slashFiltered.map((cmd, i) => (
+                <li key={cmd}>
+                  <button
+                    onMouseDown={(e) => { e.preventDefault(); selectSlashCommand(cmd); }}
+                    aria-pressed={i === slashIndex}
+                    className={`w-full text-left px-3 py-1.5 text-[13px] font-mono-code cursor-pointer transition-colors ${
+                      i === slashIndex ? "bg-cc-primary/10 text-cc-primary" : "text-cc-fg hover:bg-cc-hover"
+                    }`}
+                  >
+                    /{cmd}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* Textarea */}
           <textarea
@@ -503,11 +546,7 @@ export function HomePage() {
                     aria-checked={backend === b.id}
                     title={b.available ? b.name : `${b.name} CLI not found in PATH`}
                     className={`px-3 py-1.5 text-[12px] rounded-lg transition-colors whitespace-nowrap shrink-0 ${
-                      !b.available
-                        ? "text-cc-muted/40 cursor-not-allowed"
-                        : backend === b.id
-                          ? "bg-cc-card text-cc-fg font-semibold shadow-md cursor-pointer"
-                          : "text-cc-muted hover:text-cc-fg cursor-pointer"
+                      backendButtonClass(b.available, backend === b.id)
                     }`}
                   >
                     {b.name}
@@ -640,8 +679,9 @@ export function HomePage() {
 
               {/* Folder / cwd */}
               <div>
-                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Working directory</label>
+                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="cwd-picker">Working directory</label>
                 <button
+                  id="cwd-picker"
                   onClick={() => setShowFolderPicker(true)}
                   className="w-full flex items-center gap-1.5 px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer text-left"
                 >
@@ -662,8 +702,9 @@ export function HomePage() {
               {/* Branch picker */}
               {gitRepoInfo && (
                 <div className="relative" ref={branchDropdownRef}>
-                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Branch</label>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="branch-picker">Branch</label>
                   <button
+                    id="branch-picker"
                     onClick={() => {
                       if (!showBranchDropdown && gitRepoInfo) {
                         api.gitFetch(gitRepoInfo.repoRoot)
@@ -802,8 +843,9 @@ export function HomePage() {
               {/* Worktree toggle */}
               {gitRepoInfo && (
                 <div>
-                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Worktree</label>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="worktree-toggle">Worktree</label>
                   <button
+                    id="worktree-toggle"
                     onClick={() => setUseWorktree(!useWorktree)}
                     className={`w-full flex items-center gap-1.5 px-3 py-2 text-[12px] rounded-xl border transition-colors cursor-pointer ${
                       useWorktree
@@ -820,45 +862,13 @@ export function HomePage() {
                 </div>
               )}
 
-              {/* Container toggle */}
-              <div>
-                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Container</label>
-                <button
-                  onClick={() => setUseContainer(!useContainer)}
-                  className={`w-full flex items-center gap-1.5 px-3 py-2 text-[12px] rounded-xl border transition-colors cursor-pointer ${
-                    useContainer
-                      ? "bg-cc-primary/10 border-cc-primary/30 text-cc-primary font-medium"
-                      : "bg-cc-bg border-cc-border text-cc-fg hover:bg-cc-hover"
-                  }`}
-                  title="Run session in a Docker container"
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 shrink-0 opacity-70">
-                    <path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.186.186 0 00-.185.186v1.887c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.888c0 .102.082.185.185.186m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.887c0 .102.082.186.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.186.186 0 00-.185.185v1.887c0 .102.083.186.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.186.186 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.186.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.186v1.887c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.186v1.887c0 .102.083.185.185.185m-2.964 0h2.119a.186.186 0 00.185-.185V9.006a.186.186 0 00-.185-.186H5.136a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.687 11.687 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.228 12.228 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288z" />
-                  </svg>
-                  {useContainer ? "Enabled" : "Disabled"}
-                </button>
-              </div>
-
-              {/* Container image (shown when container mode active) */}
-              {useContainer && (
-                <div>
-                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="container-image">Docker image</label>
-                  <input
-                    id="container-image"
-                    type="text"
-                    value={containerImage}
-                    onChange={(e) => setContainerImage(e.target.value)}
-                    placeholder="Docker image"
-                    className="w-full px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg focus:outline-none focus:border-cc-primary/50"
-                  />
-                </div>
-              )}
 
               {/* Codex: internet access */}
               {backend === "codex" && (
                 <div>
-                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Internet access</label>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="internet-toggle">Internet access</label>
                   <button
+                    id="internet-toggle"
                     onClick={() => {
                       const next = !codexInternetAccess;
                       setCodexInternetAccess(next);
@@ -882,8 +892,8 @@ export function HomePage() {
               {/* Codex: reasoning effort */}
               {backend === "codex" && (
                 <div>
-                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Reasoning effort</label>
-                  <div className="flex rounded-lg border border-cc-border overflow-hidden">
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="reasoning-effort">Reasoning effort</label>
+                  <div id="reasoning-effort" className="flex rounded-lg border border-cc-border overflow-hidden">
                     {(["low", "medium", "high"] as const).map((level) => (
                       <button
                         key={level}
@@ -917,7 +927,7 @@ export function HomePage() {
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-cc-fg leading-snug">
                   <span className="font-mono-code font-medium">{pullPrompt.branchName}</span> is{" "}
-                  <span className="font-semibold text-amber-500">{pullPrompt.behind} commit{pullPrompt.behind !== 1 ? "s" : ""} behind</span>{" "}
+                  <span className="font-semibold text-amber-500">{pullPrompt.behind} commit{pullPrompt.behind === 1 ? "" : "s"} behind</span>{" "}
                   remote. Pull before starting?
                 </p>
                 {pullError && (
@@ -947,7 +957,7 @@ export function HomePage() {
                   >
                     {pulling ? (
                       <>
-                        <span className="w-3 h-3 border-2 border-cc-primary/30 border-t-cc-primary rounded-full animate-spin" />
+                        <span className="w-3 h-3 border-2 border-cc-primary/30 border-t-cc-primary rounded-full animate-spin" />{" "}
                         Pulling...
                       </>
                     ) : (
