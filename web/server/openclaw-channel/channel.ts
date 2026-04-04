@@ -54,7 +54,7 @@ export const campfirePlugin: ChannelPlugin = {
         label: "Campfire Server URL",
         type: "url",
         required: true,
-        placeholder: "http://localhost:3456",
+        placeholder: "http://localhost:4567",
         help: "The URL of your running Campfire server",
       },
       {
@@ -62,8 +62,8 @@ export const campfirePlugin: ChannelPlugin = {
         label: "Campfire Port",
         type: "number",
         required: false,
-        placeholder: "3456",
-        help: "Port number (default: 3456)",
+        placeholder: "4567",
+        help: "Port number (default: 4567)",
       },
     ],
 
@@ -136,7 +136,7 @@ export const campfirePlugin: ChannelPlugin = {
       config: Record<string, string>;
       onMessage: (msg: InboundMessage) => void;
     }): Promise<void> {
-      const campfireUrl = opts.config.campfireUrl || "http://localhost:3456";
+      const campfireUrl = opts.config.campfireUrl || "http://localhost:4567";
 
       activeAccounts.set(opts.accountId, {
         accountId: opts.accountId,

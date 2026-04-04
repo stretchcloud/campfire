@@ -317,7 +317,7 @@ export function registerGalleryRoutes(api: Hono, deps: RouteDeps): void {
       return c.json({ error: "Moltbook API key not configured. Add it in Settings." }, 400);
     }
     const body = await c.req.json().catch(() => ({}));
-    const baseUrl = body.campfireBaseUrl || `http://localhost:3456`;
+    const baseUrl = body.campfireBaseUrl || `http://localhost:4567`;
     const replayUrl = `${baseUrl}/#/replay/session/${entry.sessionId}`;
     const costStr = entry.totalCostUsd > 0 ? `$${entry.totalCostUsd.toFixed(2)}` : "free";
     const durationMin = Math.round(entry.durationMs / 60_000);

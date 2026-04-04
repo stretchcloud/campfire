@@ -106,7 +106,7 @@ export function updateSettings(
   settings = {
     ...settings,
     ...patch,
-    openrouterModel: (patch.openrouterModel && patch.openrouterModel.trim()) || settings.openrouterModel || DEFAULT_OPENROUTER_MODEL,
+    openrouterModel: patch.openrouterModel?.trim() || settings.openrouterModel || DEFAULT_OPENROUTER_MODEL,
     updatedAt: Date.now(),
   };
   persist();

@@ -655,7 +655,7 @@ export function TaskPanel({ sessionId }: Readonly<{ sessionId: string }>) {
   if (!taskPanelOpen) return null;
 
   const isCodex = (session?.backend_type || sdkBackendType) === "codex";
-  const showTasks = !!session && !isCodex;
+  const showTasks = !!session;
 
   // Group tasks: in_progress first, then pending, then completed
   const inProgress = tasks.filter((t) => t.status === "in_progress");

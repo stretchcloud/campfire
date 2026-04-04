@@ -7,8 +7,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { execSync } from "node:child_process";
-import { DEFAULT_PORT_PROD } from "./constants.js";
+import { execFileSync } from "node:child_process";
+import { DEFAULT_PORT } from "./constants.js";
 import { getServicePath } from "./path-resolver.js";
 
 // ─── Shared Constants ───────────────────────────────────────────────────────────
@@ -17,6 +17,13 @@ const CAMPFIRE_DIR = join(homedir(), ".campfire");
 const LOG_DIR = join(CAMPFIRE_DIR, "logs");
 const STDOUT_LOG = join(LOG_DIR, "campfire.log");
 const STDERR_LOG = join(LOG_DIR, "campfire.error.log");
+
+// ─── System binary paths (absolute to satisfy S4036 PATH safety) ───────────────
+
+const BIN_WHICH = "/usr/bin/which";
+const BIN_LAUNCHCTL = "/bin/launchctl";
+const BIN_SYSTEMCTL = "/usr/bin/systemctl";
+const BIN_LOGINCTL = "/usr/bin/loginctl";
 
 // ─── macOS (launchd) Constants ──────────────────────────────────────────────────
 
@@ -60,7 +67,7 @@ interface PlistOptions {
 }
 
 export function generatePlist(opts: PlistOptions): string {
-  const port = opts.port ?? DEFAULT_PORT_PROD;
+  const port = opts.port ?? DEFAULT_PORT;
   const home = homedir();
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -125,7 +132,7 @@ interface UnitOptions {
 }
 
 export function generateSystemdUnit(opts: UnitOptions): string {
-  const port = opts.port ?? DEFAULT_PORT_PROD;
+  const port = opts.port ?? DEFAULT_PORT;
   const home = homedir();
 
   return `[Unit]
@@ -155,7 +162,7 @@ WantedBy=default.target
 
 function resolveBinPath(): string {
   try {
-    const binPath = execSync("which the-campfire", { encoding: "utf-8" }).trim();
+    const binPath = execFileSync(BIN_WHICH, ["the-campfire"], { encoding: "utf-8" }).trim();
     if (binPath) return binPath;
   } catch {
     // not found globally
@@ -175,7 +182,7 @@ function resolveBinPath(): string {
 
 function unloadLaunchdService(plistPath: string): void {
   try {
-    execSync(`launchctl unload -w "${plistPath}"`, { stdio: "pipe" });
+    execFileSync(BIN_LAUNCHCTL, ["unload", "-w", plistPath], { stdio: "pipe" });
   } catch {
     // Service may already be unloaded — that's fine
   }
@@ -215,7 +222,7 @@ function isSystemdUnitInstalled(): boolean {
 
 function systemctlUser(cmd: string): string {
   const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
-  return execSync(`systemctl --user ${cmd}`, {
+  return execFileSync(BIN_SYSTEMCTL, ["--user", ...cmd.split(" ")], {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
     env: {
@@ -246,7 +253,7 @@ async function installDarwin(opts?: { port?: number }): Promise<void> {
   }
 
   const binPath = resolveBinPath();
-  const port = opts?.port ?? DEFAULT_PORT_PROD;
+  const port = opts?.port ?? DEFAULT_PORT;
 
   // Create log directory
   mkdirSync(LOG_DIR, { recursive: true });
@@ -259,10 +266,10 @@ async function installDarwin(opts?: { port?: number }): Promise<void> {
 
   // Load the service
   try {
-    execSync(`launchctl load -w "${PLIST_PATH}"`, { stdio: "pipe" });
+    execFileSync(BIN_LAUNCHCTL, ["load", "-w", PLIST_PATH], { stdio: "pipe" });
   } catch (err: unknown) {
     console.error("Failed to load the service with launchctl:");
-    console.error(err instanceof Error ? err.message : String(err));
+    console.error(err instanceof Error ? err.message : "Unknown error");
     // Clean up the plist on failure
     try { unlinkSync(PLIST_PATH); } catch { /* ok */ }
     process.exit(1);
@@ -286,7 +293,7 @@ async function installLinux(opts?: { port?: number }): Promise<void> {
   }
 
   const binPath = resolveBinPath();
-  const port = opts?.port ?? DEFAULT_PORT_PROD;
+  const port = opts?.port ?? DEFAULT_PORT;
 
   // Create log directory
   mkdirSync(LOG_DIR, { recursive: true });
@@ -303,7 +310,7 @@ async function installLinux(opts?: { port?: number }): Promise<void> {
     systemctlUser(`enable --now ${UNIT_NAME}`);
   } catch (err: unknown) {
     console.error("Failed to enable the service with systemctl:");
-    console.error(err instanceof Error ? err.message : String(err));
+    console.error(err instanceof Error ? err.message : "Unknown error");
     // Clean up the unit file on failure
     try { unlinkSync(UNIT_PATH); } catch { /* ok */ }
     process.exit(1);
@@ -311,7 +318,7 @@ async function installLinux(opts?: { port?: number }): Promise<void> {
 
   // Enable linger so user services survive logout
   try {
-    execSync("loginctl enable-linger", { stdio: ["pipe", "pipe", "pipe"] });
+    execFileSync(BIN_LOGINCTL, ["enable-linger"], { stdio: ["pipe", "pipe", "pipe"] });
   } catch {
     console.warn(
       "Warning: Could not enable linger. The service may stop when you log out.",
@@ -402,22 +409,22 @@ async function startDarwin(): Promise<void> {
   }
 
   const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
-  const domain = uid !== undefined ? `gui/${uid}` : "gui";
-  const domainTarget = uid !== undefined
-    ? `gui/${uid}/${installedService.label}`
-    : installedService.label;
+  const domain = uid === undefined ? "gui" : `gui/${uid}`;
+  const domainTarget = uid === undefined
+    ? installedService.label
+    : `gui/${uid}/${installedService.label}`;
 
   try {
-    execSync(`launchctl kickstart -k "${domainTarget}"`, { stdio: "pipe" });
+    execFileSync(BIN_LAUNCHCTL, ["kickstart", "-k", domainTarget], { stdio: "pipe" });
   } catch {
     try {
-      execSync(`launchctl bootstrap "${domain}" "${installedService.plistPath}"`, { stdio: "pipe" });
+      execFileSync(BIN_LAUNCHCTL, ["bootstrap", domain, installedService.plistPath], { stdio: "pipe" });
     } catch {
       try {
-        execSync(`launchctl load -w "${installedService.plistPath}"`, { stdio: "pipe" });
+        execFileSync(BIN_LAUNCHCTL, ["load", "-w", installedService.plistPath], { stdio: "pipe" });
       } catch (err: unknown) {
         console.error("Failed to start the service with launchctl:");
-        console.error(err instanceof Error ? err.message : String(err));
+        console.error(err instanceof Error ? err.message : "Unknown error");
         process.exit(1);
       }
     }
@@ -442,7 +449,7 @@ async function startLinux(): Promise<void> {
     systemctlUser(`start ${UNIT_NAME}`);
   } catch (err: unknown) {
     console.error("Failed to start the service with systemctl:");
-    console.error(err instanceof Error ? err.message : String(err));
+    console.error(err instanceof Error ? err.message : "Unknown error");
     process.exit(1);
   }
 
@@ -467,12 +474,12 @@ async function stopDarwin(): Promise<void> {
 
   try {
     const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
-    const domainTarget = uid !== undefined
-      ? `gui/${uid}/${installedService.label}`
-      : installedService.label;
+    const domainTarget = uid === undefined
+      ? installedService.label
+      : `gui/${uid}/${installedService.label}`;
     // `stop` is not enough with KeepAlive=true: launchd can immediately restart it.
     // Booting out unloads the job from launchd while keeping the plist installed.
-    execSync(`launchctl bootout "${domainTarget}"`, { stdio: "pipe" });
+    execFileSync(BIN_LAUNCHCTL, ["bootout", domainTarget], { stdio: "pipe" });
   } catch {
     // Fallback for environments where bootout/domain targeting is unavailable.
     unloadLaunchdService(installedService.plistPath);
@@ -492,7 +499,7 @@ async function stopLinux(): Promise<void> {
     systemctlUser(`stop ${UNIT_NAME}`);
   } catch (err: unknown) {
     console.error("Failed to stop the service with systemctl:");
-    console.error(err instanceof Error ? err.message : String(err));
+    console.error(err instanceof Error ? err.message : "Unknown error");
     process.exit(1);
   }
 
@@ -517,20 +524,20 @@ async function restartDarwin(): Promise<void> {
   }
 
   const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
-  const domainTarget = uid !== undefined
-    ? `gui/${uid}/${installedService.label}`
-    : installedService.label;
+  const domainTarget = uid === undefined
+    ? installedService.label
+    : `gui/${uid}/${installedService.label}`;
 
   try {
-    execSync(`launchctl kickstart -k "${domainTarget}"`, { stdio: "pipe" });
+    execFileSync(BIN_LAUNCHCTL, ["kickstart", "-k", domainTarget], { stdio: "pipe" });
   } catch {
     // Fallback for environments where kickstart/domain targeting is unavailable.
     unloadLaunchdService(installedService.plistPath);
     try {
-      execSync(`launchctl load -w "${installedService.plistPath}"`, { stdio: "pipe" });
+      execFileSync(BIN_LAUNCHCTL, ["load", "-w", installedService.plistPath], { stdio: "pipe" });
     } catch (err: unknown) {
       console.error("Failed to restart the service with launchctl:");
-      console.error(err instanceof Error ? err.message : String(err));
+      console.error(err instanceof Error ? err.message : "Unknown error");
       process.exit(1);
     }
   }
@@ -551,7 +558,7 @@ async function restartLinux(): Promise<void> {
     systemctlUser(`restart ${UNIT_NAME}`);
   } catch (err: unknown) {
     console.error("Failed to restart the service with systemctl:");
-    console.error(err instanceof Error ? err.message : String(err));
+    console.error(err instanceof Error ? err.message : "Unknown error");
     process.exit(1);
   }
 
@@ -576,7 +583,7 @@ export function isRunningAsService(): boolean {
     const installedService = getInstalledLaunchdService();
     if (!installedService) return false;
     try {
-      const output = execSync(`launchctl list "${installedService.label}"`, {
+      const output = execFileSync(BIN_LAUNCHCTL, ["list", installedService.label], {
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
       });
@@ -599,6 +606,43 @@ export function isRunningAsService(): boolean {
   return false;
 }
 
+function refreshDarwinDefinition(): void {
+  const installedService = getInstalledLaunchdService();
+  if (!installedService) return;
+
+  let port = DEFAULT_PORT;
+  try {
+    const content = readFileSync(installedService.plistPath, "utf-8");
+    const portMatch = /<key>PORT<\/key>\s*<string>(\d+)<\/string>/.exec(content);
+    if (portMatch) port = Number(portMatch[1]);
+  } catch { /* use default */ }
+
+  const binPath = resolveBinPath();
+  const path = getServicePath();
+  const plist = generatePlist({ binPath, port, path });
+  writeFileSync(installedService.plistPath, plist, "utf-8");
+}
+
+function refreshLinuxDefinition(): void {
+  if (!isSystemdUnitInstalled()) return;
+
+  let port = DEFAULT_PORT;
+  try {
+    const content = readFileSync(UNIT_PATH, "utf-8");
+    const portMatch = /Environment=PORT=(\d+)/.exec(content);
+    if (portMatch) port = Number(portMatch[1]);
+  } catch { /* use default */ }
+
+  const binPath = resolveBinPath();
+  const path = getServicePath();
+  const unit = generateSystemdUnit({ binPath, port, path });
+  writeFileSync(UNIT_PATH, unit, "utf-8");
+
+  try {
+    systemctlUser("daemon-reload");
+  } catch { /* best effort */ }
+}
+
 /**
  * Re-write the service definition (plist or systemd unit) using the current
  * binary path and the latest template, preserving the user's custom port.
@@ -606,38 +650,9 @@ export function isRunningAsService(): boolean {
  */
 export function refreshServiceDefinition(): void {
   if (isDarwin()) {
-    const installedService = getInstalledLaunchdService();
-    if (!installedService) return;
-
-    let port = DEFAULT_PORT_PROD;
-    try {
-      const content = readFileSync(installedService.plistPath, "utf-8");
-      const portMatch = content.match(/<key>PORT<\/key>\s*<string>(\d+)<\/string>/);
-      if (portMatch) port = Number(portMatch[1]);
-    } catch { /* use default */ }
-
-    const binPath = resolveBinPath();
-    const path = getServicePath();
-    const plist = generatePlist({ binPath, port, path });
-    writeFileSync(installedService.plistPath, plist, "utf-8");
+    refreshDarwinDefinition();
   } else if (isLinux()) {
-    if (!isSystemdUnitInstalled()) return;
-
-    let port = DEFAULT_PORT_PROD;
-    try {
-      const content = readFileSync(UNIT_PATH, "utf-8");
-      const portMatch = content.match(/Environment=PORT=(\d+)/);
-      if (portMatch) port = Number(portMatch[1]);
-    } catch { /* use default */ }
-
-    const binPath = resolveBinPath();
-    const path = getServicePath();
-    const unit = generateSystemdUnit({ binPath, port, path });
-    writeFileSync(UNIT_PATH, unit, "utf-8");
-
-    try {
-      systemctlUser("daemon-reload");
-    } catch { /* best effort */ }
+    refreshLinuxDefinition();
   }
 }
 
@@ -657,22 +672,22 @@ async function statusDarwin(): Promise<ServiceStatus> {
   }
 
   // Read port from the plist
-  let port = DEFAULT_PORT_PROD;
+  let port = DEFAULT_PORT;
   try {
     const plistContent = readFileSync(installedService.plistPath, "utf-8");
-    const portMatch = plistContent.match(/<key>PORT<\/key>\s*<string>(\d+)<\/string>/);
+    const portMatch = /<key>PORT<\/key>\s*<string>(\d+)<\/string>/.exec(plistContent);
     if (portMatch) port = Number(portMatch[1]);
   } catch { /* use default */ }
 
   // Check if service is running via launchctl
   try {
-    const output = execSync(`launchctl list "${installedService.label}"`, {
+    const output = execFileSync(BIN_LAUNCHCTL, ["list", installedService.label], {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });
 
     // Parse PID from the launchctl list output
-    const pidMatch = output.match(/"PID"\s*=\s*(\d+)/);
+    const pidMatch = /"PID"\s*=\s*(\d+)/.exec(output);
     if (pidMatch) {
       return { installed: true, running: true, pid: Number(pidMatch[1]), port };
     }
@@ -691,18 +706,18 @@ async function statusLinux(): Promise<ServiceStatus> {
   }
 
   // Read port from the unit file
-  let port = DEFAULT_PORT_PROD;
+  let port = DEFAULT_PORT;
   try {
     const unitContent = readFileSync(UNIT_PATH, "utf-8");
-    const portMatch = unitContent.match(/Environment=PORT=(\d+)/);
+    const portMatch = /Environment=PORT=(\d+)/.exec(unitContent);
     if (portMatch) port = Number(portMatch[1]);
   } catch { /* use default */ }
 
   // Check if service is running via systemctl
   try {
     const output = systemctlUser(`show ${UNIT_NAME} --property=ActiveState,MainPID --no-pager`);
-    const activeMatch = output.match(/ActiveState=(\w+)/);
-    const pidMatch = output.match(/MainPID=(\d+)/);
+    const activeMatch = /ActiveState=(\w+)/.exec(output);
+    const pidMatch = /MainPID=(\d+)/.exec(output);
 
     const isActive = activeMatch?.[1] === "active";
     const pid = pidMatch ? Number(pidMatch[1]) : undefined;
