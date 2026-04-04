@@ -19,6 +19,10 @@ import { registerOrchestratorRoutes } from "./orchestrator-routes.js";
 import { registerAuthRoutes, authMiddleware } from "./auth-routes.js";
 import { registerSkillsRoutes } from "./skills-routes.js";
 import { registerFolderRoutes } from "./folder-routes.js";
+import { registerAgentRoutes } from "./agent-routes.js";
+import { registerHubRoutes } from "../recording-hub/hub-routes.js";
+import { registerMonitorRoutes } from "./monitor-routes.js";
+import { registerCommandsRoutes } from "./commands-routes.js";
 
 export function createRoutes(deps: RouteDeps): Hono {
   const api = new Hono();
@@ -47,6 +51,10 @@ export function createRoutes(deps: RouteDeps): Hono {
   registerOrchestratorRoutes(api, deps);
   registerSkillsRoutes(api, deps);
   registerFolderRoutes(api, deps);
+  registerAgentRoutes(api, deps);
+  registerHubRoutes(api, deps);
+  registerMonitorRoutes(api, deps);
+  registerCommandsRoutes(api, deps);
 
   return api;
 }

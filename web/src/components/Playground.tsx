@@ -970,6 +970,151 @@ export function Playground() {
           </div>
         </Section>
 
+        {/* ─── Session Pulse ──────────────────────────────── */}
+        <Section title="Session Pulse" description="Unified floating activity widget — combines per-session agent/task tracking with cross-session awareness. Two tabs: Agents (current session subagents + tasks) and Sessions (other running sessions).">
+          <div className="space-y-4 max-w-3xl">
+            <Card label="Trigger pill — agents + sessions active">
+              <div className="relative h-14 bg-cc-bg rounded-lg border border-cc-border/30 flex items-end justify-end p-3">
+                <div className="flex items-center gap-2 px-3 h-8 rounded-full border border-cc-border/50 bg-cc-card/90 backdrop-blur-lg shadow-panel">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inset-0 rounded-full bg-cc-primary opacity-75 animate-ping" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-cc-primary" />
+                  </span>
+                  <span className="text-[11px] font-medium text-cc-fg/80 font-mono-code">2 agents · 1 tool · 3/5 · 1 session</span>
+                  <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-cc-warning/15 text-cc-warning text-[9px] font-semibold">1</span>
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted/60">
+                    <path d="M4.427 9.573l3.396-3.396a.25.25 0 01.354 0l3.396 3.396a.25.25 0 01-.177.427H4.604a.25.25 0 01-.177-.427z" />
+                  </svg>
+                </div>
+              </div>
+            </Card>
+            <Card label="Activity tab — agents, tools, and tasks (all backends)">
+              <div className="w-80 rounded-xl border border-cc-border/60 bg-cc-card/95 shadow-float overflow-hidden">
+                {/* Tab header */}
+                <div className="flex items-center gap-1 px-2 pt-2 pb-1 border-b border-cc-border/40">
+                  <span className="px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-cc-primary/10 text-cc-primary">Activity <span className="ml-1 text-[9px] tabular-nums opacity-70">5</span></span>
+                  <span className="px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider text-cc-muted hover:text-cc-fg cursor-pointer">Sessions <span className="ml-1 text-[9px] tabular-nums opacity-70">1</span></span>
+                  <div className="flex-1" />
+                  <span className="p-1 rounded hover:bg-cc-hover cursor-pointer">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted"><path d="M4.28 3.22a.75.75 0 00-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 101.06 1.06L8 9.06l3.72 3.72a.75.75 0 101.06-1.06L9.06 8l3.72-3.72a.75.75 0 00-1.06-1.06L8 6.94 4.28 3.22z" /></svg>
+                  </span>
+                </div>
+                <div className="py-1.5">
+                  {/* Agents section */}
+                  <div className="px-3 py-1"><span className="text-[9px] text-cc-muted/50 uppercase tracking-widest font-semibold">Agents</span></div>
+                  {/* Running agent */}
+                  <div className="flex items-center gap-2.5 px-3 py-1.5">
+                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                      <span className="absolute inset-0 rounded-full bg-cc-primary opacity-75 animate-breathing" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cc-primary" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-medium text-cc-fg truncate">Search codebase for utils</span>
+                        <span className="text-[8px] text-cc-muted/40 uppercase font-mono-code">Explore</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-cc-muted/50 font-mono-code tabular-nums shrink-0">32s</span>
+                  </div>
+                  {/* Completed agent */}
+                  <div className="flex items-center gap-2.5 px-3 py-1.5">
+                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cc-success" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-medium text-cc-fg/60 truncate">Analyze test coverage</span>
+                        <span className="text-[8px] text-cc-muted/40 uppercase font-mono-code">general-purpose</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-cc-muted/50 font-mono-code tabular-nums shrink-0">1m 14s</span>
+                  </div>
+                  {/* Separator */}
+                  <hr className="mx-3 my-1.5 border-t border-cc-border/30 border-b-0 border-x-0" />
+                  {/* Active tools section (works for ALL backends) */}
+                  <div className="px-3 py-1"><span className="text-[9px] text-cc-muted/50 uppercase tracking-widest font-semibold">Tools</span></div>
+                  <div className="flex items-center gap-2.5 px-3 py-1.5">
+                    <svg className="w-3.5 h-3.5 text-cc-primary animate-spin shrink-0" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" /><path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+                    <span className="text-[11px] font-medium text-cc-fg truncate flex-1">Bash</span>
+                    <span className="text-[10px] text-cc-muted/50 font-mono-code tabular-nums shrink-0">8s</span>
+                  </div>
+                  {/* Separator */}
+                  <hr className="mx-3 my-1.5 border-t border-cc-border/30 border-b-0 border-x-0" />
+                  {/* Tasks section */}
+                  <div className="px-3 py-1"><span className="text-[9px] text-cc-muted/50 uppercase tracking-widest font-semibold">Tasks</span></div>
+                  {/* Completed task */}
+                  <div className="flex items-center gap-2 px-3 py-1">
+                    <svg className="w-3.5 h-3.5 text-cc-success shrink-0" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" /></svg>
+                    <span className="text-[11px] text-cc-muted/50 line-through truncate">Set up test infrastructure</span>
+                  </div>
+                  {/* In-progress task */}
+                  <div className="flex items-center gap-2 px-3 py-1">
+                    <svg className="w-3.5 h-3.5 text-cc-primary animate-spin shrink-0" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" /><path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] text-cc-fg truncate block">Write unit tests for API</span>
+                      <span className="text-[10px] text-cc-muted/50 italic truncate block">Writing unit tests for API</span>
+                    </div>
+                  </div>
+                  {/* Pending task */}
+                  <div className="flex items-center gap-2 px-3 py-1">
+                    <svg className="w-3.5 h-3.5 text-cc-muted/30 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5" /></svg>
+                    <span className="text-[11px] text-cc-fg truncate">Run integration tests</span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+            <Card label="Sessions tab — cross-session awareness">
+              <div className="w-80 rounded-xl border border-cc-border/60 bg-cc-card/95 shadow-float overflow-hidden">
+                {/* Tab header */}
+                <div className="flex items-center gap-1 px-2 pt-2 pb-1 border-b border-cc-border/40">
+                  <span className="px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider text-cc-muted hover:text-cc-fg cursor-pointer">Activity <span className="ml-1 text-[9px] tabular-nums opacity-70">5</span></span>
+                  <span className="px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-cc-primary/10 text-cc-primary">Sessions <span className="ml-1 text-[9px] tabular-nums opacity-70">2</span></span>
+                  <div className="flex-1" />
+                  <span className="p-1 rounded hover:bg-cc-hover cursor-pointer">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted"><path d="M4.28 3.22a.75.75 0 00-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 101.06 1.06L8 9.06l3.72 3.72a.75.75 0 101.06-1.06L9.06 8l3.72-3.72a.75.75 0 00-1.06-1.06L8 6.94 4.28 3.22z" /></svg>
+                  </span>
+                </div>
+                <div className="py-1">
+                  {/* Running session */}
+                  <div className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-cc-hover/60 transition-colors text-left cursor-pointer group">
+                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                      <span className="absolute inset-0 rounded-full bg-cc-primary opacity-75 animate-breathing" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cc-primary" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] font-medium text-cc-fg truncate block">Refactor API layer</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-cc-muted/50 font-mono-code tabular-nums">4m 23s</span>
+                        <span className="text-[10px] text-cc-muted/50 font-mono-code tabular-nums">$0.12</span>
+                      </div>
+                    </div>
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted/30 group-hover:text-cc-primary/60 transition-colors shrink-0"><path d="M8.22 2.97a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06l2.97-2.97H3.75a.75.75 0 010-1.5h7.44L8.22 4.03a.75.75 0 010-1.06z" /></svg>
+                  </div>
+                  {/* Session with permission needed */}
+                  <div className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-cc-hover/60 transition-colors text-left cursor-pointer group">
+                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                      <span className="absolute inset-0 rounded-full bg-cc-primary opacity-75 animate-breathing" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cc-primary" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] font-medium text-cc-fg truncate block">Write unit tests</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-cc-muted/50 font-mono-code tabular-nums">1m 47s</span>
+                        <span className="text-[10px] text-cc-muted/50 font-mono-code tabular-nums">$0.08</span>
+                      </div>
+                    </div>
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-cc-warning/10 shrink-0">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 text-cc-warning"><path d="M8.22 1.754a.25.25 0 00-.44 0L1.698 13.132a.25.25 0 00.22.368h12.164a.25.25 0 00.22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0114.082 15H1.918a1.75 1.75 0 01-1.543-2.575L6.457 1.047zM9 11a1 1 0 11-2 0 1 1 0 012 0zm-.25-5.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z" /></svg>
+                      <span className="text-[9px] font-semibold text-cc-warning tabular-nums">1</span>
+                    </span>
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted/30 group-hover:text-cc-primary/60 transition-colors shrink-0"><path d="M8.22 2.97a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06l2.97-2.97H3.75a.75.75 0 010-1.5h7.44L8.22 4.03a.75.75 0 010-1.06z" /></svg>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </Section>
+
         {/* ─── Cost Card ────────────────────────────────────── */}
         <Section title="Cost Card" description="Shareable session summary card with key metrics and PNG export">
           <div className="space-y-4">

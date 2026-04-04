@@ -1,9 +1,12 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { DiffViewer } from "./DiffViewer.js";
+import { detectLanguage } from "./CodeEditor.js";
+
+const CodeEditor = lazy(() => import("./CodeEditor.js").then((m) => ({ default: m.CodeEditor })));
 
 export function DiffPanel({ sessionId }: { sessionId: string }) {
   const session = useStore((s) => s.sessions.get(sessionId));
@@ -18,7 +21,12 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
   const [diffContent, setDiffContent] = useState<string>("");
   const [diffLoading, setDiffLoading] = useState(false);
   const [fileExists, setFileExists] = useState(true);
-  const [viewMode, setViewMode] = useState<"diff" | "raw">("diff");
+  const [viewMode, setViewMode] = useState<"diff" | "raw" | "edit">("diff");
+  const [editContent, setEditContent] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editSaved, setEditSaved] = useState(false);
+  const [editDirty, setEditDirty] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 640 : true,
   );
@@ -75,6 +83,39 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
       });
     return () => { cancelled = true; };
   }, [selectedFile, gitStartCommit, sessionId]);
+
+  // Load file content when entering edit mode
+  useEffect(() => {
+    if (viewMode !== "edit" || !selectedFile) return;
+    let cancelled = false;
+    setEditLoading(true);
+    setEditDirty(false);
+    setEditSaved(false);
+    api.readFile(selectedFile).then((res) => {
+      if (!cancelled) {
+        setEditContent(res.content);
+        setEditLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setEditContent("");
+        setEditLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [viewMode, selectedFile]);
+
+  const handleSaveFile = useCallback(async () => {
+    if (!selectedFile || editSaving) return;
+    setEditSaving(true);
+    try {
+      await api.writeFile(selectedFile, editContent);
+      setEditDirty(false);
+      setEditSaved(true);
+      setTimeout(() => setEditSaved(false), 2000);
+    } catch { /* ignore */ }
+    setEditSaving(false);
+  }, [selectedFile, editContent, editSaving]);
 
   const handleFileSelect = useCallback(
     (path: string) => {
@@ -215,26 +256,67 @@ export function DiffPanel({ sessionId }: { sessionId: string }) {
             <div className="ml-2 hidden sm:flex items-center gap-1 rounded-md bg-cc-bg border border-cc-border p-0.5 text-[11px]">
               <button
                 onClick={() => setViewMode("diff")}
-                className={`px-2 py-0.5 rounded ${viewMode === "diff" ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg"}`}
+                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${viewMode === "diff" ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg"}`}
               >
                 Diff
               </button>
               <button
+                onClick={() => setViewMode("edit")}
+                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${viewMode === "edit" ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg"}`}
+              >
+                Edit
+              </button>
+              <button
                 onClick={() => setViewMode("raw")}
-                className={`px-2 py-0.5 rounded ${viewMode === "raw" ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg"}`}
+                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${viewMode === "raw" ? "bg-cc-active text-cc-fg" : "text-cc-muted hover:text-cc-fg"}`}
               >
                 Raw
               </button>
             </div>
+            {/* Save button for edit mode */}
+            {viewMode === "edit" && (
+              <div className="ml-2 flex items-center gap-2">
+                <button
+                  onClick={handleSaveFile}
+                  disabled={editSaving || !editDirty}
+                  className="px-3 py-1 rounded-md bg-cc-primary text-white text-[11px] font-medium hover:bg-cc-primary-hover transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  {editSaving ? "Saving..." : "Save"}
+                </button>
+                {editSaved && <span className="text-[10px] text-cc-success">Saved</span>}
+                {editDirty && !editSaved && <span className="text-[10px] text-cc-warning">Unsaved</span>}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Diff content */}
+        {/* Content area */}
         <div className="flex-1 overflow-auto">
           {diffLoading ? (
             <div className="h-full flex items-center justify-center">
               <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
             </div>
+          ) : selectedFile && viewMode === "edit" ? (
+            /* ── Edit mode: Monaco Editor ──────────────────────── */
+            editLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <Suspense fallback={<div className="h-full flex items-center justify-center text-cc-muted text-[12px]">Loading editor...</div>}>
+                <CodeEditor
+                  value={editContent}
+                  onChange={(val) => { setEditContent(val); setEditDirty(true); }}
+                  language={detectLanguage(selectedFile)}
+                  height="calc(100vh - 120px)"
+                  minimap
+                  lineNumbers
+                  wordWrap={false}
+                  ariaLabel={`Editing ${selectedRelPath || selectedFile}`}
+                  className="border-0 rounded-none"
+                />
+              </Suspense>
+            )
           ) : selectedFile ? (
             <div className="p-4">
               {!fileExists && !diffContent.trim() ? (

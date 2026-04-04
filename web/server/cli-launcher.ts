@@ -94,6 +94,8 @@ export interface LaunchOptions {
   codexReasoningEffort?: "low" | "medium" | "high";
   /** Optional override for CODEX_HOME used by Codex sessions. */
   codexHome?: string;
+  /** Docker container ID — when set, CLI is spawned inside the container via docker exec */
+  containerId?: string;
   /** Pre-resolved worktree info from the session creation flow */
   worktreeInfo?: {
     isWorktree: boolean;
@@ -115,6 +117,7 @@ export class CliLauncher {
   private store: SessionStore | null = null;
   private recorder: RecorderManager | null = null;
   private onAdapter: ((sessionId: string, adapter: AgentAdapter, backendType: BackendType) => void) | null = null;
+  private onExited: ((sessionId: string, exitCode: number | null) => void) | null = null;
 
   constructor(port: number) {
     this.port = port;
@@ -123,6 +126,11 @@ export class CliLauncher {
   /** Register a callback for when an adapter is created (WsBridge needs to attach it). */
   onAdapterCreated(cb: (sessionId: string, adapter: AgentAdapter, backendType: BackendType) => void): void {
     this.onAdapter = cb;
+  }
+
+  /** Register a callback for when a CLI process exits (used by proactive keepalive). */
+  onSessionExited(cb: (sessionId: string, exitCode: number | null) => void): void {
+    this.onExited = cb;
   }
 
   /** Attach a persistent store for surviving server restarts. */
@@ -380,11 +388,56 @@ export class CliLauncher {
       PATH: getEnrichedPath(),
     };
 
-    console.log(`[cli-launcher] Spawning session ${sessionId}: ${binary} ${args.join(" ")}`);
+    // If a containerId is provided, run the CLI inside the container via docker exec
+    let spawnCmd: string[];
+    let spawnEnv: Record<string, string | undefined>;
+    let spawnCwd: string | undefined;
 
-    const proc = Bun.spawn([binary, ...args], {
-      cwd: info.cwd,
-      env,
+    if (options.containerId) {
+      // Run the CLI inside the Docker container via docker exec.
+      // The --sdk-url uses host.docker.internal so the CLI inside the container
+      // can connect back to the Campfire server running on the host.
+      const containerSdkUrl = sdkUrl.replace("localhost", "host.docker.internal");
+      const containerArgs = args.map((a) => a === sdkUrl ? containerSdkUrl : a);
+      const dockerArgs = ["docker", "exec", "-i"];
+      // Pass environment variables via -e flags
+      if (options.env) {
+        for (const [k, v] of Object.entries(options.env)) {
+          dockerArgs.push("-e", `${k}=${v}`);
+        }
+      }
+      // Set PATH, working directory, container ID, and shell command in one push
+      const innerCmd = [binary, ...containerArgs].map((a) => a.includes(" ") ? `'${a}'` : a).join(" ");
+      // Install Node + Claude Code if not present (handles images without npm like python:slim)
+      const installSteps = [
+        `command -v claude >/dev/null 2>&1 || {`,
+        `  command -v npm >/dev/null 2>&1 || {`,
+        `    apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null 2>&1 || true;`,
+        `  };`,
+        `  npm install -g @anthropic-ai/claude-code@latest 2>/dev/null || true;`,
+        `}`,
+      ].join(" ");
+      const installAndRun = `${installSteps}; ${innerCmd}`;
+      dockerArgs.push(
+        "-e", `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin`,
+        "-w", "/workspace",
+        options.containerId,
+        "bash", "-lc", installAndRun,
+      );
+      spawnCmd = dockerArgs;
+      spawnEnv = { ...process.env, PATH: getEnrichedPath() };
+      spawnCwd = undefined;
+      console.log(`[cli-launcher] Spawning session ${sessionId} INSIDE container ${options.containerId}`);
+    } else {
+      spawnCmd = [binary, ...args];
+      spawnEnv = env;
+      spawnCwd = info.cwd;
+      console.log(`[cli-launcher] Spawning session ${sessionId}: ${binary} ${args.join(" ")}`);
+    }
+
+    const proc = Bun.spawn(spawnCmd, {
+      cwd: spawnCwd,
+      env: spawnEnv,
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -412,6 +465,8 @@ export class CliLauncher {
           session.cliSessionId = undefined;
         }
       }
+      // Notify proactive keepalive
+      this.onExited?.(sessionId, exitCode);
       this.processes.delete(sessionId);
       this.persistState();
     });

@@ -45,10 +45,13 @@ export function registerRecordingRoutes(api: Hono, deps: RouteDeps): void {
     try {
       const recording = loadRecording(filePath);
 
-      // Playable message types for the replay UI
+      // Playable message types for the replay UI (expanded to cover all backends)
       const PLAYABLE_TYPES = new Set([
         "assistant", "result", "user_message", "stream_event",
         "permission_request", "permission_cancelled", "status_change",
+        "session_init", "session_update", "cli_connected", "cli_disconnected",
+        "tool_progress", "tool_use_summary", "error",
+        "session_name_update", "mcp_status",
       ]);
 
       // Collect outgoing browser messages (server→browser)

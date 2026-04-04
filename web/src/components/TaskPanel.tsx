@@ -4,7 +4,6 @@ import { api, type UsageLimits, type GitHubPRInfo } from "../api.js";
 import type { TaskItem } from "../types.js";
 import { McpSection } from "./McpPanel.js";
 import { CostCard } from "./CostCard.js";
-import { WorkspaceSection } from "./WorkspaceSection.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
 const POLL_INTERVAL = 60_000;
@@ -39,7 +38,7 @@ function contextBarColor(pct: number): string {
   return "bg-green-500";
 }
 
-function UsageLimitsSection({ sessionId }: { sessionId: string }) {
+function UsageLimitsSection({ sessionId }: Readonly<{ sessionId: string }>) {
   const [limits, setLimits] = useState<UsageLimits | null>(
     limitsCache.get(sessionId) ?? null,
   );
@@ -183,7 +182,7 @@ function formatWindowDuration(mins: number): string {
   return `${mins}m`;
 }
 
-function CodexRateLimitsSection({ sessionId }: { sessionId: string }) {
+function CodexRateLimitsSection({ sessionId }: Readonly<{ sessionId: string }>) {
   const rateLimits = useStore((s) => s.sessions.get(sessionId)?.codex_rate_limits);
 
   // Tick for countdown refresh
@@ -258,7 +257,7 @@ function formatTokenCount(n: number): string {
   return String(n);
 }
 
-function CodexTokenDetailsSection({ sessionId }: { sessionId: string }) {
+function CodexTokenDetailsSection({ sessionId }: Readonly<{ sessionId: string }>) {
   const details = useStore((s) => s.sessions.get(sessionId)?.codex_token_details);
   // Use the server-computed context percentage (input+output / contextWindow, capped 0-100)
   const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
@@ -333,9 +332,8 @@ function formatCostUsd(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
-function ClaudeTokenDetailsSection({ sessionId }: { sessionId: string }) {
+function ClaudeTokenDetailsSection({ sessionId }: Readonly<{ sessionId: string }>) {
   const details = useStore((s) => s.sessions.get(sessionId)?.claude_token_details);
-  const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
   const [open, setOpen] = useState(false);
 
   if (!details) return null;
@@ -393,7 +391,7 @@ function ClaudeTokenDetailsSection({ sessionId }: { sessionId: string }) {
 
 // ─── Context Usage Bar ──────────────────────────────────────────────────────
 
-function ContextUsageBar({ sessionId }: { sessionId: string }) {
+function ContextUsageBar({ sessionId }: Readonly<{ sessionId: string }>) {
   const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
 
   if (contextPct === 0) return null;
@@ -416,7 +414,7 @@ function ContextUsageBar({ sessionId }: { sessionId: string }) {
 
 // ─── Session Stats ───────────────────────────────────────────────────────────
 
-function SessionStatsSection({ sessionId }: { sessionId: string }) {
+function SessionStatsSection({ sessionId }: Readonly<{ sessionId: string }>) {
   const session = useStore((s) => s.sessions.get(sessionId));
   if (!session) return null;
 
@@ -476,7 +474,7 @@ function prStatePill(state: GitHubPRInfo["state"], isDraft: boolean) {
   }
 }
 
-export function GitHubPRDisplay({ pr }: { pr: GitHubPRInfo }) {
+export function GitHubPRDisplay({ pr }: Readonly<{ pr: GitHubPRInfo }>) {
   const pill = prStatePill(pr.state, pr.isDraft);
   const { checksSummary: cs, reviewThreads: rt } = pr;
 
@@ -551,7 +549,7 @@ export function GitHubPRDisplay({ pr }: { pr: GitHubPRInfo }) {
   );
 }
 
-function GitHubPRSection({ sessionId }: { sessionId: string }) {
+function GitHubPRSection({ sessionId }: Readonly<{ sessionId: string }>) {
   const session = useStore((s) => s.sessions.get(sessionId));
   const sdk = useStore((s) => s.sdkSessions.find((x) => x.sessionId === sessionId));
   const prStatus = useStore((s) => s.prStatus.get(sessionId));
@@ -574,7 +572,7 @@ function GitHubPRSection({ sessionId }: { sessionId: string }) {
 
 // ─── Cost Card ───────────────────────────────────────────────────────────────
 
-function CostCardSection({ sessionId }: { sessionId: string }) {
+function CostCardSection({ sessionId }: Readonly<{ sessionId: string }>) {
   const session = useStore((s) => s.sessions.get(sessionId));
   const sessionName = useStore((s) => s.sessionNames.get(sessionId) ?? `Session ${sessionId.slice(0, 8)}`);
   const status = useStore((s) => s.sessionStatus.get(sessionId));
@@ -608,7 +606,7 @@ function CostCardSection({ sessionId }: { sessionId: string }) {
 
 // ─── Collapsible MCP Section Wrapper ────────────────────────────────────────
 
-function CollapsibleMcpSection({ sessionId }: { sessionId: string }) {
+function CollapsibleMcpSection({ sessionId }: Readonly<{ sessionId: string }>) {
   const mcpServers = useStore((s) => s.mcpServers.get(sessionId));
   const [open, setOpen] = useState(false);
 
@@ -642,40 +640,12 @@ function CollapsibleMcpSection({ sessionId }: { sessionId: string }) {
   );
 }
 
-// ─── Collapsible Workspace Section Wrapper ──────────────────────────────────
-
-function CollapsibleWorkspaceSection({ sessionId }: { sessionId: string }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 w-full px-3 py-2.5 text-[10px] text-cc-muted uppercase tracking-wider hover:text-cc-fg hover:bg-cc-hover/50 transition-colors cursor-pointer"
-      >
-        <svg
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          className={`w-2.5 h-2.5 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
-        >
-          <path d="M6 3l5 5-5 5V3z" />
-        </svg>
-        Workspace
-      </button>
-      {open && (
-        <div className="border-t border-cc-border/40">
-          <WorkspaceSection sessionId={sessionId} />
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Task Panel ──────────────────────────────────────────────────────────────
 
 export { CodexRateLimitsSection, CodexTokenDetailsSection, ClaudeTokenDetailsSection };
 
-export function TaskPanel({ sessionId }: { sessionId: string }) {
+export function TaskPanel({ sessionId }: Readonly<{ sessionId: string }>) {
   const tasks = useStore((s) => s.sessionTasks.get(sessionId) || EMPTY_TASKS);
   const session = useStore((s) => s.sessions.get(sessionId));
   const sdkBackendType = useStore((s) => s.sdkSessions.find((x) => x.sessionId === sessionId)?.backendType);
@@ -746,9 +716,6 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
         {/* MCP servers — collapsible with count badge */}
         <CollapsibleMcpSection sessionId={sessionId} />
 
-        {/* Workspace — collapsible */}
-        <CollapsibleWorkspaceSection sessionId={sessionId} />
-
         {showTasks && (
           <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">
             {/* Task section header */}
@@ -762,7 +729,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
                 )}
                 {tasks.length > 0 && (
                   <button
-                    onClick={() => { window.location.hash = "#/kanban"; }}
+                    onClick={() => { globalThis.location.hash = "#/kanban"; }}
                     className="text-[10px] font-mono-code text-cc-muted hover:text-cc-fg px-1.5 py-0.5 rounded hover:bg-cc-hover transition-all duration-200 cursor-pointer"
                     title="View Kanban board"
                   >
@@ -794,7 +761,29 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
   );
 }
 
-function TaskRow({ task }: { task: TaskItem }) {
+function TaskStatusIcon({ status }: Readonly<{ status: TaskItem["status"] }>) {
+  if (status === "in_progress") {
+    return (
+      <svg className="w-[18px] h-[18px] text-cc-primary animate-spin" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (status === "completed") {
+    return (
+      <svg viewBox="0 0 16 16" fill="currentColor" className="w-[18px] h-[18px] text-cc-success" aria-hidden>
+        <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-9.354a.5.5 0 00-.708-.708L7 8.586 5.354 6.94a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z" clipRule="evenodd" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className="w-[18px] h-[18px] text-cc-muted" aria-hidden>
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function TaskRow({ task }: Readonly<{ task: TaskItem }>) {
   const isCompleted = task.status === "completed";
   const isInProgress = task.status === "in_progress";
 
@@ -805,50 +794,7 @@ function TaskRow({ task }: { task: TaskItem }) {
       <div className="flex items-start gap-2">
         {/* Status icon */}
         <span className="shrink-0 flex items-center justify-center w-[18px] h-[18px] mt-px">
-          {isInProgress ? (
-            <svg
-              className="w-[18px] h-[18px] text-cc-primary animate-spin"
-              viewBox="0 0 16 16"
-              fill="none"
-            >
-              <circle
-                cx="8"
-                cy="8"
-                r="6"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeDasharray="28"
-                strokeDashoffset="8"
-                strokeLinecap="round"
-              />
-            </svg>
-          ) : isCompleted ? (
-            <svg
-              viewBox="0 0 16 16"
-              fill="currentColor"
-              className="w-[18px] h-[18px] text-cc-success"
-            >
-              <path
-                fillRule="evenodd"
-                d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-9.354a.5.5 0 00-.708-.708L7 8.586 5.354 6.94a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ) : (
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              className="w-[18px] h-[18px] text-cc-muted"
-            >
-              <circle
-                cx="8"
-                cy="8"
-                r="6"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-            </svg>
-          )}
+          <TaskStatusIcon status={task.status} />
         </span>
 
         {/* Subject */}
