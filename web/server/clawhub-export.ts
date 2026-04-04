@@ -64,7 +64,7 @@ export function generateSkillMd(
     prompt?: string;
   },
 ): string {
-  const baseUrl = options?.campfireBaseUrl || "http://localhost:3456";
+  const baseUrl = options?.campfireBaseUrl || "http://localhost:4567";
   const cost = `$${entry.totalCostUsd.toFixed(2)}`;
   const duration = formatDuration(entry.durationMs);
   const replayUrl = `${baseUrl}/#/replay/session/${entry.sessionId}`;

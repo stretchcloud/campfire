@@ -27,7 +27,7 @@ Commands:
   help        Show this help message
 
 Options:
-  --port <n>  Override the default port (default: 3456)
+  --port <n>  Override the default port (default: 4567)
 `);
 }
 

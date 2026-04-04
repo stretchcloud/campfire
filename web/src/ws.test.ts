@@ -41,7 +41,7 @@ class MockWebSocket {
 }
 
 vi.stubGlobal("WebSocket", MockWebSocket);
-vi.stubGlobal("location", { protocol: "http:", host: "localhost:3456" });
+vi.stubGlobal("location", { protocol: "http:", host: "localhost:4567" });
 
 // ---------------------------------------------------------------------------
 // Fresh module state for each test
@@ -103,7 +103,7 @@ describe("connectSession", () => {
   it("creates a WebSocket with the correct URL", () => {
     wsModule.connectSession("s1");
 
-    expect(lastWs.url).toBe("ws://localhost:3456/ws/browser/s1");
+    expect(lastWs.url).toBe("ws://localhost:4567/ws/browser/s1");
     expect(useStore.getState().connectionStatus.get("s1")).toBe("connecting");
   });
 

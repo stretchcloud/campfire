@@ -89,7 +89,7 @@ curl -fsSL https://bun.sh/install | bash
 bunx the-campfire
 ```
 
-Open [http://localhost:3456](http://localhost:3456). That's it.
+Open [http://localhost:4567](http://localhost:4567). That's it.
 
 To run on a different port:
 
@@ -110,23 +110,23 @@ cd campfire
 cd web
 bun install
 
-# 3a. Development mode (hot reload, frontend on :5174, backend on :3457)
+# 3a. Development mode (hot reload, frontend on :4567, backend on :14567)
 bun run dev
 
-# 3b. OR production mode (single server on :3456)
+# 3b. OR production mode (single server on :4567)
 bun run build
 bun run start
 ```
 
 **Development mode** starts two processes:
-- Backend on `http://localhost:3457` (auto-restarts on file changes)
-- Frontend on `http://localhost:5174` (Vite HMR, proxies API/WS to backend)
+- Backend on `http://localhost:14567` (auto-restarts on file changes)
+- Frontend on `http://localhost:4567` (Vite HMR, proxies API/WS to backend)
 
-Open [http://localhost:5174](http://localhost:5174) in development mode.
+Open [http://localhost:4567](http://localhost:4567) in development mode.
 
 **Production mode** builds the frontend into static files and serves everything from a single server:
 
-Open [http://localhost:3456](http://localhost:3456) in production mode.
+Open [http://localhost:4567](http://localhost:4567) in production mode.
 
 ### Option 3: Docker
 
@@ -144,7 +144,7 @@ docker compose up
 docker compose up -d
 ```
 
-Open [http://localhost:3456](http://localhost:3456).
+Open [http://localhost:4567](http://localhost:4567).
 
 To build the Docker image manually without Compose:
 
@@ -155,7 +155,7 @@ docker build -t campfire:latest .
 # Run the container
 docker run -d \
   --name campfire \
-  -p 3456:3456 \
+  -p 3456:4567 \
   -v campfire-data:/home/campfire/.campfire \
   -v campfire-sessions:/tmp/vibe-sessions \
   campfire:latest
@@ -267,7 +267,7 @@ Share any session with teammates using invite links. Multiple people can watch a
    - **Spectator** — watch-only (cannot send messages or vote)
 4. Copy the generated link and share it
 
-The invite link looks like `http://localhost:3456/#/join/<token>`. When someone opens it, they join the session with the assigned role.
+The invite link looks like `http://localhost:4567/#/join/<token>`. When someone opens it, they join the session with the assigned role.
 
 **Presence indicators:**
 
@@ -329,10 +329,10 @@ Configure the voting policy via the UI or API:
 
 ```bash
 # Get current policy
-curl http://localhost:3456/api/voting-policy
+curl http://localhost:4567/api/voting-policy
 
 # Change policy
-curl -X PUT http://localhost:3456/api/voting-policy \
+curl -X PUT http://localhost:4567/api/voting-policy \
   -H "Content-Type: application/json" \
   -d '{"policy": "any-deny-blocks"}'
 ```
@@ -374,14 +374,14 @@ Recordings are stored as JSONL (newline-delimited JSON) files in `~/.campfire/re
 
 ```bash
 # List all recordings
-curl http://localhost:3456/api/recordings
+curl http://localhost:4567/api/recordings
 
 # Check if a session is being recorded
-curl http://localhost:3456/api/sessions/:id/recording/status
+curl http://localhost:4567/api/sessions/:id/recording/status
 
 # Start/stop recording for a specific session
-curl -X POST http://localhost:3456/api/sessions/:id/recording/start
-curl -X POST http://localhost:3456/api/sessions/:id/recording/stop
+curl -X POST http://localhost:4567/api/sessions/:id/recording/start
+curl -X POST http://localhost:4567/api/sessions/:id/recording/stop
 ```
 
 Recording is enabled by default. Disable globally with `CAMPFIRE_RECORD=0`. Files auto-rotate when total lines exceed 100,000 (configurable with `CAMPFIRE_RECORDINGS_MAX_LINES`).
@@ -407,7 +407,7 @@ Fork any session at any point in its conversation to explore a different path. F
 **Fork options:**
 
 ```bash
-curl -X POST http://localhost:3456/api/sessions/:id/fork \
+curl -X POST http://localhost:4567/api/sessions/:id/fork \
   -H "Content-Type: application/json" \
   -d '{
     "messageIndex": 5,
@@ -467,10 +467,10 @@ Each entry captures a snapshot of the session at publish time: backend type, mod
 
 ```bash
 # List gallery entries with filters
-curl "http://localhost:3456/api/gallery?backend=claude&sortBy=votes&featured=true"
+curl "http://localhost:4567/api/gallery?backend=claude&sortBy=votes&featured=true"
 
 # Publish a session
-curl -X POST http://localhost:3456/api/gallery \
+curl -X POST http://localhost:4567/api/gallery \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "abc-123",
@@ -480,12 +480,12 @@ curl -X POST http://localhost:3456/api/gallery \
   }'
 
 # Vote on an entry
-curl -X POST http://localhost:3456/api/gallery/:id/vote \
+curl -X POST http://localhost:4567/api/gallery/:id/vote \
   -H "Content-Type: application/json" \
   -d '{"direction": 1}'
 
 # Toggle featured status
-curl -X POST http://localhost:3456/api/gallery/:id/feature
+curl -X POST http://localhost:4567/api/gallery/:id/feature
 ```
 
 ---
@@ -516,10 +516,10 @@ The prompt picker automatically filters prompts based on the current session's w
 
 ```bash
 # List prompts (optionally filtered by cwd)
-curl "http://localhost:3456/api/prompts?cwd=/home/user/my-project"
+curl "http://localhost:4567/api/prompts?cwd=/home/user/my-project"
 
 # Create a prompt
-curl -X POST http://localhost:3456/api/prompts \
+curl -X POST http://localhost:4567/api/prompts \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Code review checklist",
@@ -528,12 +528,12 @@ curl -X POST http://localhost:3456/api/prompts \
   }'
 
 # Update a prompt
-curl -X PUT http://localhost:3456/api/prompts/:id \
+curl -X PUT http://localhost:4567/api/prompts/:id \
   -H "Content-Type: application/json" \
   -d '{"name": "Updated name", "content": "Updated content"}'
 
 # Delete a prompt
-curl -X DELETE http://localhost:3456/api/prompts/:id
+curl -X DELETE http://localhost:4567/api/prompts/:id
 ```
 
 Prompts are stored at `~/.campfire/prompts.json`.
@@ -575,37 +575,37 @@ When you first use Linear in a git repository, Campfire prompts you to link the 
 
 ```bash
 # Check connection status
-curl http://localhost:3456/api/linear/connection
+curl http://localhost:4567/api/linear/connection
 # → {"connected": true, "viewer": {"name": "...", "email": "..."}, "teams": [...]}
 
 # Search issues (cached, deduplicated)
-curl "http://localhost:3456/api/linear/issues?query=auth&limit=10"
+curl "http://localhost:4567/api/linear/issues?query=auth&limit=10"
 
 # List teams
-curl http://localhost:3456/api/linear/teams
+curl http://localhost:4567/api/linear/teams
 
 # Get workflow states for a team
-curl http://localhost:3456/api/linear/team/:teamId/states
+curl http://localhost:4567/api/linear/team/:teamId/states
 
 # Project-repo mapping
-curl http://localhost:3456/api/linear/project-mapping?repoRoot=/path/to/repo
-curl -X POST http://localhost:3456/api/linear/project-mapping \
+curl http://localhost:4567/api/linear/project-mapping?repoRoot=/path/to/repo
+curl -X POST http://localhost:4567/api/linear/project-mapping \
   -H "Content-Type: application/json" \
   -d '{"repoRoot": "/path/to/repo", "teamId": "...", "teamKey": "ENG", "teamName": "Engineering"}'
-curl -X DELETE http://localhost:3456/api/linear/project-mapping \
+curl -X DELETE http://localhost:4567/api/linear/project-mapping \
   -H "Content-Type: application/json" \
   -d '{"repoRoot": "/path/to/repo"}'
 
 # Link an issue to a session
-curl -X POST http://localhost:3456/api/linear/session/:sessionId/link-issue \
+curl -X POST http://localhost:4567/api/linear/session/:sessionId/link-issue \
   -H "Content-Type: application/json" \
   -d '{"issueId": "...", "identifier": "ENG-123", "title": "Add OAuth", "url": "...", "state": "Todo", "teamKey": "ENG"}'
 
 # Get linked issue for a session
-curl http://localhost:3456/api/linear/session/:sessionId/issue
+curl http://localhost:4567/api/linear/session/:sessionId/issue
 
 # Transition an issue's state
-curl -X POST http://localhost:3456/api/linear/issues/:issueId/transition \
+curl -X POST http://localhost:4567/api/linear/issues/:issueId/transition \
   -H "Content-Type: application/json" \
   -d '{"stateId": "..."}'
 ```
@@ -703,7 +703,7 @@ Click the **Test** button on any webhook to send a test payload and verify your 
 
 ```bash
 # Create a webhook
-curl -X POST http://localhost:3456/api/webhooks \
+curl -X POST http://localhost:4567/api/webhooks \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Slack Alerts",
@@ -714,10 +714,10 @@ curl -X POST http://localhost:3456/api/webhooks \
   }'
 
 # Test delivery
-curl -X POST http://localhost:3456/api/webhooks/:id/test
+curl -X POST http://localhost:4567/api/webhooks/:id/test
 
 # Toggle enable/disable
-curl -X POST http://localhost:3456/api/webhooks/:id/toggle
+curl -X POST http://localhost:4567/api/webhooks/:id/toggle
 ```
 
 ---
@@ -768,10 +768,10 @@ Jobs auto-disable after repeated consecutive failures to prevent runaway costs.
 
 ```bash
 # List all jobs
-curl http://localhost:3456/api/cron/jobs
+curl http://localhost:4567/api/cron/jobs
 
 # Create a recurring job
-curl -X POST http://localhost:3456/api/cron/jobs \
+curl -X POST http://localhost:4567/api/cron/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Nightly Tests",
@@ -785,13 +785,13 @@ curl -X POST http://localhost:3456/api/cron/jobs \
   }'
 
 # Manually trigger a job
-curl -X POST http://localhost:3456/api/cron/jobs/:id/run
+curl -X POST http://localhost:4567/api/cron/jobs/:id/run
 
 # Enable/disable
-curl -X POST http://localhost:3456/api/cron/jobs/:id/toggle
+curl -X POST http://localhost:4567/api/cron/jobs/:id/toggle
 
 # View execution history
-curl http://localhost:3456/api/cron/jobs/:id/executions
+curl http://localhost:4567/api/cron/jobs/:id/executions
 ```
 
 ---
@@ -807,7 +807,7 @@ Install community agent adapters from npm to add new backends to Campfire. Adapt
 the-campfire install-adapter @campfire/example-adapter
 
 # Via API
-curl -X POST http://localhost:3456/api/adapters/install \
+curl -X POST http://localhost:4567/api/adapters/install \
   -H "Content-Type: application/json" \
   -d '{"npmPackage": "@campfire/example-adapter"}'
 ```
@@ -848,10 +848,10 @@ See [`web/server/ADAPTERS.md`](web/server/ADAPTERS.md) for a step-by-step guide.
 
 ```bash
 # List installed adapters
-curl http://localhost:3456/api/adapters
+curl http://localhost:4567/api/adapters
 
 # Uninstall
-curl -X DELETE http://localhost:3456/api/adapters/my-agent
+curl -X DELETE http://localhost:4567/api/adapters/my-agent
 ```
 
 ---
@@ -912,10 +912,10 @@ Profiles are stored as individual JSON files in `~/.campfire/envs/`.
 
 ```bash
 # List profiles
-curl http://localhost:3456/api/envs
+curl http://localhost:4567/api/envs
 
 # Create a profile
-curl -X POST http://localhost:3456/api/envs \
+curl -X POST http://localhost:4567/api/envs \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Staging",
@@ -926,12 +926,12 @@ curl -X POST http://localhost:3456/api/envs \
   }'
 
 # Update a profile
-curl -X PUT http://localhost:3456/api/envs/staging \
+curl -X PUT http://localhost:4567/api/envs/staging \
   -H "Content-Type: application/json" \
   -d '{"variables": {"API_KEY": "sk-new-key", "DEBUG": "false"}}'
 
 # Delete a profile
-curl -X DELETE http://localhost:3456/api/envs/staging
+curl -X DELETE http://localhost:4567/api/envs/staging
 ```
 
 ---
@@ -974,13 +974,13 @@ PR status is displayed in the task panel and updates automatically.
 
 ```bash
 # Get repository info
-curl "http://localhost:3456/api/git/repo-info?path=/home/user/project"
+curl "http://localhost:4567/api/git/repo-info?path=/home/user/project"
 
 # List branches
-curl "http://localhost:3456/api/git/branches?repoRoot=/home/user/project"
+curl "http://localhost:4567/api/git/branches?repoRoot=/home/user/project"
 
 # Create a worktree
-curl -X POST http://localhost:3456/api/git/worktree \
+curl -X POST http://localhost:4567/api/git/worktree \
   -H "Content-Type: application/json" \
   -d '{
     "repoRoot": "/home/user/project",
@@ -989,7 +989,7 @@ curl -X POST http://localhost:3456/api/git/worktree \
   }'
 
 # Fetch and pull
-curl -X POST http://localhost:3456/api/git/fetch \
+curl -X POST http://localhost:4567/api/git/fetch \
   -H "Content-Type: application/json" \
   -d '{"repoRoot": "/home/user/project"}'
 ```
@@ -1011,12 +1011,12 @@ The terminal connects via WebSocket (`/ws/terminal/:id`) and supports all standa
 
 ```bash
 # Spawn a terminal
-curl -X POST http://localhost:3456/api/terminal/spawn \
+curl -X POST http://localhost:4567/api/terminal/spawn \
   -H "Content-Type: application/json" \
   -d '{"cwd": "/home/user/project", "cols": 120, "rows": 40}'
 
 # Kill the terminal
-curl -X POST http://localhost:3456/api/terminal/kill
+curl -X POST http://localhost:4567/api/terminal/kill
 ```
 
 ---
@@ -1092,7 +1092,7 @@ Container session creation uses Server-Sent Events (SSE) for real-time progress 
 
 ```bash
 # Create a container session with progress (returns text/event-stream)
-curl -N -X POST http://localhost:3456/api/sessions/create-with-progress \
+curl -N -X POST http://localhost:4567/api/sessions/create-with-progress \
   -H "Content-Type: application/json" \
   -d '{
     "backend": "claude",
@@ -1115,11 +1115,11 @@ curl -N -X POST http://localhost:3456/api/sessions/create-with-progress \
 
 ```bash
 # Check Docker availability
-curl http://localhost:3456/api/containers/status
+curl http://localhost:4567/api/containers/status
 # → {"available": true, "version": "24.0.7"}
 
 # List available images
-curl http://localhost:3456/api/containers/images
+curl http://localhost:4567/api/containers/images
 ```
 
 ---
@@ -1218,10 +1218,10 @@ Capability data is stored as JSON in `~/.campfire/capabilities/` and learning hi
 # 2. Start multiple sessions — CI activates automatically
 
 # 3. Query shared memory via the REST API
-curl "http://localhost:3456/api/sessions/:id/memory/query?q=authentication+pattern&limit=5"
+curl "http://localhost:4567/api/sessions/:id/memory/query?q=authentication+pattern&limit=5"
 
 # 4. Route a task to the best agent
-curl -X POST http://localhost:3456/api/sessions/route-task \
+curl -X POST http://localhost:4567/api/sessions/route-task \
   -H "Content-Type: application/json" \
   -d '{"taskDescription": "Refactor the TypeScript authentication module"}'
 ```
@@ -1610,7 +1610,7 @@ A 5-step first-run experience shown on first launch. Navigate through:
 
 Skip at any point. Tracked via `onboardingCompleted` in `~/.campfire/settings.json`. Reset with:
 ```bash
-curl -X PUT http://localhost:3456/api/settings -H 'Content-Type: application/json' -d '{"onboardingCompleted": false}'
+curl -X PUT http://localhost:4567/api/settings -H 'Content-Type: application/json' -d '{"onboardingCompleted": false}'
 ```
 
 ### Monaco Code Editor
@@ -1747,7 +1747,7 @@ When authentication is enabled, all WebSocket upgrade endpoints are protected �
 CAMPFIRE_PASSWORD=mypassword bunx the-campfire
 
 # Option 2: Set password via API
-curl -X POST http://localhost:3456/api/auth/set-password \
+curl -X POST http://localhost:4567/api/auth/set-password \
   -H 'Content-Type: application/json' \
   -d '{"password": "mypassword"}'
 ```
@@ -1756,7 +1756,7 @@ curl -X POST http://localhost:3456/api/auth/set-password \
 
 ```bash
 # Get a session token
-curl -X POST http://localhost:3456/api/auth/login \
+curl -X POST http://localhost:4567/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"password": "mypassword"}'
 # Returns: { "token": "abc123..." }
@@ -1839,7 +1839,7 @@ The included `Dockerfile` uses a multi-stage build:
 docker build -t campfire:latest .
 
 # Verify it works
-docker run --rm -p 3456:3456 campfire:latest
+docker run --rm -p 3456:4567 campfire:latest
 ```
 
 ### Using Docker Compose
@@ -1863,7 +1863,7 @@ docker compose down
 docker compose down -v
 ```
 
-Open [http://localhost:3456](http://localhost:3456).
+Open [http://localhost:4567](http://localhost:4567).
 
 ### docker-compose.yml
 
@@ -1874,13 +1874,13 @@ services:
   campfire:
     build: .
     ports:
-      - "3456:3456"
+      - "3456:4567"
     volumes:
       - campfire-data:/home/campfire/.campfire
       - campfire-sessions:/tmp/vibe-sessions
     environment:
       - NODE_ENV=production
-      - PORT=3456
+      - PORT=4567
     restart: unless-stopped
 
 volumes:
@@ -1917,7 +1917,7 @@ services:
   campfire:
     build: .
     ports:
-      - "3456:3456"
+      - "3456:4567"
     volumes:
       - campfire-data:/home/campfire/.campfire
       - campfire-sessions:/tmp/vibe-sessions
@@ -1970,7 +1970,7 @@ server {
     server_name campfire.example.com;
 
     location / {
-        proxy_pass http://localhost:3456;
+        proxy_pass http://localhost:4567;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -1986,7 +1986,7 @@ server {
 The Docker image includes a health check:
 
 ```bash
-curl -f http://localhost:3456/api/sessions || exit 1
+curl -f http://localhost:4567/api/sessions || exit 1
 ```
 
 ---
@@ -2262,7 +2262,7 @@ All endpoints are under `/api`.
 
 ### Browser Connection
 
-Connect to `ws://localhost:3456/ws/browser/:sessionId` to receive real-time session events.
+Connect to `ws://localhost:4567/ws/browser/:sessionId` to receive real-time session events.
 
 **Messages from server:**
 
@@ -2348,8 +2348,8 @@ bun run dev
 ```
 
 This starts:
-- Backend on `http://localhost:3457` (with hot reload)
-- Frontend on `http://localhost:5174` (Vite HMR, proxies API/WS to backend)
+- Backend on `http://localhost:14567` (with hot reload)
+- Frontend on `http://localhost:4567` (Vite HMR, proxies API/WS to backend)
 
 ### Commands
 

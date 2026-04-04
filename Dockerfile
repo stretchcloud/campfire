@@ -38,11 +38,11 @@ USER campfire
 
 # Default environment
 ENV NODE_ENV=production
-ENV PORT=3456
+ENV PORT=4567
 
-EXPOSE 3456
+EXPOSE 4567
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:3456/api/sessions || exit 1
+  CMD curl -f http://localhost:4567/api/sessions || exit 1
 
 CMD ["bun", "web/server/index.ts"]
