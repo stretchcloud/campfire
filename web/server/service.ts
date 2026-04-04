@@ -8,7 +8,7 @@ import {
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
-import { DEFAULT_PORT_PROD } from "./constants.js";
+import { DEFAULT_PORT } from "./constants.js";
 import { getServicePath } from "./path-resolver.js";
 
 // ─── Shared Constants ───────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ interface PlistOptions {
 }
 
 export function generatePlist(opts: PlistOptions): string {
-  const port = opts.port ?? DEFAULT_PORT_PROD;
+  const port = opts.port ?? DEFAULT_PORT;
   const home = homedir();
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -125,7 +125,7 @@ interface UnitOptions {
 }
 
 export function generateSystemdUnit(opts: UnitOptions): string {
-  const port = opts.port ?? DEFAULT_PORT_PROD;
+  const port = opts.port ?? DEFAULT_PORT;
   const home = homedir();
 
   return `[Unit]
@@ -246,7 +246,7 @@ async function installDarwin(opts?: { port?: number }): Promise<void> {
   }
 
   const binPath = resolveBinPath();
-  const port = opts?.port ?? DEFAULT_PORT_PROD;
+  const port = opts?.port ?? DEFAULT_PORT;
 
   // Create log directory
   mkdirSync(LOG_DIR, { recursive: true });
@@ -286,7 +286,7 @@ async function installLinux(opts?: { port?: number }): Promise<void> {
   }
 
   const binPath = resolveBinPath();
-  const port = opts?.port ?? DEFAULT_PORT_PROD;
+  const port = opts?.port ?? DEFAULT_PORT;
 
   // Create log directory
   mkdirSync(LOG_DIR, { recursive: true });
@@ -609,7 +609,7 @@ export function refreshServiceDefinition(): void {
     const installedService = getInstalledLaunchdService();
     if (!installedService) return;
 
-    let port = DEFAULT_PORT_PROD;
+    let port = DEFAULT_PORT;
     try {
       const content = readFileSync(installedService.plistPath, "utf-8");
       const portMatch = content.match(/<key>PORT<\/key>\s*<string>(\d+)<\/string>/);
@@ -623,7 +623,7 @@ export function refreshServiceDefinition(): void {
   } else if (isLinux()) {
     if (!isSystemdUnitInstalled()) return;
 
-    let port = DEFAULT_PORT_PROD;
+    let port = DEFAULT_PORT;
     try {
       const content = readFileSync(UNIT_PATH, "utf-8");
       const portMatch = content.match(/Environment=PORT=(\d+)/);
@@ -657,7 +657,7 @@ async function statusDarwin(): Promise<ServiceStatus> {
   }
 
   // Read port from the plist
-  let port = DEFAULT_PORT_PROD;
+  let port = DEFAULT_PORT;
   try {
     const plistContent = readFileSync(installedService.plistPath, "utf-8");
     const portMatch = plistContent.match(/<key>PORT<\/key>\s*<string>(\d+)<\/string>/);
@@ -691,7 +691,7 @@ async function statusLinux(): Promise<ServiceStatus> {
   }
 
   // Read port from the unit file
-  let port = DEFAULT_PORT_PROD;
+  let port = DEFAULT_PORT;
   try {
     const unitContent = readFileSync(UNIT_PATH, "utf-8");
     const portMatch = unitContent.match(/Environment=PORT=(\d+)/);

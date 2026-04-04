@@ -35,7 +35,7 @@ const backend = spawn(["bun", "--watch", "server/index.ts"], {
   cwd: webDir,
   stdout: "pipe",
   stderr: "pipe",
-  env: { ...process.env, NODE_ENV: "development" },
+  env: { ...process.env, NODE_ENV: "development", __CAMPFIRE_INTERNAL_PORT: "14567" },
 });
 procs.push(backend);
 prefix("api", "\x1b[36m", backend.stdout);

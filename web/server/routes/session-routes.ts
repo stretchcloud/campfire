@@ -338,7 +338,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
     if (!token) return c.json({ error: "Session not found" }, 404);
 
     const protocol = c.req.header("x-forwarded-proto") || "http";
-    const host = c.req.header("host") || "localhost:3456";
+    const host = c.req.header("host") || "localhost:4567";
     const url = `${protocol}://${host}/#/join/${token}`;
     return c.json({ token, url, role });
   });
