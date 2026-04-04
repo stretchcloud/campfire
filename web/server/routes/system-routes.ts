@@ -78,6 +78,16 @@ export function registerSystemRoutes(api: Hono, deps: RouteDeps): void {
     return c.json(images);
   });
 
+  api.get("/containers/list", (c) => {
+    return c.json(containerManager.listContainers());
+  });
+
+  api.post("/containers/:sessionId/stop", async (c) => {
+    const sessionId = c.req.param("sessionId");
+    await containerManager.removeContainer(sessionId);
+    return c.json({ ok: true });
+  });
+
   // ─── Usage Limits ─────────────────────────────────────────────────────
   api.get("/usage-limits", async (c) => {
     const limits = await getUsageLimits();

@@ -49,6 +49,19 @@
   - [Drag & Drop Upload](#drag--drop-upload)
   - [Session Folders](#session-folders)
   - [Permission Mode Selector](#permission-mode-selector)
+  - [Session Pulse (Background Activity)](#session-pulse-background-activity)
+  - [Agent System](#agent-system)
+  - [Provider Settings](#provider-settings)
+  - [Model & Provider Switcher](#model--provider-switcher)
+  - [Session Launch Progress](#session-launch-progress)
+  - [Onboarding Wizard](#onboarding-wizard)
+  - [Monaco Code Editor](#monaco-code-editor)
+  - [Files Panel](#files-panel)
+  - [Recording Hub](#recording-hub)
+  - [Protocol Monitor](#protocol-monitor)
+  - [Commands Discovery](#commands-discovery)
+  - [Proactive Keepalive](#proactive-keepalive)
+  - [Security Headers & Rate Limiting](#security-headers--rate-limiting)
 - [Architecture](#architecture)
 - [Docker Deployment](#docker-deployment)
 - [CLI Reference](#cli-reference)
@@ -1503,6 +1516,209 @@ A dropdown in the Composer lets you switch between Claude Code permission modes 
 Switching sends a `set_permission_mode` control message to the CLI. The current mode is displayed as a badge on the mode button. Use `Shift+Tab` in the Composer as a keyboard shortcut to toggle between Plan and your previous mode.
 
 ---
+
+### Session Pulse (Background Activity)
+
+A floating widget in the bottom-right corner of the chat view that provides real-time awareness of background activity. Two tabs:
+
+**Activity tab** — shows what's happening in the current session:
+- Background agents spawned with `run_in_background` (Claude Code)
+- Active tool calls with elapsed timers (all backends)
+- Task progress from TodoWrite/TaskCreate
+
+**Sessions tab** — shows other sessions running in the background:
+- Which sessions are running or compacting
+- Pending permission counts with warning badges
+- Click any row to jump to that session
+
+Auto-hides when all activity completes. Appears automatically when agents or sessions are active.
+
+### Agent System
+
+Persistent agent profiles with automated triggers. Navigate to **Config > Agents** (`#/agents`).
+
+**Creating an agent:**
+1. Click **Create Agent**
+2. Fill in: name, description, backend (all 7 supported), model, permission mode, working directory
+3. Write a prompt template — use `{{input}}` as a placeholder for trigger input
+4. Select an environment profile (important for Codex — provides `OPENAI_API_KEY`)
+5. Optionally enable triggers: webhook or cron schedule
+
+**Running an agent:**
+- Click the play button on any agent card
+- If the prompt contains `{{input}}`, a modal asks for the input value
+- The agent creates a new session, injects the resolved prompt, and runs autonomously
+- Agent sessions are named with the agent's icon (e.g., `🔬 Analyser`)
+
+**Triggers:**
+| Trigger | How it works |
+|---------|-------------|
+| Manual | Click the play button |
+| Webhook | `POST /api/agents/{id}/webhook` with `{ "input": "..." }` |
+| Schedule | Cron expression (e.g., `0 8 * * *` for daily at 8am) |
+
+**Safety:** Auto-disables after 5 consecutive failures. Overlap prevention skips execution if previous run is still alive.
+
+**Import/Export:** Agents can be exported as JSON and imported on another Campfire instance.
+
+### Provider Settings
+
+Configure AI provider authentication tokens. Navigate to **Settings > Providers**.
+
+Three token types, auto-injected into sessions for matching backends:
+
+| Token | Environment Variable | Used By |
+|-------|---------------------|---------|
+| Claude Code OAuth | `CLAUDE_CODE_OAUTH_TOKEN` | Claude sessions |
+| OpenAI API Key | `OPENAI_API_KEY` | Codex sessions |
+| Anthropic API Key | `ANTHROPIC_API_KEY` | All sessions (Goose, Aider, etc.) |
+
+**Precedence:** Environment profiles override global provider tokens. If your env profile sets `OPENAI_API_KEY`, the global setting is skipped for that session.
+
+**Auth detection:** `GET /api/settings/auth-status` checks for existing authentication:
+- `~/.claude/.credentials.json` (Claude subscription login)
+- `~/.codex/auth.json` (ChatGPT plan login)
+- Environment variables and stored tokens
+
+### Model & Provider Switcher
+
+Two compact dropdowns in the TopBar for switching models and providers mid-session:
+
+**Model Switcher** — click the model name (e.g., `◕ Sonnet`) to see all available models for the current backend. Selecting a different model sends a `set_model` WebSocket message. Works for all backends.
+
+**Provider Switcher** — click the backend name (e.g., `✨ Claude`) to see all 7 backends with availability status. Selecting a different provider creates a new session with the same working directory (since backends can't be swapped mid-session).
+
+### Session Launch Progress
+
+A non-blocking floating toast (bottom-left) that shows real-time progress when any session is being created:
+
+- **Standard sessions:** Spawning process → Waiting for connection → Ready
+- **Auto-detects** new sessions by monitoring the `sdkSessions` store
+- **Auto-dismisses** after 2 seconds once all steps complete
+- Works globally — triggers from HomePage, ProviderSwitcher, Agent execution, or Cron jobs
+
+### Onboarding Wizard
+
+A 5-step first-run experience shown on first launch. Navigate through:
+
+1. **Welcome** — explains what Campfire is
+2. **Providers** — dual-path auth for Claude (subscription via `claude auth login` OR API key) and Codex (ChatGPT login via `codex login` OR API key). Auto-detects existing auth.
+3. **Workspace** — pick a default working directory
+4. **Tour** — key features overview
+5. **Launch** — sends user to create their first session
+
+Skip at any point. Tracked via `onboardingCompleted` in `~/.campfire/settings.json`. Reset with:
+```bash
+curl -X PUT http://localhost:3456/api/settings -H 'Content-Type: application/json' -d '{"onboardingCompleted": false}'
+```
+
+### Monaco Code Editor
+
+VS Code's editor engine integrated into Campfire for code editing. Lazy-loaded — only downloaded when an editor opens.
+
+**Where it's used:**
+- **CLAUDE.md Editor** — edit project instructions with Markdown syntax highlighting
+- **Diff Panel "Edit" mode** — click Diff > Edit to modify any file the agent changed
+- **Files Panel** — full file browser with editing (see below)
+- **Agent prompt editor** — write agent prompts with line numbers
+- **Cron prompt editor** — same for scheduled tasks
+
+**Features:** IntelliSense (TS/JS/CSS/JSON), minimap, find/replace (Ctrl+H), multi-cursor, code folding, bracket pair colorization, command palette (Ctrl+Shift+P), custom Campfire themes (light + dark).
+
+### Files Panel
+
+A full workspace file browser with Monaco editor. Click the **Files** tab in the TopBar (next to Log and Diff).
+
+**Features:**
+- **Lazy-loaded directory tree** — expands on click, shows folders and files
+- **File search** — filter by filename
+- **Syntax-highlighted editing** — open any file in Monaco with auto-detected language (40+ extensions)
+- **Save/Cancel** — save edits to disk or discard changes
+- **Changed file indicators** — files modified by the agent show a warning dot
+- **Image preview** — renders PNG/JPG/SVG inline
+- **Show/hide dotfiles** — toggle hidden files visibility
+- **Responsive** — sidebar collapses on mobile
+
+### Recording Hub
+
+Browse, validate, and diagnose session recordings. Navigate to **Data > Recordings** (`#/hub`).
+
+**Getting started:**
+1. Click **Index Recordings** to import all existing auto-recordings
+2. Browse recordings with backend filter pills, playable/metadata filter, and sort options
+
+**Per-recording analysis** (click the details icon):
+- **Protocol Validation** — checks message format compatibility across all 7 backends
+- **Health Report** — duration, message rate, disconnections, data gaps, permission response times, anomaly patterns
+
+**Filter/Sort options:**
+- By backend: Claude, Codex, Goose, etc.
+- By type: Playable (has chat content), Metadata only
+- By sort: Newest, Oldest, Longest duration, Most messages
+
+### Protocol Monitor
+
+Real-time WebSocket message flow dashboard. Navigate to **Tools > Monitor** (`#/monitor`).
+
+**Metrics (auto-refreshes every 3 seconds):**
+- Total messages, messages/minute, active sessions, errors
+- Backend breakdown with per-backend message/error counts
+- Message type distribution (5-minute rolling window)
+- Per-session stats with name, backend, rate, last activity
+
+**Protocol drift alerts** — visual warnings when unexpected message formats are detected, with deduplication.
+
+### Commands Discovery
+
+Browse all available slash commands and skills. Navigate to **Config > Commands** (`#/commands`).
+
+**Dynamic command list** — fetched from the CLI itself (not hardcoded). If no sessions are connected, Campfire spins up a temporary session to discover available commands, caches the result, and kills the session.
+
+**Three sections:**
+- **Built-in Commands** — all CLI slash commands (e.g., `/help`, `/compact`, `/cost`, `/memory`)
+- **Custom Commands** — `.md` files from `~/.claude/commands/` and `{cwd}/.claude/commands/`
+- **Skills** — directories with `SKILL.md` from `~/.claude/skills/`
+
+Custom commands and skills show expandable content preview and source badges (user vs project).
+
+**Slash autocomplete on HomePage** — type `/` in the new session textarea to see the autocomplete dropdown with all available commands.
+
+### Proactive Keepalive
+
+Auto-relaunches crashed CLI sessions with exponential backoff. Ensures autonomous sessions (agents, cron jobs) stay alive even without a browser connected.
+
+| Setting | Default | Environment Variable |
+|---------|---------|---------------------|
+| Base delay | 3 seconds | `CAMPFIRE_KEEPALIVE_DELAY_MS` |
+| Max attempts | 3 | `CAMPFIRE_KEEPALIVE_MAX_ATTEMPTS` |
+
+**Backoff schedule:** 3s → 6s → 12s. Resets on successful relaunch.
+
+**Excluded from relaunch:** Intentional kills (user clicked kill/delete), archived sessions, clean exits (exit code 0).
+
+**WebSocket config:** Bun's built-in ping timeout is disabled (`idleTimeout: 0, sendPings: false`) to prevent idle CLI connections from being killed with code 1006.
+
+### Security Headers & Rate Limiting
+
+**Security headers** applied to all responses:
+
+| Header | Value |
+|--------|-------|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `X-XSS-Protection` | `1; mode=block` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` (HTTPS only) |
+
+**Rate limiting** on `/api/*` endpoints:
+
+| Setting | Default | Environment Variable |
+|---------|---------|---------------------|
+| Window | 60 seconds | `CAMPFIRE_RATE_LIMIT_WINDOW_MS` |
+| Max requests | 120 per window | `CAMPFIRE_RATE_LIMIT_MAX` |
+
+Rate limit headers included in every API response: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`. Returns `429 Too Many Requests` with `Retry-After` header when exceeded.
 
 ---
 

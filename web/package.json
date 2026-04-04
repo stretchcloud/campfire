@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.26.2",
+    "@monaco-editor/react": "^4.7.0",
     "croner": "^10.0.1",
     "diff": "^8.0.3",
     "geist": "^1.7.0",

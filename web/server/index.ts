@@ -23,6 +23,11 @@ import { getSettings } from "./settings-manager.js";
 import { PRPoller } from "./pr-poller.js";
 import { RecorderManager } from "./recorder.js";
 import { CronScheduler } from "./cron-scheduler.js";
+import { AgentExecutor } from "./agent-executor.js";
+import { ProtocolMonitor } from "./protocol-monitor.js";
+import { ProactiveKeepalive } from "./proactive-keepalive.js";
+import { securityHeaders, rateLimiter } from "./security-middleware.js";
+import { isAuthEnabled, verifyToken } from "./auth.js";
 import { WebhookManager } from "./webhook-manager.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { collectiveIntelligenceLayer } from "./collective-intelligence.js";
@@ -49,12 +54,18 @@ const recorder = new RecorderManager();
 const cronScheduler = new CronScheduler(launcher, wsBridge);
 const webhookManager = new WebhookManager();
 const adapterRegistry = new AdapterRegistry();
+const agentExecutor = new AgentExecutor(launcher, wsBridge);
+const protocolMonitor = new ProtocolMonitor();
+// Proactive keepalive — auto-relaunches crashed CLI sessions with exponential backoff.
+const _keepalive = new ProactiveKeepalive(launcher);
+process.on("SIGTERM", () => _keepalive.destroy());
 const dmuxWatcher = new DmuxWatcher();
 
 // ── Restore persisted sessions from disk ────────────────────────────────────
 wsBridge.setStore(sessionStore);
 wsBridge.setRecorder(recorder);
 wsBridge.setWebhookManager(webhookManager);
+wsBridge.setProtocolMonitor(protocolMonitor);
 wsBridge.setCollectiveIntelligence(collectiveIntelligenceLayer);
 launcher.setStore(sessionStore);
 launcher.setRecorder(recorder);
@@ -122,8 +133,10 @@ app.onError((err, c) => {
   return c.json({ error: err.message }, 500);
 });
 
+app.use("/*", securityHeaders);
+app.use("/api/*", rateLimiter);
 app.use("/api/*", cors());
-app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, webhookManager, adapterRegistry));
+app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, webhookManager, adapterRegistry, agentExecutor, protocolMonitor));
 
 // In production, serve built frontend using absolute path (works when installed as npm package)
 if (process.env.NODE_ENV === "production") {
@@ -132,61 +145,90 @@ if (process.env.NODE_ENV === "production") {
   app.get("/*", serveStatic({ path: resolve(distDir, "index.html") }));
 }
 
+// ── WebSocket auth helper ──────────────────────────────────────────────────
+// When auth is enabled, all WebSocket upgrades (except CLI from localhost)
+// require a valid session token. Returns null if authorized, or a 401 Response.
+function checkWsAuth(request: Request, wsUrl: URL, allowLocalCli = false): Response | null {
+  if (!isAuthEnabled()) return null;
+  if (allowLocalCli) {
+    const host = request.headers.get("host") || "";
+    if (host.startsWith("localhost") || host.startsWith("127.0.0.1")) return null;
+  }
+  const token = wsUrl.searchParams.get("auth_token")
+    || request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (token && verifyToken(token)) return null;
+  return new Response("Unauthorized", { status: 401 });
+}
+
+// ── WebSocket upgrade routing (extracted for cognitive complexity) ──────────
+
+const CLI_RE = /^\/ws\/cli\/([a-f0-9-]+)$/;
+const BROWSER_RE = /^\/ws\/browser\/([a-f0-9-]+)$/;
+const TERMINAL_RE = /^\/ws\/terminal\/([a-f0-9-]+)$/;
+
+type WsServer = { upgrade: (req: Request, opts: { data: SocketData; headers?: HeadersInit }) => boolean };
+
+function upgradeOrFail(server: WsServer, req: Request, data: SocketData): Response | undefined {
+  return server.upgrade(req, { data }) ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
+}
+
+function handleCliWs(req: Request, url: URL, server: WsServer, sessionId: string): Response | undefined {
+  const authReject = checkWsAuth(req, url, true);
+  if (authReject) return authReject;
+  return upgradeOrFail(server, req, { kind: "cli", sessionId });
+}
+
+function handleBrowserWs(req: Request, url: URL, server: WsServer, sessionId: string): Response | undefined {
+  const inviteToken = url.searchParams.get("token");
+  const role = inviteToken ? wsBridge.resolveInviteTokenRole(inviteToken) : undefined;
+  if (!role) {
+    const authReject = checkWsAuth(req, url);
+    if (authReject) return authReject;
+  }
+  return upgradeOrFail(server, req, { kind: "browser", sessionId, _joinRole: role } as SocketData);
+}
+
+function handleTerminalWs(req: Request, url: URL, server: WsServer, terminalId: string): Response | undefined {
+  const authReject = checkWsAuth(req, url);
+  if (authReject) return authReject;
+  return upgradeOrFail(server, req, { kind: "terminal", terminalId });
+}
+
+function handleDmuxWs(req: Request, url: URL, server: WsServer): Response | undefined {
+  const authReject = checkWsAuth(req, url);
+  if (authReject) return authReject;
+  return upgradeOrFail(server, req, { kind: "dmux", cwd: url.searchParams.get("cwd") || "" });
+}
+
+function handleWsUpgrade(req: Request, url: URL, server: WsServer): Response | undefined {
+  const cliMatch = CLI_RE.exec(url.pathname);
+  if (cliMatch) return handleCliWs(req, url, server, cliMatch[1]);
+
+  const browserMatch = BROWSER_RE.exec(url.pathname);
+  if (browserMatch) return handleBrowserWs(req, url, server, browserMatch[1]);
+
+  const termMatch = TERMINAL_RE.exec(url.pathname);
+  if (termMatch) return handleTerminalWs(req, url, server, termMatch[1]);
+
+  if (url.pathname === "/ws/dmux") return handleDmuxWs(req, url, server);
+
+  return undefined;
+}
+
 const server = Bun.serve<SocketData>({
   port,
   async fetch(req, server) {
     const url = new URL(req.url);
-
-    // ── CLI WebSocket — Claude Code CLI connects here via --sdk-url ────
-    const cliMatch = url.pathname.match(/^\/ws\/cli\/([a-f0-9-]+)$/);
-    if (cliMatch) {
-      const sessionId = cliMatch[1];
-      const upgraded = server.upgrade(req, {
-        data: { kind: "cli" as const, sessionId },
-      });
-      if (upgraded) return undefined;
-      return new Response("WebSocket upgrade failed", { status: 400 });
-    }
-
-    // ── Browser WebSocket — connects to a specific session ─────────────
-    const browserMatch = url.pathname.match(/^\/ws\/browser\/([a-f0-9-]+)$/);
-    if (browserMatch) {
-      const sessionId = browserMatch[1];
-      // Resolve role from invite token if provided
-      const inviteToken = url.searchParams.get("token");
-      const role = inviteToken ? wsBridge.resolveInviteTokenRole(inviteToken) : undefined;
-      const upgraded = server.upgrade(req, {
-        data: { kind: "browser" as const, sessionId, _joinRole: role } as SocketData,
-      });
-      if (upgraded) return undefined;
-      return new Response("WebSocket upgrade failed", { status: 400 });
-    }
-
-    // ── Terminal WebSocket — embedded terminal PTY connection ─────────
-    const termMatch = url.pathname.match(/^\/ws\/terminal\/([a-f0-9-]+)$/);
-    if (termMatch) {
-      const terminalId = termMatch[1];
-      const upgraded = server.upgrade(req, {
-        data: { kind: "terminal" as const, terminalId },
-      });
-      if (upgraded) return undefined;
-      return new Response("WebSocket upgrade failed", { status: 400 });
-    }
-
-    // ── Dmux WebSocket — real-time dmux status + pane streaming ──────
-    if (url.pathname === "/ws/dmux") {
-      const cwd = url.searchParams.get("cwd") || "";
-      const upgraded = server.upgrade(req, {
-        data: { kind: "dmux" as const, cwd },
-      });
-      if (upgraded) return undefined;
-      return new Response("WebSocket upgrade failed", { status: 400 });
-    }
+    const wsResult = handleWsUpgrade(req, url, server);
+    if (wsResult) return wsResult;
 
     // Hono handles the rest
     return app.fetch(req, server);
   },
   websocket: {
+    // Disable Bun's built-in ping timeout to prevent idle CLI connections from being killed (code 1006)
+    idleTimeout: 0,
+    sendPings: false,
     open(ws: ServerWebSocket<SocketData>) {
       const data = ws.data;
       if (data.kind === "cli") {
@@ -246,6 +288,7 @@ if (process.env.NODE_ENV !== "production") {
 
 // ── Cron scheduler ──────────────────────────────────────────────────────────
 cronScheduler.startAll();
+agentExecutor.startAll();
 
 // ── Update checker ──────────────────────────────────────────────────────────
 startPeriodicCheck();

@@ -22,6 +22,8 @@ export function createRoutes(
   cronScheduler?: import("./cron-scheduler.js").CronScheduler,
   webhookManager?: import("./webhook-manager.js").WebhookManager,
   adapterRegistry?: import("./adapter-registry.js").AdapterRegistry,
+  agentExecutor?: import("./agent-executor.js").AgentExecutor,
+  protocolMonitor?: import("./protocol-monitor.js").ProtocolMonitor,
 ) {
   return _createRoutes({
     launcher,
@@ -34,5 +36,7 @@ export function createRoutes(
     cronScheduler,
     webhookManager,
     adapterRegistry,
+    agentExecutor,
+    protocolMonitor,
   });
 }

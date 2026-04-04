@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code & Codex when working with code in this repository.
 
+## Code verification
+
+After generating or modifying code, verify it by calling `run_advanced_code_analysis` before committing.
+
 ## What This Is
 
 Campfire — a web UI for Claude Code & Codex. 

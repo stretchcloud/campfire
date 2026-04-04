@@ -71,6 +71,15 @@ const NAV_TOOLS: NavItem[] = [
       </svg>
     ),
   },
+  {
+    label: "Monitor",
+    hash: "#/monitor",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+        <path d="M1 3.5A1.5 1.5 0 012.5 2h11A1.5 1.5 0 0115 3.5v6a1.5 1.5 0 01-1.5 1.5H10v1.5h1.5a.5.5 0 010 1h-7a.5.5 0 010-1H6V11H2.5A1.5 1.5 0 011 9.5v-6zM2.5 3a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h11a.5.5 0 00.5-.5v-6a.5.5 0 00-.5-.5h-11z" />
+      </svg>
+    ),
+  },
 ];
 
 const NAV_DATA: NavItem[] = [
@@ -112,7 +121,7 @@ const NAV_DATA: NavItem[] = [
   },
   {
     label: "Recordings",
-    hash: "#/recordings",
+    hash: "#/hub",
     icon: (
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -129,6 +138,15 @@ const NAV_CONFIG: NavItem[] = [
     icon: (
       <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
         <path d="M2 4a2 2 0 012-2h1.5a.5.5 0 010 1H4a1 1 0 00-1 1v2.5a.5.5 0 01-1 0V4zm0 8a2 2 0 002 2h1.5a.5.5 0 000-1H4a1 1 0 01-1-1V9.5a.5.5 0 00-1 0V12zm12-8a2 2 0 00-2-2h-1.5a.5.5 0 000 1H12a1 1 0 011 1v2.5a.5.5 0 001 0V4zm0 8a2 2 0 01-2 2h-1.5a.5.5 0 010-1H12a1 1 0 001-1V9.5a.5.5 0 011 0V12zM6 8a2 2 0 114 0 2 2 0 01-4 0z" />
+      </svg>
+    ),
+  },
+  {
+    label: "Commands",
+    hash: "#/commands",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+        <path d="M6.646 5.646a.5.5 0 01.708 0l2.5 2.5a.5.5 0 010 .708l-2.5 2.5a.5.5 0 01-.708-.708L8.793 8.5H1.5a.5.5 0 010-1h7.293L6.646 5.354a.5.5 0 010-.708zM12.5 2a.5.5 0 01.5.5v11a.5.5 0 01-1 0v-11a.5.5 0 01.5-.5z" />
       </svg>
     ),
   },

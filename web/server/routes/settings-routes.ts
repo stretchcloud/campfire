@@ -1,54 +1,108 @@
 import type { Hono } from "hono";
 import type { RouteDeps } from "./route-deps.js";
-import { DEFAULT_OPENROUTER_MODEL, getSettings, updateSettings } from "../settings-manager.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import { DEFAULT_OPENROUTER_MODEL, getSettings, updateSettings, type CampfireSettings } from "../settings-manager.js";
+
+function settingsResponse(s: CampfireSettings) {
+  return {
+    openrouterApiKeyConfigured: !!s.openrouterApiKey.trim(),
+    openrouterModel: s.openrouterModel || DEFAULT_OPENROUTER_MODEL,
+    moltbookApiKeyConfigured: !!s.moltbookApiKey?.trim(),
+    linearApiKeyConfigured: !!s.linearApiKey?.trim(),
+    claudeOAuthTokenConfigured: !!s.claudeOAuthToken?.trim(),
+    openaiApiKeyConfigured: !!s.openaiApiKey?.trim(),
+    anthropicApiKeyConfigured: !!s.anthropicApiKey?.trim(),
+    onboardingCompleted: s.onboardingCompleted,
+  };
+}
+
+function resolveClaudeMethod(
+  credentials: boolean, oauthEnv: boolean, apiKeyEnv: boolean,
+  anthropicStored: boolean, tokenStored: boolean,
+): string | null {
+  if (credentials) return "subscription";
+  if (oauthEnv) return "oauth-token";
+  if (apiKeyEnv || anthropicStored) return "api-key";
+  if (tokenStored) return "oauth-token";
+  return null;
+}
+
+function resolveCodexMethod(auth: boolean, apiKeyEnv: boolean, keyStored: boolean): string | null {
+  if (auth) return "subscription";
+  if (apiKeyEnv || keyStored) return "api-key";
+  return null;
+}
 
 export function registerSettingsRoutes(api: Hono, _deps: RouteDeps): void {
   api.get("/settings", (c) => {
     const settings = getSettings();
-    return c.json({
-      openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
-      openrouterModel: settings.openrouterModel || DEFAULT_OPENROUTER_MODEL,
-      moltbookApiKeyConfigured: !!settings.moltbookApiKey?.trim(),
-      linearApiKeyConfigured: !!settings.linearApiKey?.trim(),
-    });
+    return c.json(settingsResponse(settings));
   });
 
   api.put("/settings", async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    if (body.openrouterApiKey !== undefined && typeof body.openrouterApiKey !== "string") {
-      return c.json({ error: "openrouterApiKey must be a string" }, 400);
+
+    // Validate string fields
+    const STRING_FIELDS = [
+      "openrouterApiKey", "openrouterModel", "moltbookApiKey", "linearApiKey",
+      "claudeOAuthToken", "openaiApiKey", "anthropicApiKey",
+    ] as const;
+
+    for (const field of STRING_FIELDS) {
+      if (body[field] !== undefined && typeof body[field] !== "string") {
+        return c.json({ error: `${field} must be a string` }, 400);
+      }
     }
-    if (body.openrouterModel !== undefined && typeof body.openrouterModel !== "string") {
-      return c.json({ error: "openrouterModel must be a string" }, 400);
-    }
-    if (body.moltbookApiKey !== undefined && typeof body.moltbookApiKey !== "string") {
-      return c.json({ error: "moltbookApiKey must be a string" }, 400);
-    }
-    if (body.linearApiKey !== undefined && typeof body.linearApiKey !== "string") {
-      return c.json({ error: "linearApiKey must be a string" }, 400);
-    }
-    if (
-      body.openrouterApiKey === undefined &&
-      body.openrouterModel === undefined &&
-      body.moltbookApiKey === undefined &&
-      body.linearApiKey === undefined
-    ) {
+
+    const hasOnboarding = typeof body.onboardingCompleted === "boolean";
+    const hasAnyField = STRING_FIELDS.some((f) => body[f] !== undefined) || hasOnboarding;
+    if (!hasAnyField) {
       return c.json({ error: "At least one settings field is required" }, 400);
     }
 
-    const patch: Record<string, string> = {};
-    if (typeof body.openrouterApiKey === "string") patch.openrouterApiKey = body.openrouterApiKey.trim();
-    if (typeof body.openrouterModel === "string") patch.openrouterModel = body.openrouterModel.trim() || DEFAULT_OPENROUTER_MODEL;
-    if (typeof body.moltbookApiKey === "string") patch.moltbookApiKey = body.moltbookApiKey.trim();
-    if (typeof body.linearApiKey === "string") patch.linearApiKey = body.linearApiKey.trim();
+    const patch: Record<string, string | boolean> = {};
+    if (hasOnboarding) patch.onboardingCompleted = body.onboardingCompleted;
+    for (const field of STRING_FIELDS) {
+      if (typeof body[field] === "string") {
+        patch[field] = field === "openrouterModel"
+          ? (body[field].trim() || DEFAULT_OPENROUTER_MODEL)
+          : body[field].trim();
+      }
+    }
 
     const settings = updateSettings(patch);
+    return c.json(settingsResponse(settings));
+  });
+
+  // ─── Auth detection: check if Claude/Codex are already authenticated ─────
+  api.get("/settings/auth-status", (c) => {
+    const home = homedir();
+    // Claude: ~/.claude/.credentials.json or CLAUDE_CODE_OAUTH_TOKEN env var
+    const claudeCredentials = existsSync(join(home, ".claude", ".credentials.json"));
+    const claudeOAuthEnv = !!process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    const claudeApiKeyEnv = !!process.env.ANTHROPIC_API_KEY;
+
+    // Codex: ~/.codex/auth.json or OPENAI_API_KEY env var
+    const codexAuth = existsSync(join(home, ".codex", "auth.json"));
+    const openaiApiKeyEnv = !!process.env.OPENAI_API_KEY;
+
+    // Also check global settings for stored tokens
+    const settings = getSettings();
+    const claudeTokenStored = !!settings.claudeOAuthToken?.trim();
+    const openaiKeyStored = !!settings.openaiApiKey?.trim();
+    const anthropicKeyStored = !!settings.anthropicApiKey?.trim();
 
     return c.json({
-      openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
-      openrouterModel: settings.openrouterModel || DEFAULT_OPENROUTER_MODEL,
-      moltbookApiKeyConfigured: !!settings.moltbookApiKey?.trim(),
-      linearApiKeyConfigured: !!settings.linearApiKey?.trim(),
+      claude: {
+        authenticated: claudeCredentials || claudeOAuthEnv || claudeApiKeyEnv || claudeTokenStored || anthropicKeyStored,
+        method: resolveClaudeMethod(claudeCredentials, claudeOAuthEnv, claudeApiKeyEnv, anthropicKeyStored, claudeTokenStored),
+      },
+      codex: {
+        authenticated: codexAuth || openaiApiKeyEnv || openaiKeyStored,
+        method: resolveCodexMethod(codexAuth, openaiApiKeyEnv, openaiKeyStored),
+      },
     });
   });
 }

@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { api } from "../api.js";
+
+const CodeEditor = lazy(() => import("./CodeEditor.js").then((m) => ({ default: m.CodeEditor })));
 
 interface ClaudeMdFile {
   path: string;
@@ -310,17 +312,19 @@ export function ClaudeMdEditor({ cwd, open, onClose }: ClaudeMdEditorProps) {
                       </div>
                     </div>
 
-                    {/* Textarea */}
-                    <textarea
-                      value={editContent}
-                      onChange={(e) => {
-                        setEditContent(e.target.value);
-                        setDirty(true);
-                      }}
-                      spellCheck={false}
-                      className="flex-1 w-full p-4 bg-cc-bg text-cc-fg text-[13px] font-mono-code leading-relaxed resize-none focus:outline-none"
-                      placeholder="Write your project instructions here..."
-                    />
+                    {/* Monaco Editor (lazy-loaded) */}
+                    <Suspense fallback={<div className="p-4 text-cc-muted text-[12px]">Loading editor...</div>}>
+                      <CodeEditor
+                        value={editContent}
+                        onChange={(val) => { setEditContent(val); setDirty(true); }}
+                        language="markdown"
+                        height="60vh"
+                        minimap={false}
+                        wordWrap
+                        ariaLabel="CLAUDE.md editor"
+                        className="border-0 rounded-none"
+                      />
+                    </Suspense>
                   </>
                 )}
 

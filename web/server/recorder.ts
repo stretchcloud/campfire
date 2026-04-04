@@ -333,16 +333,22 @@ function countFileLinesAndContent(path: string): { lines: number; hasContent: bo
     let hasContent = false;
     // In JSONL recordings, the raw field contains escaped JSON, so type markers
     // appear as \"type\":\"assistant\" (backslash-escaped quotes inside the outer JSON string).
-    const assistantMarker = Buffer.from('\\"type\\":\\"assistant\\"');
-    const userMsgMarker = Buffer.from('\\"type\\":\\"user_message\\"');
+    // Check for multiple content types to cover all backends (Claude, Codex, Goose, etc.)
+    const contentMarkers = [
+      Buffer.from(String.raw`\"type\":\"assistant\"`),
+      Buffer.from(String.raw`\"type\":\"user_message\"`),
+      Buffer.from(String.raw`\"type\":\"stream_event\"`),
+      Buffer.from(String.raw`\"type\":\"result\"`),
+      Buffer.from(String.raw`\"type\":\"session_init\"`),
+    ];
     for (let i = 0; i < buf.length; i++) {
       if (buf[i] === 0x0a) lines++;
-      if (!hasContent && i + assistantMarker.length <= buf.length) {
-        if (buf.subarray(i, i + assistantMarker.length).equals(assistantMarker)) {
-          hasContent = true;
-        } else if (i + userMsgMarker.length <= buf.length &&
-                   buf.subarray(i, i + userMsgMarker.length).equals(userMsgMarker)) {
-          hasContent = true;
+      if (!hasContent) {
+        for (const marker of contentMarkers) {
+          if (i + marker.length <= buf.length && buf.subarray(i, i + marker.length).equals(marker)) {
+            hasContent = true;
+            break;
+          }
         }
       }
     }

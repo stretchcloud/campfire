@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import type { RouteDeps } from "./route-deps.js";
 import * as envManager from "../env-manager.js";
+import { getSettings } from "../settings-manager.js";
 import * as gitUtils from "../git-utils.js";
 import * as sessionNames from "../session-names.js";
 import { containerManager, type ContainerConfig, type ContainerInfo } from "../container-manager.js";
@@ -35,6 +36,18 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
             `[routes] Environment "${body.envSlug}" not found, ignoring`,
           );
         }
+      }
+
+      // Auto-inject provider tokens from global settings (if not already set by env profile)
+      const globalSettings = getSettings();
+      if (backend === "claude" && globalSettings.claudeOAuthToken && !envVars?.["CLAUDE_CODE_OAUTH_TOKEN"]) {
+        envVars = { ...envVars, CLAUDE_CODE_OAUTH_TOKEN: globalSettings.claudeOAuthToken };
+      }
+      if (backend === "codex" && globalSettings.openaiApiKey && !envVars?.["OPENAI_API_KEY"]) {
+        envVars = { ...envVars, OPENAI_API_KEY: globalSettings.openaiApiKey };
+      }
+      if (globalSettings.anthropicApiKey && !envVars?.["ANTHROPIC_API_KEY"]) {
+        envVars = { ...envVars, ANTHROPIC_API_KEY: globalSettings.anthropicApiKey };
       }
 
       let cwd = body.cwd;
@@ -92,7 +105,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
 
       // If container mode requested, create and start the container
       let containerInfo: ContainerInfo | undefined;
-      if (body.container && backend === "claude") {
+      if (body.container) {
         const cConfig: ContainerConfig = {
           image: body.container.image || "campfire-dev:latest",
           ports: Array.isArray(body.container.ports)
@@ -103,6 +116,15 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
         };
         const containerId = crypto.randomUUID().slice(0, 8);
         containerInfo = containerManager.createContainer(containerId, cwd, cConfig);
+      }
+
+      // Seed auth BEFORE launch so the container has credentials ready
+      if (containerInfo) {
+        if (backend === "claude") {
+          seedClaudeAuth(containerInfo.containerId);
+        } else if (backend === "codex") {
+          seedCodexAuth(containerInfo.containerId);
+        }
       }
 
       const session = launcher.launch({
@@ -120,6 +142,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
         env: envVars,
         backendType: backend,
         worktreeInfo,
+        containerId: containerInfo?.containerId,
       });
 
       // Re-track container with real session ID
@@ -433,6 +456,7 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
             allowedTools: body.allowedTools,
             env: envVars,
             backendType: backend,
+            containerId: containerInfo?.containerId,
           });
 
           if (containerInfo) {

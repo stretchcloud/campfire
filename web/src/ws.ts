@@ -1,5 +1,6 @@
 import { useStore } from "./store.js";
-import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig, SessionState } from "./types.js";
+import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, BackgroundAgentItem, SdkSessionInfo, McpServerConfig, SessionState } from "./types.js";
+import { getAuthToken } from "./api.js";
 import { generateUniqueSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 
@@ -9,6 +10,10 @@ const lastSeqBySession = new Map<string, number>();
 const taskCounters = new Map<string, number>();
 /** Track processed tool_use IDs to prevent duplicate task creation */
 const processedToolUseIds = new Map<string, Set<string>>();
+/** Separate dedup set for background agents */
+const processedAgentIds = new Map<string, Set<string>>();
+/** Pending background agents awaiting tool_result completion */
+const pendingBackgroundAgents = new Map<string, Map<string, { name: string; description: string; agentType: string; startedAt: number }>>();
 
 function normalizePath(path: string): string {
   const isAbs = path.startsWith("/");
@@ -124,6 +129,70 @@ function extractChangedFilesFromBlocks(sessionId: string, blocks: ContentBlock[]
   }
 }
 
+function extractBackgroundAgentsFromBlocks(sessionId: string, blocks: ContentBlock[]) {
+  const store = useStore.getState();
+  let agentProcessed = processedAgentIds.get(sessionId);
+  if (!agentProcessed) {
+    agentProcessed = new Set();
+    processedAgentIds.set(sessionId, agentProcessed);
+  }
+
+  for (const block of blocks) {
+    // Phase 1: Detect Agent tool_use with run_in_background
+    if (block.type === "tool_use" && block.name === "Agent") {
+      if (block.id && agentProcessed.has(block.id)) continue;
+      const input = block.input as Record<string, unknown>;
+      if (input.run_in_background === true) {
+        if (block.id) agentProcessed.add(block.id);
+        let sessionPending = pendingBackgroundAgents.get(sessionId);
+        if (!sessionPending) {
+          sessionPending = new Map();
+          pendingBackgroundAgents.set(sessionId, sessionPending);
+        }
+        const agentItem: BackgroundAgentItem = {
+          toolUseId: block.id,
+          name: (input.name as string) || (input.description as string) || "Background agent",
+          description: (input.description as string) || "",
+          agentType: (input.subagent_type as string) || "general-purpose",
+          status: "running",
+          startedAt: Date.now(),
+        };
+        sessionPending.set(block.id, {
+          name: agentItem.name,
+          description: agentItem.description,
+          agentType: agentItem.agentType,
+          startedAt: agentItem.startedAt,
+        });
+        store.addBackgroundAgent(sessionId, agentItem);
+      }
+    }
+
+    // Phase 2: Match tool_result to a pending background Agent
+    if (block.type === "tool_result") {
+      const toolUseId = block.tool_use_id;
+      const sessionPending = pendingBackgroundAgents.get(sessionId);
+      const pending = sessionPending?.get(toolUseId);
+      if (sessionPending && pending) {
+        const content = typeof block.content === "string"
+          ? block.content
+          : Array.isArray(block.content)
+            ? block.content.map((b: Record<string, unknown>) => (typeof b.text === "string" ? b.text : "")).join("")
+            : "";
+        const isError = block.is_error === true;
+        store.updateBackgroundAgent(sessionId, toolUseId, {
+          status: isError ? "failed" : "completed",
+          completedAt: Date.now(),
+          summary: content.length > 200 ? content.slice(0, 200) + "..." : content,
+        });
+        sessionPending.delete(toolUseId);
+        if (sessionPending.size === 0) {
+          pendingBackgroundAgents.delete(sessionId);
+        }
+      }
+    }
+  }
+}
+
 function sendBrowserNotification(title: string, body: string, tag: string) {
   if (typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;
@@ -176,18 +245,25 @@ export function setInviteToken(token: string, sessionId?: string): void {
 function getWsUrl(sessionId: string): string {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   let url = `${proto}//${location.host}/ws/browser/${sessionId}`;
-  // Check for a token stored for this session, or a pending token
-  let token = sessionInviteTokens.get(sessionId);
-  if (!token) {
-    token = sessionInviteTokens.get("__pending__") || undefined;
-    if (token) {
+  const params = new URLSearchParams();
+
+  // Invite token for collaboration role
+  let inviteToken = sessionInviteTokens.get(sessionId);
+  if (!inviteToken) {
+    inviteToken = sessionInviteTokens.get("__pending__") || undefined;
+    if (inviteToken) {
       sessionInviteTokens.delete("__pending__");
-      sessionInviteTokens.set(sessionId, token);
+      sessionInviteTokens.set(sessionId, inviteToken);
     }
   }
-  if (token) {
-    url += `?token=${encodeURIComponent(token)}`;
-  }
+  if (inviteToken) params.set("token", inviteToken);
+
+  // Auth token for WebSocket authentication
+  const authToken = getAuthToken();
+  if (authToken) params.set("auth_token", authToken);
+
+  const qs = params.toString();
+  if (qs) url += `?${qs}`;
   return url;
 }
 
@@ -320,10 +396,11 @@ function handleParsedMessage(
         store.setStreamingStats(sessionId, { startedAt: Date.now() });
       }
 
-      // Extract tasks and changed files from tool_use content blocks
+      // Extract tasks, changed files, and background agents from tool_use content blocks
       if (msg.content?.length) {
         extractTasksFromBlocks(sessionId, msg.content);
         extractChangedFilesFromBlocks(sessionId, msg.content);
+        extractBackgroundAgentsFromBlocks(sessionId, msg.content);
       }
 
       break;
@@ -447,6 +524,7 @@ function handleParsedMessage(
         }];
         extractTasksFromBlocks(sessionId, permBlocks);
         extractChangedFilesFromBlocks(sessionId, permBlocks);
+        extractBackgroundAgentsFromBlocks(sessionId, permBlocks);
       }
       break;
     }
@@ -607,10 +685,11 @@ function handleParsedMessage(
             model: msg.model,
             stopReason: msg.stop_reason,
           });
-          // Also extract tasks and changed files from history
+          // Also extract tasks, changed files, and background agents from history
           if (msg.content?.length) {
             extractTasksFromBlocks(sessionId, msg.content);
             extractChangedFilesFromBlocks(sessionId, msg.content);
+            extractBackgroundAgentsFromBlocks(sessionId, msg.content);
           }
         } else if (histMsg.type === "result") {
           const r = histMsg.data;
@@ -730,6 +809,8 @@ export function disconnectSession(sessionId: string) {
   }
   processedToolUseIds.delete(sessionId);
   taskCounters.delete(sessionId);
+  processedAgentIds.delete(sessionId);
+  pendingBackgroundAgents.delete(sessionId);
 }
 
 export function disconnectAll() {
