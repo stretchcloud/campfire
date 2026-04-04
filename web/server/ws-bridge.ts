@@ -597,6 +597,14 @@ export class WsBridge {
     return ids;
   }
 
+  /** Notify browsers that the CLI backend is being launched for a session. */
+  notifyLaunching(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      this.broadcastToBrowsers(session, { type: "cli_launching" });
+    }
+  }
+
   /** Pre-populate a session's message history (e.g. for forked sessions). */
   seedMessageHistory(sessionId: string, messages: BrowserIncomingMessage[]): void {
     const session = this.getOrCreateSession(sessionId);
@@ -741,6 +749,7 @@ export class WsBridge {
       duration: session.state.total_duration_api_ms || 0,
       linesAdded: session.state.total_lines_added || 0,
       linesRemoved: session.state.total_lines_removed || 0,
+      contextPct: session.state.context_used_percent || 0,
       codexDetails: session.state.codex_token_details,
       claudeDetails: session.state.claude_token_details,
     };
@@ -761,6 +770,9 @@ export class WsBridge {
     }
     if (!session.state.total_lines_removed && preserved.linesRemoved > 0) {
       session.state.total_lines_removed = preserved.linesRemoved;
+    }
+    if (!session.state.context_used_percent && preserved.contextPct > 0) {
+      session.state.context_used_percent = preserved.contextPct;
     }
     if (!session.state.codex_token_details && preserved.codexDetails) {
       session.state.codex_token_details = preserved.codexDetails;
@@ -963,10 +975,13 @@ export class WsBridge {
       : !!session.cliSocket;
 
     if (!backendConnected) {
-      this.sendToBrowser(ws, { type: "cli_disconnected" });
       if (this.onCLIRelaunchNeeded) {
+        // Backend is dead but we're about to relaunch — tell browser we're starting
+        this.sendToBrowser(ws, { type: "cli_launching" });
         console.log(`[ws-bridge] Browser connected but backend is dead for session ${sessionId}, requesting relaunch`);
         this.onCLIRelaunchNeeded(sessionId);
+      } else {
+        this.sendToBrowser(ws, { type: "cli_disconnected" });
       }
     }
 

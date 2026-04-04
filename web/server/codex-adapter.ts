@@ -965,10 +965,29 @@ export class CodexAdapter implements AgentAdapter {
         }
         break;
       }
+      case "error": {
+        const errorMsg = (params as Record<string, unknown>).message || JSON.stringify(params);
+        console.warn(`[codex-adapter] Error notification:`, JSON.stringify(params).substring(0, 500));
+        this.emit({
+          type: "assistant",
+          message: {
+            id: `codex-error-${Date.now()}`,
+            type: "message",
+            role: "assistant",
+            model: this.options.model || "codex",
+            content: [{ type: "text", text: `Error: ${errorMsg}` }],
+            stop_reason: "error",
+            usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+          timestamp: Date.now(),
+        });
+        break;
+      }
       default:
         // Unknown notification, log for debugging
         if (!method.startsWith("account/") && !method.startsWith("codex/event/")) {
-          console.log(`[codex-adapter] Unhandled notification: ${method}`);
+          console.log(`[codex-adapter] Unhandled notification: ${method}`, JSON.stringify(params).substring(0, 200));
         }
         break;
     }
