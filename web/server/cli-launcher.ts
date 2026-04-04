@@ -184,7 +184,41 @@ export class CliLauncher {
     if (recovered > 0) {
       console.log(`[cli-launcher] Recovered ${recovered} live session(s) from disk`);
     }
-    return recovered;
+
+    // Also recover sessions from individual session store files that are
+    // missing from launcher.json (e.g. after a crash before launcher.json
+    // was written). This prevents data loss on VM crash or power loss.
+    const storeRecovered = this.recoverFromStoreFiles();
+
+    return recovered + storeRecovered;
+  }
+
+  /** Scan individual session store files for sessions missing from launcher.json. */
+  private recoverFromStoreFiles(): number {
+    if (!this.store) return 0;
+    const storeFiles = this.store.loadAll();
+    let count = 0;
+    for (const persisted of storeFiles) {
+      if (this.sessions.has(persisted.id)) continue;
+      const info: SdkSessionInfo = {
+        sessionId: persisted.id,
+        state: "exited",
+        exitCode: -1,
+        model: persisted.state?.model,
+        permissionMode: persisted.state?.permissionMode,
+        cwd: persisted.state?.cwd || "",
+        createdAt: 0,
+        archived: persisted.archived,
+        backendType: persisted.state?.backend_type,
+      };
+      this.sessions.set(persisted.id, info);
+      count++;
+    }
+    if (count > 0) {
+      console.log(`[cli-launcher] Recovered ${count} additional session(s) from session store files`);
+      this.persistState();
+    }
+    return count;
   }
 
   /**

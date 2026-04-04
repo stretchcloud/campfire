@@ -1,6 +1,6 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, cpSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import type {
   SessionState,
   BrowserIncomingMessage,
@@ -25,15 +25,46 @@ export interface PersistedSession {
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_DIR = process.env.CAMPFIRE_SESSION_DIR || join(tmpdir(), "vibe-sessions");
+// Persistent storage: ~/.campfire/sessions/ (survives reboots, unlike /tmp/)
+const PERSISTENT_DIR = join(homedir(), ".campfire", "sessions");
+// Legacy location (may contain data from older installs or pre-migration)
+const LEGACY_DIR = join(tmpdir(), "vibe-sessions");
+const DEFAULT_DIR = process.env.CAMPFIRE_SESSION_DIR || PERSISTENT_DIR;
 
 export class SessionStore {
-  private dir: string;
-  private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly dir: string;
+  private readonly debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(dir?: string) {
     this.dir = dir || DEFAULT_DIR;
     mkdirSync(this.dir, { recursive: true });
+    // Migrate data from legacy /tmp/ location if it exists and persistent dir is empty
+    this.migrateFromLegacy();
+  }
+
+  /** One-time migration: copy session files from /tmp/vibe-sessions/ to ~/.campfire/sessions/ */
+  private migrateFromLegacy(): void {
+    // Skip if using custom dir or legacy dir doesn't exist
+    if (this.dir !== PERSISTENT_DIR) return;
+    if (!existsSync(LEGACY_DIR)) return;
+
+    try {
+      const legacyFiles = readdirSync(LEGACY_DIR).filter((f) => f.endsWith(".json"));
+      const currentFiles = new Set(readdirSync(this.dir).filter((f) => f.endsWith(".json")));
+      let migrated = 0;
+
+      for (const file of legacyFiles) {
+        if (currentFiles.has(file)) continue; // don't overwrite existing
+        try {
+          cpSync(join(LEGACY_DIR, file), join(this.dir, file));
+          migrated++;
+        } catch { /* skip individual file errors */ }
+      }
+
+      if (migrated > 0) {
+        console.log(`[session-store] Migrated ${migrated} session(s) from ${LEGACY_DIR} to ${this.dir}`);
+      }
+    } catch { /* legacy dir not readable, skip */ }
   }
 
   private filePath(sessionId: string): string {
