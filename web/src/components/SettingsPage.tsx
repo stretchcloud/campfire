@@ -5,12 +5,13 @@ import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "..
 
 /* ─── Tab Types ─────────────────────────────────────────────────── */
 
-type SettingsTab = "general" | "providers" | "api-keys" | "notifications" | "appearance" | "updates";
+type SettingsTab = "general" | "providers" | "api-keys" | "security" | "notifications" | "appearance" | "updates";
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: "general", label: "General" },
   { id: "providers", label: "Providers" },
   { id: "api-keys", label: "API Keys" },
+  { id: "security", label: "Security" },
   { id: "notifications", label: "Notifications" },
   { id: "appearance", label: "Appearance" },
   { id: "updates", label: "Updates" },
@@ -93,6 +94,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  // Security / auth state
+  const [authEnabled, setAuthEnabled] = useState(false);
+  const [authPassword, setAuthPassword] = useState("");
+  const [authSaving, setAuthSaving] = useState(false);
+  const [authSaved, setAuthSaved] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authSessions, setAuthSessions] = useState(0);
   const darkMode = useStore((s) => s.darkMode);
   const toggleDarkMode = useStore((s) => s.toggleDarkMode);
   const notificationSound = useStore((s) => s.notificationSound);
@@ -119,8 +127,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         setOpenaiConfigured(s.openaiApiKeyConfigured ?? false);
         setAnthropicConfigured(s.anthropicApiKeyConfigured ?? false);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unknown error"))
       .finally(() => setLoading(false));
+    // Fetch auth status
+    api.getAuthStatus().then((s) => {
+      setAuthEnabled(s.enabled);
+      setAuthSessions(s.activeSessions);
+    }).catch(() => {});
   }, []);
 
   async function onSave(e: React.FormEvent) {
@@ -486,6 +499,114 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 </button>
               </div>
             </form>
+          )}
+
+          {/* ── Security Tab ────────────────────────────────────────── */}
+          {activeTab === "security" && (
+            <div className="space-y-5">
+              <SettingsCard title="Authentication" description="Protect your Campfire instance with a password. When enabled, all API and WebSocket connections require a valid session token.">
+                {/* Status indicator */}
+                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-cc-border/30">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${authEnabled ? "bg-cc-success/10" : "bg-cc-hover"}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={`w-5 h-5 ${authEnabled ? "text-cc-success" : "text-cc-muted"}`} aria-hidden>
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[13px] font-medium text-cc-fg">
+                      Authentication is {authEnabled ? "enabled" : "disabled"}
+                    </p>
+                    <p className="text-[11px] text-cc-muted">
+                      {authEnabled
+                        ? `${authSessions} active session${authSessions === 1 ? "" : "s"}`
+                        : "Anyone with the URL can access this instance"}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full ${authEnabled ? "text-cc-success bg-cc-success/10" : "text-cc-warning bg-cc-warning/10"}`}>
+                    {authEnabled ? "Protected" : "Open"}
+                  </span>
+                </div>
+
+                {authError && (
+                  <div className="mb-3 px-3 py-2 rounded-lg bg-cc-error/8 border border-cc-error/15" role="alert">
+                    <p className="text-[11px] text-cc-error">{authError}</p>
+                  </div>
+                )}
+
+                {!authEnabled ? (
+                  /* Enable auth flow */
+                  <div className="space-y-3">
+                    <div>
+                      <label htmlFor="auth-password" className="text-[12px] font-medium text-cc-fg block mb-1.5">Set a password</label>
+                      <input
+                        id="auth-password"
+                        type="password"
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        placeholder="Minimum 4 characters"
+                        className="w-full h-10 px-3 rounded-lg border border-cc-border bg-cc-input-bg text-[13px] text-cc-fg focus:outline-none focus:ring-2 focus:ring-cc-primary/20 focus:border-cc-primary/40"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={authPassword.length < 4 || authSaving}
+                      onClick={async () => {
+                        setAuthSaving(true);
+                        setAuthError("");
+                        try {
+                          await api.setAuthPassword(authPassword);
+                          setAuthEnabled(true);
+                          setAuthPassword("");
+                          setAuthSaved(true);
+                          setTimeout(() => setAuthSaved(false), 2000);
+                        } catch (e: unknown) {
+                          setAuthError(e instanceof Error ? e.message : "Failed to enable auth");
+                        } finally {
+                          setAuthSaving(false);
+                        }
+                      }}
+                      className="w-full h-10 rounded-lg bg-cc-primary text-white text-[13px] font-medium hover:bg-cc-primary-hover transition-colors cursor-pointer disabled:opacity-40"
+                    >
+                      {authSaving ? "Enabling..." : "Enable Authentication"}
+                    </button>
+                  </div>
+                ) : (
+                  /* Disable auth flow */
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-cc-border/40 bg-cc-hover/30 px-4 py-3">
+                      <p className="text-[11px] text-cc-muted leading-relaxed">
+                        All REST API requests require a <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">Bearer</code> token.
+                        All WebSocket connections require an <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">auth_token</code> parameter.
+                        CLI connections from localhost are allowed without a token.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={authSaving}
+                      onClick={async () => {
+                        setAuthSaving(true);
+                        setAuthError("");
+                        try {
+                          await api.disableAuth();
+                          setAuthEnabled(false);
+                          setAuthSaved(true);
+                          setTimeout(() => setAuthSaved(false), 2000);
+                        } catch (e: unknown) {
+                          setAuthError(e instanceof Error ? e.message : "Failed to disable auth");
+                        } finally {
+                          setAuthSaving(false);
+                        }
+                      }}
+                      className="w-full h-10 rounded-lg border border-cc-error/30 text-cc-error text-[13px] font-medium hover:bg-cc-error/5 transition-colors cursor-pointer disabled:opacity-40"
+                    >
+                      {authSaving ? "Disabling..." : "Disable Authentication"}
+                    </button>
+                  </div>
+                )}
+
+                {authSaved && <p className="text-[11px] text-cc-success mt-2">Saved</p>}
+              </SettingsCard>
+            </div>
           )}
 
           {/* ── Notifications Tab ─────────────────────────────────── */}
