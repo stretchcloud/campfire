@@ -62,6 +62,7 @@
   - [Commands Discovery](#commands-discovery)
   - [Proactive Keepalive](#proactive-keepalive)
   - [Security Headers & Rate Limiting](#security-headers--rate-limiting)
+  - [WebSocket Authentication](#websocket-authentication)
 - [Architecture](#architecture)
 - [Docker Deployment](#docker-deployment)
 - [CLI Reference](#cli-reference)
@@ -1719,6 +1720,51 @@ Auto-relaunches crashed CLI sessions with exponential backoff. Ensures autonomou
 | Max requests | 120 per window | `CAMPFIRE_RATE_LIMIT_MAX` |
 
 Rate limit headers included in every API response: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`. Returns `429 Too Many Requests` with `Retry-After` header when exceeded.
+
+### WebSocket Authentication
+
+When authentication is enabled, all WebSocket upgrade endpoints are protected — not just the REST API. This prevents unauthorized users from connecting directly to WebSocket endpoints and bypassing the login.
+
+**Protected endpoints:**
+
+| Endpoint | What it does | Auth behavior |
+|----------|-------------|---------------|
+| `/ws/cli/:sessionId` | Agent CLI connection | Allowed from localhost without token (CLI is spawned locally). Requires token from remote connections. |
+| `/ws/browser/:sessionId` | Browser session connection | Requires auth token. Valid invite tokens bypass auth (for collaboration). |
+| `/ws/terminal/:terminalId` | Embedded terminal PTY | Requires auth token. |
+| `/ws/dmux` | Dmux status streaming | Requires auth token. |
+
+**How tokens are passed:**
+- Query parameter: `?auth_token=<session_token>` (auto-appended by the frontend)
+- HTTP header: `Authorization: Bearer <session_token>`
+
+**When auth is disabled (default):** All WebSocket connections work without tokens — zero friction for local development.
+
+**Enabling auth:**
+
+```bash
+# Option 1: Set password via environment variable
+CAMPFIRE_PASSWORD=mypassword bunx the-campfire
+
+# Option 2: Set password via API
+curl -X POST http://localhost:3456/api/auth/set-password \
+  -H 'Content-Type: application/json' \
+  -d '{"password": "mypassword"}'
+```
+
+**Login flow:**
+
+```bash
+# Get a session token
+curl -X POST http://localhost:3456/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"password": "mypassword"}'
+# Returns: { "token": "abc123..." }
+```
+
+The frontend stores this token in `localStorage` and automatically includes it in all API requests (via `Authorization` header) and WebSocket connections (via `?auth_token=` query parameter).
+
+**Collaboration:** Invite tokens (generated via the Share menu) still work when auth is enabled. A valid invite token grants the specified role (collaborator/spectator) without requiring a session auth token.
 
 ---
 

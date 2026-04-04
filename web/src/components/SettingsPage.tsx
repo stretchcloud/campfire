@@ -5,20 +5,38 @@ import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "..
 
 /* ─── Tab Types ─────────────────────────────────────────────────── */
 
-type SettingsTab = "general" | "providers" | "api-keys" | "notifications" | "appearance" | "updates";
+type SettingsTab = "general" | "providers" | "api-keys" | "security" | "notifications" | "appearance" | "updates";
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: "general", label: "General" },
   { id: "providers", label: "Providers" },
   { id: "api-keys", label: "API Keys" },
+  { id: "security", label: "Security" },
   { id: "notifications", label: "Notifications" },
   { id: "appearance", label: "Appearance" },
   { id: "updates", label: "Updates" },
 ];
 
+/* ─── Helpers ───────────────────────────────────────────────────── */
+
+function authStatusDescription(enabled: boolean, sessions: number): string {
+  if (!enabled) return "Anyone with the URL can access this instance";
+  return `${sessions} active session${sessions === 1 ? "" : "s"}`;
+}
+
+function updateVersionText(info: import("../api.js").UpdateInfo | null): string {
+  if (!info?.latestVersion) return "Check for updates to see the latest version";
+  if (info.updateAvailable) return `v${info.latestVersion} available`;
+  return "You're on the latest version";
+}
+
+function authBadgeClass(enabled: boolean): string {
+  return enabled ? "text-cc-success bg-cc-success/10" : "text-cc-warning bg-cc-warning/10";
+}
+
 /* ─── Toggle Switch ─────────────────────────────────────────────── */
 
-function Toggle({ enabled, onToggle, label }: { enabled: boolean; onToggle: () => void; label: string }) {
+function Toggle({ enabled, onToggle, label }: Readonly<{ enabled: boolean; onToggle: () => void; label: string }>) {
   return (
     <button
       type="button"
@@ -41,7 +59,7 @@ function Toggle({ enabled, onToggle, label }: { enabled: boolean; onToggle: () =
 
 /* ─── Section Card ──────────────────────────────────────────────── */
 
-function SettingsCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function SettingsCard({ title, description, children }: Readonly<{ title: string; description?: string; children: React.ReactNode }>) {
   return (
     <div className="bg-cc-card border border-cc-border/60 rounded-xl">
       <div className="px-5 py-4 border-b border-cc-border/40">
@@ -55,7 +73,7 @@ function SettingsCard({ title, description, children }: { title: string; descrip
 
 /* ─── Row ───────────────────────────────────────────────────────── */
 
-function SettingsRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+function SettingsRow({ label, description, children }: Readonly<{ label: string; description?: string; children: React.ReactNode }>) {
   return (
     <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0 border-b border-cc-border/20 last:border-0">
       <div className="min-w-0">
@@ -73,7 +91,7 @@ interface SettingsPageProps {
   embedded?: boolean;
 }
 
-export function SettingsPage({ embedded = false }: SettingsPageProps) {
+export function SettingsPage({ embedded = false }: Readonly<SettingsPageProps>) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [openrouterApiKey, setOpenrouterApiKey] = useState("");
   const [openrouterModel, setOpenrouterModel] = useState("openrouter/free");
@@ -93,6 +111,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  // Security / auth state
+  const [authEnabled, setAuthEnabled] = useState(false);
+  const [authPassword, setAuthPassword] = useState("");
+  const [authSaving, setAuthSaving] = useState(false);
+  const [authSaved, setAuthSaved] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authSessions, setAuthSessions] = useState(0);
   const darkMode = useStore((s) => s.darkMode);
   const toggleDarkMode = useStore((s) => s.toggleDarkMode);
   const notificationSound = useStore((s) => s.notificationSound);
@@ -119,8 +144,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         setOpenaiConfigured(s.openaiApiKeyConfigured ?? false);
         setAnthropicConfigured(s.anthropicApiKeyConfigured ?? false);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unknown error"))
       .finally(() => setLoading(false));
+    // Fetch auth status
+    api.getAuthStatus().then((s) => {
+      setAuthEnabled(s.enabled);
+      setAuthSessions(s.activeSessions);
+    }).catch(() => {});
   }, []);
 
   async function onSave(e: React.FormEvent) {
@@ -149,7 +179,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setSaving(false);
     }
@@ -168,7 +198,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         setUpdateStatus("You are up to date.");
       }
     } catch (err: unknown) {
-      setUpdateError(err instanceof Error ? err.message : String(err));
+      setUpdateError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setCheckingUpdates(false);
     }
@@ -182,7 +212,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       const res = await api.triggerUpdate();
       setUpdateStatus(res.message);
     } catch (err: unknown) {
-      setUpdateError(err instanceof Error ? err.message : String(err));
+      setUpdateError(err instanceof Error ? err.message : "Unknown error");
       setUpdatingApp(false);
     }
   }
@@ -194,7 +224,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         {/* ── Header with back button ─────────────────────────────── */}
         <div className="flex items-center gap-3 mb-1">
           <button
-            onClick={() => { window.location.hash = ""; }}
+            onClick={() => { globalThis.location.hash = ""; }}
             className="flex items-center justify-center w-8 h-8 rounded-lg text-cc-fg/60 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
             aria-label="Go back"
           >
@@ -259,7 +289,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   </p>
                   <button
                     type="button"
-                    onClick={() => { window.location.hash = "#/environments"; }}
+                    onClick={() => { globalThis.location.hash = "#/environments"; }}
                     className="px-3.5 py-2 rounded-lg text-[12px] font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer shrink-0 ml-4"
                   >
                     Manage
@@ -488,6 +518,60 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             </form>
           )}
 
+          {/* ── Security Tab ────────────────────────────────────────── */}
+          {activeTab === "security" && (
+            <div className="space-y-5">
+              <SettingsCard title="Authentication" description="Protect your Campfire instance with a password. When enabled, all API and WebSocket connections require a valid session token.">
+                {/* Status indicator */}
+                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-cc-border/30">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${authEnabled ? "bg-cc-success/10" : "bg-cc-hover"}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={`w-5 h-5 ${authEnabled ? "text-cc-success" : "text-cc-muted"}`} aria-hidden>
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[13px] font-medium text-cc-fg">
+                      Authentication is {authEnabled ? "enabled" : "disabled"}
+                    </p>
+                    <p className="text-[11px] text-cc-muted">
+                      {authStatusDescription(authEnabled, authSessions)}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full ${authBadgeClass(authEnabled)}`}>
+                    {authEnabled ? "Protected" : "Open"}
+                  </span>
+                </div>
+
+                {authError && (
+                  <div className="mb-3 px-3 py-2 rounded-lg bg-cc-error/8 border border-cc-error/15" role="alert">
+                    <p className="text-[11px] text-cc-error">{authError}</p>
+                  </div>
+                )}
+
+                {authEnabled ? (
+                  <DisableAuthSection saving={authSaving} onDisable={async () => {
+                    setAuthSaving(true); setAuthError("");
+                    try { await api.disableAuth(); setAuthEnabled(false); setAuthSaved(true); setTimeout(() => setAuthSaved(false), 2000); }
+                    catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "Failed to disable auth"); }
+                    finally { setAuthSaving(false); }
+                  }} />
+                ) : (
+                  <EnableAuthSection password={authPassword} saving={authSaving}
+                    onPasswordChange={setAuthPassword}
+                    onEnable={async () => {
+                      setAuthSaving(true); setAuthError("");
+                      try { await api.setAuthPassword(authPassword); setAuthEnabled(true); setAuthPassword(""); setAuthSaved(true); setTimeout(() => setAuthSaved(false), 2000); }
+                      catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "Failed to enable auth"); }
+                      finally { setAuthSaving(false); }
+                    }}
+                  />
+                )}
+
+                {authSaved && <p className="text-[11px] text-cc-success mt-2">Saved</p>}
+              </SettingsCard>
+            </div>
+          )}
+
           {/* ── Notifications Tab ─────────────────────────────────── */}
           {activeTab === "notifications" && (
             <SettingsCard title="Notification Preferences" description="Control how Campfire alerts you">
@@ -510,14 +594,14 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     enabled={notificationDesktop}
                     label="Toggle desktop notifications"
                     onToggle={async () => {
-                      if (!notificationDesktop) {
+                      if (notificationDesktop) {
+                        setNotificationDesktop(false);
+                      } else {
                         if (Notification.permission !== "granted") {
                           const result = await Notification.requestPermission();
                           if (result !== "granted") return;
                         }
                         setNotificationDesktop(true);
-                      } else {
-                        setNotificationDesktop(false);
                       }
                     }}
                   />
@@ -558,11 +642,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                       {updateInfo ? `v${updateInfo.currentVersion}` : "Loading..."}
                     </p>
                     <p className="text-[11px] text-cc-fg/55">
-                      {updateInfo?.latestVersion
-                        ? updateInfo.updateAvailable
-                          ? `v${updateInfo.latestVersion} available`
-                          : "You're on the latest version"
-                        : "Check for updates to see the latest version"}
+                      {updateVersionText(updateInfo)}
                     </p>
                   </div>
                 </div>
@@ -593,7 +673,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   >
                     {checkingUpdates ? (
                       <span className="flex items-center gap-2">
-                        <span className="w-3.5 h-3.5 border-2 border-cc-fg/20 border-t-cc-fg/60 rounded-full animate-spin" />
+                        <span className="w-3.5 h-3.5 border-2 border-cc-fg/20 border-t-cc-fg/60 rounded-full animate-spin" />{" "}
                         Checking...
                       </span>
                     ) : (
@@ -625,6 +705,45 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Auth Sub-Components ──────────────────────────────────────────────────
+
+function EnableAuthSection({ password, saving, onPasswordChange, onEnable }: Readonly<{
+  password: string; saving: boolean; onPasswordChange: (v: string) => void; onEnable: () => void;
+}>) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label htmlFor="auth-password" className="text-[12px] font-medium text-cc-fg block mb-1.5">Set a password</label>
+        <input id="auth-password" type="password" value={password} onChange={(e) => onPasswordChange(e.target.value)}
+          placeholder="Minimum 4 characters"
+          className="w-full h-10 px-3 rounded-lg border border-cc-border bg-cc-input-bg text-[13px] text-cc-fg focus:outline-none focus:ring-2 focus:ring-cc-primary/20 focus:border-cc-primary/40" />
+      </div>
+      <button type="button" disabled={password.length < 4 || saving} onClick={onEnable}
+        className="w-full h-10 rounded-lg bg-cc-primary text-white text-[13px] font-medium hover:bg-cc-primary-hover transition-colors cursor-pointer disabled:opacity-40">
+        {saving ? "Enabling..." : "Enable Authentication"}
+      </button>
+    </div>
+  );
+}
+
+function DisableAuthSection({ saving, onDisable }: Readonly<{ saving: boolean; onDisable: () => void }>) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-cc-border/40 bg-cc-hover/30 px-4 py-3">
+        <p className="text-[11px] text-cc-muted leading-relaxed">
+          All REST API requests require a <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">Bearer</code> token.
+          All WebSocket connections require an <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">auth_token</code> parameter.
+          CLI connections from localhost are allowed without a token.
+        </p>
+      </div>
+      <button type="button" disabled={saving} onClick={onDisable}
+        className="w-full h-10 rounded-lg border border-cc-error/30 text-cc-error text-[13px] font-medium hover:bg-cc-error/5 transition-colors cursor-pointer disabled:opacity-40">
+        {saving ? "Disabling..." : "Disable Authentication"}
+      </button>
     </div>
   );
 }
