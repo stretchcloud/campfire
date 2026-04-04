@@ -24,6 +24,7 @@ interface AppState {
   // Connection state per session
   connectionStatus: Map<string, "connecting" | "connected" | "disconnected">;
   cliConnected: Map<string, boolean>;
+  cliLaunching: Map<string, boolean>;
 
   // Session status
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
@@ -181,6 +182,7 @@ interface AppState {
   // Connection actions
   setConnectionStatus: (sessionId: string, status: "connecting" | "connected" | "disconnected") => void;
   setCliConnected: (sessionId: string, connected: boolean) => void;
+  setCliLaunching: (sessionId: string, launching: boolean) => void;
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
 
   // Update actions
@@ -274,6 +276,7 @@ export const useStore = create<AppState>((set) => ({
   pendingPermissions: new Map(),
   connectionStatus: new Map(),
   cliConnected: new Map(),
+  cliLaunching: new Map(),
   sessionStatus: new Map(),
   previousPermissionMode: new Map(),
   sessionTasks: new Map(),
@@ -828,7 +831,21 @@ export const useStore = create<AppState>((set) => ({
     set((s) => {
       const cliConnected = new Map(s.cliConnected);
       cliConnected.set(sessionId, connected);
-      return { cliConnected };
+      // Clear launching state when CLI connects
+      const cliLaunching = connected ? new Map(s.cliLaunching) : s.cliLaunching;
+      if (connected) cliLaunching.delete(sessionId);
+      return { cliConnected, cliLaunching };
+    }),
+
+  setCliLaunching: (sessionId, launching) =>
+    set((s) => {
+      const cliLaunching = new Map(s.cliLaunching);
+      if (launching) {
+        cliLaunching.set(sessionId, true);
+      } else {
+        cliLaunching.delete(sessionId);
+      }
+      return { cliLaunching };
     }),
 
   setSessionStatus: (sessionId, status) =>
@@ -879,6 +896,7 @@ export const useStore = create<AppState>((set) => ({
       pendingPermissions: new Map(),
       connectionStatus: new Map(),
       cliConnected: new Map(),
+      cliLaunching: new Map(),
       sessionStatus: new Map(),
       previousPermissionMode: new Map(),
       sessionTasks: new Map(),

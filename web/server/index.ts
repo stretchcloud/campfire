@@ -40,10 +40,14 @@ import type { ServerWebSocket } from "bun";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = process.env.__CAMPFIRE_PACKAGE_ROOT || resolve(__dirname, "..");
 
-import { DEFAULT_PORT_DEV, DEFAULT_PORT_PROD } from "./constants.js";
+import { DEFAULT_PORT, INTERNAL_DEV_BACKEND_PORT } from "./constants.js";
 
-const defaultPort = process.env.NODE_ENV === "production" ? DEFAULT_PORT_PROD : DEFAULT_PORT_DEV;
-const port = Number(process.env.PORT) || defaultPort;
+// In dev mode, the backend listens on an internal port (Vite proxies to it).
+// In production, the backend IS the user-facing server on DEFAULT_PORT.
+const port = Number(process.env.PORT)
+  || (process.env.NODE_ENV === "production"
+    ? DEFAULT_PORT
+    : (Number(process.env.__CAMPFIRE_INTERNAL_PORT) || INTERNAL_DEV_BACKEND_PORT));
 const sessionStore = new SessionStore();
 const wsBridge = new WsBridge();
 const launcher = new CliLauncher(port);
@@ -96,6 +100,7 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   if (info && info.state !== "starting") {
     relaunchingSet.add(sessionId);
     console.log(`[server] Auto-relaunching CLI for session ${sessionId}`);
+    wsBridge.notifyLaunching(sessionId);
     try {
       await launcher.relaunch(sessionId);
     } finally {
@@ -283,7 +288,7 @@ console.log(`  CLI WebSocket:     ws://localhost:${server.port}/ws/cli/:sessionI
 console.log(`  Browser WebSocket: ws://localhost:${server.port}/ws/browser/:sessionId`);
 
 if (process.env.NODE_ENV !== "production") {
-  console.log("Dev mode: frontend at http://localhost:5174");
+  console.log("Dev mode: open http://localhost:4567 (Vite proxies to this backend)");
 }
 
 // ── Cron scheduler ──────────────────────────────────────────────────────────
@@ -310,6 +315,7 @@ if (starting.length > 0) {
     for (const info of stale) {
       if (info.archived) continue;
       console.log(`[server] CLI for session ${info.sessionId} did not reconnect, relaunching...`);
+      wsBridge.notifyLaunching(info.sessionId);
       await launcher.relaunch(info.sessionId);
     }
   }, RECONNECT_GRACE_MS);

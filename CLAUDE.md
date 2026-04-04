@@ -14,7 +14,7 @@ It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Clau
 ## Development Commands
 
 ```bash
-# Dev server (Hono backend on :3456 + Vite HMR on :5174)
+# Dev server (Hono backend on :4567 + Vite HMR on :4567)
 cd web && bun install && bun run dev
 
 # Or from repo root
@@ -58,22 +58,22 @@ All UI components used in the message/chat flow **must** be represented in the P
 
 ```
 Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJSON) ←→ Claude Code CLI
-     :5174              /ws/browser/:id        :3456        /ws/cli/:id         (--sdk-url)
+     :4567              /ws/browser/:id        :4567        /ws/cli/:id         (--sdk-url)
 ```
 
 1. Browser sends a "create session" REST call to the server
-2. Server spawns `claude --sdk-url ws://localhost:3456/ws/cli/SESSION_ID` as a subprocess
+2. Server spawns `claude --sdk-url ws://localhost:4567/ws/cli/SESSION_ID` as a subprocess
 3. CLI connects back to the server over WebSocket using NDJSON protocol
 4. Server bridges messages between CLI WebSocket and browser WebSocket
 5. Tool calls arrive as `control_request` (subtype `can_use_tool`) — browser renders approval UI, server relays `control_response` back
 
 ### All code lives under `web/`
 
-- **`web/server/`** — Hono + Bun backend (runs on port 3456)
+- **`web/server/`** — Hono + Bun backend (runs on port 4567)
   - `index.ts` — Server bootstrap, Bun.serve with dual WebSocket upgrade (CLI vs browser)
   - `ws-bridge.ts` — Core message router. Maintains per-session state (CLI socket, browser sockets, message history, pending permissions). Parses NDJSON from CLI, translates to typed JSON for browsers.
   - `cli-launcher.ts` — Spawns/kills/relaunches Claude Code CLI processes. Handles `--resume` for session recovery. Persists session state across server restarts.
-  - `session-store.ts` — JSON file persistence to `$TMPDIR/vibe-sessions/`. Debounced writes.
+  - `session-store.ts` — JSON file persistence to `~/.campfire/sessions/`. Debounced writes.
   - `session-types.ts` — All TypeScript types for CLI messages (NDJSON), browser messages, session state, permissions.
   - `routes.ts` — REST API: session CRUD, filesystem browsing, environment management.
   - `env-manager.ts` — CRUD for environment profiles stored in `~/.campfire/envs/`.
@@ -96,7 +96,7 @@ Full protocol documentation is in `WEBSOCKET_PROTOCOL_REVERSED.md`.
 
 ### Session Lifecycle
 
-Sessions persist to disk (`$TMPDIR/vibe-sessions/`) and survive server restarts. On restart, live CLI processes are detected by PID and given a grace period to reconnect their WebSocket. If they don't, they're killed and relaunched with `--resume` using the CLI's internal session ID.
+Sessions persist to disk (`~/.campfire/sessions/`) and survive server restarts. On restart, live CLI processes are detected by PID and given a grace period to reconnect their WebSocket. If they don't, they're killed and relaunched with `--resume` using the CLI's internal session ID.
 
 ### Raw Protocol Recordings
 
@@ -193,7 +193,7 @@ The core innovation is a **protocol bridge** that normalizes different agent pro
 **Data Flow:**
 ```
 Browser (React 19) ←→ WebSocket ←→ Hono Server (Bun) ←→ Agent Backend
-     :5174              /ws/browser/:id     :3456         (Claude/Codex/Goose/Aider/OpenHands)
+     :4567              /ws/browser/:id     :4567         (Claude/Codex/Goose/Aider/OpenHands)
 ```
 
 **Key Components:**
@@ -229,7 +229,7 @@ Browser (React 19) ←→ WebSocket ←→ Hono Server (Bun) ←→ Agent Backen
 
 **`cli-launcher.ts`** - Process Lifecycle Manager
 - Spawns agent subprocesses:
-  - Claude Code: `claude --sdk-url ws://localhost:3456/ws/cli/SESSION_ID`
+  - Claude Code: `claude --sdk-url ws://localhost:4567/ws/cli/SESSION_ID`
   - Codex: `codex app-server` (JSON-RPC over stdio)
   - Goose: `goose acp` (JSON-RPC 2.0 over stdio)
   - Aider: `aider --no-pretty --yes` (stdout parsing)
@@ -240,7 +240,7 @@ Browser (React 19) ←→ WebSocket ←→ Hono Server (Bun) ←→ Agent Backen
 - Creates git worktrees for branch isolation
 
 **`session-store.ts`** - Disk Persistence
-- Debounced JSON writes to `$TMPDIR/vibe-sessions/` (150ms delay to batch rapid changes)
+- Debounced JSON writes to `~/.campfire/sessions/` (150ms delay to batch rapid changes)
 - Persists per session: state, message history, pending permissions, event buffer, processed client message IDs
 - Sessions survive server restarts
 - `launcher.json` stores launcher state separately
@@ -454,7 +454,7 @@ All state is file-based (no database):
 
 | Data | Location | Format |
 |------|----------|--------|
-| Sessions | `$TMPDIR/vibe-sessions/` | JSON per session |
+| Sessions | `~/.campfire/sessions/` | JSON per session |
 | Recordings | `~/.campfire/recordings/` | JSONL per session |
 | Environments | `~/.campfire/envs/` | JSON per profile |
 | Cron jobs | `~/.campfire/cron/` | JSON per job |
@@ -499,7 +499,7 @@ All state is file-based (no database):
 ```
 campfire/
 ├── web/                      # Main application (published as "the-campfire")
-│   ├── server/               # Bun + Hono backend (port 3456/3457)
+│   ├── server/               # Bun + Hono backend (port 4567)
 │   │   ├── index.ts          # Server bootstrap
 │   │   ├── ws-bridge.ts      # Core message router
 │   │   ├── cli-launcher.ts   # Process lifecycle manager

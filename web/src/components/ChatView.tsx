@@ -6,12 +6,13 @@ import { Composer } from "./Composer.js";
 import { PermissionBanner } from "./PermissionBanner.js";
 import { SessionPulse } from "./SessionPulse.js";
 
-export function ChatView({ sessionId }: { sessionId: string }) {
+export function ChatView({ sessionId }: Readonly<{ sessionId: string }>) {
   const sessionPerms = useStore((s) => s.pendingPermissions.get(sessionId));
   const connStatus = useStore(
     (s) => s.connectionStatus.get(sessionId) ?? "disconnected"
   );
   const cliConnected = useStore((s) => s.cliConnected.get(sessionId) ?? false);
+  const cliLaunching = useStore((s) => s.cliLaunching.get(sessionId) ?? false);
 
   const perms = useMemo(
     () => (sessionPerms ? Array.from(sessionPerms.values()) : []),
@@ -20,8 +21,18 @@ export function ChatView({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="flex flex-col h-full min-h-0 relative">
-      {/* CLI disconnected banner */}
-      {connStatus === "connected" && !cliConnected && (
+      {/* CLI launching banner */}
+      {connStatus === "connected" && !cliConnected && cliLaunching && (
+        <div className="px-4 py-1.5 bg-cc-accent/5 border-b border-cc-border text-center flex items-center justify-center gap-3">
+          <span className="w-1 h-1 rounded-full bg-cc-accent animate-pulse" />
+          <span className="text-[11px] text-cc-muted font-mono-code">
+            starting agent...
+          </span>
+        </div>
+      )}
+
+      {/* CLI disconnected banner — only when not launching */}
+      {connStatus === "connected" && !cliConnected && !cliLaunching && (
         <div className="px-4 py-1.5 bg-cc-warning/5 border-b border-cc-border text-center flex items-center justify-center gap-3">
           <span className="w-1 h-1 rounded-full bg-cc-warning animate-pulse" />
           <span className="text-[11px] text-cc-warning/80 font-mono-code">

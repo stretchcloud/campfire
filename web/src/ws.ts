@@ -599,12 +599,18 @@ function handleParsedMessage(
 
     case "cli_disconnected": {
       store.setCliConnected(sessionId, false);
+      store.setCliLaunching(sessionId, false);
       store.setSessionStatus(sessionId, null);
       break;
     }
 
     case "cli_connected": {
       store.setCliConnected(sessionId, true);
+      break;
+    }
+
+    case "cli_launching": {
+      store.setCliLaunching(sessionId, true);
       break;
     }
 

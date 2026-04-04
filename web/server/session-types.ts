@@ -207,6 +207,7 @@ export type BrowserIncomingMessageBase =
   | { type: "error"; message: string }
   | { type: "cli_disconnected" }
   | { type: "cli_connected" }
+  | { type: "cli_launching" }
   | { type: "user_message"; content: string; timestamp: number; id?: string }
   | { type: "message_history"; messages: BrowserIncomingMessage[] }
   | { type: "event_replay"; events: BufferedBrowserEvent[] }

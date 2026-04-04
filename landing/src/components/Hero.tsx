@@ -32,7 +32,7 @@ export function Hero() {
         <p className="mt-4 text-center text-sm text-cc-muted animate-fade-up-4">
           Then open{" "}
           <code className="font-mono-code text-[13px] bg-cc-card border border-cc-border px-1.5 py-0.5 rounded">
-            localhost:3456
+            localhost:4567
           </code>
         </p>
 

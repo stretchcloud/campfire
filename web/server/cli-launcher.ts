@@ -70,6 +70,8 @@ export interface SdkSessionInfo {
   cronJobId?: string;
   /** Human-readable name of the cron job that spawned this session */
   cronJobName?: string;
+  /** Environment variables injected at session creation (persisted for relaunch) */
+  sessionEnv?: Record<string, string>;
 }
 
 export interface LaunchOptions {
@@ -110,10 +112,54 @@ export interface LaunchOptions {
  * Manages CLI backend processes (Claude Code via --sdk-url WebSocket,
  * or Codex via app-server stdio).
  */
+/** Build Claude Code CLI arguments. */
+function buildClaudeArgs(sdkUrl: string, options: LaunchOptions & { resumeSessionId?: string }): string[] {
+  const args = ["--sdk-url", sdkUrl, "--print", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose"];
+  if (options.model) args.push("--model", options.model);
+  if (options.permissionMode) {
+    args.push("--permission-mode", options.permissionMode);
+    if (options.permissionMode === "bypassPermissions") args.push("--dangerously-skip-permissions");
+  }
+  if (options.allowedTools) {
+    for (const tool of options.allowedTools) args.push("--allowedTools", tool);
+  }
+  return args;
+}
+
+/** Build docker exec spawn command for running CLI inside a container. */
+function buildContainerSpawn(
+  sessionId: string, binary: string, args: string[], sdkUrl: string,
+  options: LaunchOptions & { containerId: string }, env: Record<string, string | undefined>,
+): { spawnCmd: string[]; spawnEnv: Record<string, string | undefined>; spawnCwd: string | undefined } {
+  const containerSdkUrl = sdkUrl.replace("localhost", "host.docker.internal");
+  const containerArgs = args.map((a) => a === sdkUrl ? containerSdkUrl : a);
+  const dockerArgs = ["docker", "exec", "-i"];
+  if (options.env) {
+    for (const [k, v] of Object.entries(options.env)) {
+      dockerArgs.push("-e", `${k}=${v}`);
+    }
+  }
+  const innerCmd = [binary, ...containerArgs].map((a) => a.includes(" ") ? `'${a}'` : a).join(" ");
+  const installSteps = [
+    `command -v claude >/dev/null 2>&1 || {`,
+    `  command -v npm >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null 2>&1 || true; };`,
+    `  npm install -g @anthropic-ai/claude-code@latest 2>/dev/null || true;`,
+    `}`,
+  ].join(" ");
+  dockerArgs.push(
+    "-e", `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin`,
+    "-w", "/workspace",
+    options.containerId,
+    "bash", "-lc", `${installSteps}; ${innerCmd}`,
+  );
+  console.log(`[cli-launcher] Spawning session ${sessionId} INSIDE container ${options.containerId}`);
+  return { spawnCmd: dockerArgs, spawnEnv: { ...process.env, PATH: getEnrichedPath() }, spawnCwd: undefined };
+}
+
 export class CliLauncher {
-  private sessions = new Map<string, SdkSessionInfo>();
-  private processes = new Map<string, Subprocess>();
-  private port: number;
+  private readonly sessions = new Map<string, SdkSessionInfo>();
+  private readonly processes = new Map<string, Subprocess>();
+  private readonly port: number;
   private store: SessionStore | null = null;
   private recorder: RecorderManager | null = null;
   private onAdapter: ((sessionId: string, adapter: AgentAdapter, backendType: BackendType) => void) | null = null;
@@ -245,6 +291,11 @@ export class CliLauncher {
       info.codexReasoningEffort = options.codexReasoningEffort;
     }
 
+    // Persist env vars so they survive server restarts and relaunches
+    if (options.env && Object.keys(options.env).length > 0) {
+      info.sessionEnv = options.env;
+    }
+
     // Store worktree metadata if provided
     if (options.worktreeInfo) {
       info.isWorktree = options.worktreeInfo.isWorktree;
@@ -300,6 +351,9 @@ export class CliLauncher {
 
     info.state = "starting";
 
+    // Persisted env vars are re-injected on every relaunch
+    const relaunchEnv = info.sessionEnv;
+
     if (info.backendType === "codex") {
       this.spawnCodex(sessionId, info, {
         model: info.model,
@@ -308,36 +362,42 @@ export class CliLauncher {
         codexSandbox: info.codexSandbox,
         codexInternetAccess: info.codexInternetAccess,
         codexReasoningEffort: info.codexReasoningEffort,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "goose") {
       this.spawnGoose(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "aider") {
       this.spawnAider(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "openhands") {
       this.spawnOpenHands(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "openclaw") {
       this.spawnOpenClaw(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else if (info.backendType === "opencode") {
       this.spawnOpenCode(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
+        env: relaunchEnv,
       });
     } else {
       this.spawnCLI(sessionId, info, {
@@ -345,6 +405,7 @@ export class CliLauncher {
         permissionMode: info.permissionMode,
         cwd: info.cwd,
         resumeSessionId: info.cliSessionId,
+        env: relaunchEnv,
       });
     }
     return true;
@@ -372,29 +433,7 @@ export class CliLauncher {
 
     const sdkUrl = `ws://localhost:${this.port}/ws/cli/${sessionId}`;
 
-    const args: string[] = [
-      "--sdk-url", sdkUrl,
-      "--print",
-      "--output-format", "stream-json",
-      "--input-format", "stream-json",
-      "--verbose",
-    ];
-
-    if (options.model) {
-      args.push("--model", options.model);
-    }
-    if (options.permissionMode) {
-      args.push("--permission-mode", options.permissionMode);
-      // bypassPermissions requires --dangerously-skip-permissions flag
-      if (options.permissionMode === "bypassPermissions") {
-        args.push("--dangerously-skip-permissions");
-      }
-    }
-    if (options.allowedTools) {
-      for (const tool of options.allowedTools) {
-        args.push("--allowedTools", tool);
-      }
-    }
+    const args = buildClaudeArgs(sdkUrl, options);
 
     // Inject CLAUDE.md guardrails for worktree sessions
     if (info.isWorktree && info.branch) {
@@ -422,50 +461,11 @@ export class CliLauncher {
       PATH: getEnrichedPath(),
     };
 
-    // If a containerId is provided, run the CLI inside the container via docker exec
-    let spawnCmd: string[];
-    let spawnEnv: Record<string, string | undefined>;
-    let spawnCwd: string | undefined;
+    const { spawnCmd, spawnEnv, spawnCwd } = options.containerId
+      ? buildContainerSpawn(sessionId, binary, args, sdkUrl, options as LaunchOptions & { containerId: string }, env)
+      : { spawnCmd: [binary, ...args], spawnEnv: env, spawnCwd: info.cwd };
 
-    if (options.containerId) {
-      // Run the CLI inside the Docker container via docker exec.
-      // The --sdk-url uses host.docker.internal so the CLI inside the container
-      // can connect back to the Campfire server running on the host.
-      const containerSdkUrl = sdkUrl.replace("localhost", "host.docker.internal");
-      const containerArgs = args.map((a) => a === sdkUrl ? containerSdkUrl : a);
-      const dockerArgs = ["docker", "exec", "-i"];
-      // Pass environment variables via -e flags
-      if (options.env) {
-        for (const [k, v] of Object.entries(options.env)) {
-          dockerArgs.push("-e", `${k}=${v}`);
-        }
-      }
-      // Set PATH, working directory, container ID, and shell command in one push
-      const innerCmd = [binary, ...containerArgs].map((a) => a.includes(" ") ? `'${a}'` : a).join(" ");
-      // Install Node + Claude Code if not present (handles images without npm like python:slim)
-      const installSteps = [
-        `command -v claude >/dev/null 2>&1 || {`,
-        `  command -v npm >/dev/null 2>&1 || {`,
-        `    apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null 2>&1 || true;`,
-        `  };`,
-        `  npm install -g @anthropic-ai/claude-code@latest 2>/dev/null || true;`,
-        `}`,
-      ].join(" ");
-      const installAndRun = `${installSteps}; ${innerCmd}`;
-      dockerArgs.push(
-        "-e", `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin`,
-        "-w", "/workspace",
-        options.containerId,
-        "bash", "-lc", installAndRun,
-      );
-      spawnCmd = dockerArgs;
-      spawnEnv = { ...process.env, PATH: getEnrichedPath() };
-      spawnCwd = undefined;
-      console.log(`[cli-launcher] Spawning session ${sessionId} INSIDE container ${options.containerId}`);
-    } else {
-      spawnCmd = [binary, ...args];
-      spawnEnv = env;
-      spawnCwd = info.cwd;
+    if (!options.containerId) {
       console.log(`[cli-launcher] Spawning session ${sessionId}: ${binary} ${args.join(" ")}`);
     }
 
@@ -549,7 +549,7 @@ export class CliLauncher {
     }
   }
 
-  private spawnCodex(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): void {
+  private async spawnCodex(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): Promise<void> {
     let binary = options.codexBinary || "codex";
     const resolved = resolveBinary(binary);
     if (resolved) {
@@ -584,16 +584,24 @@ export class CliLauncher {
     // Determine whether to invoke node explicitly or use the binary directly.
     // If a `node` binary exists next to `codex`, use it to bypass shebang issues.
     let spawnCmd: string[];
-    if (existsSync(siblingNode)) {
-      // Resolve the real path of the codex script (follows symlinks)
-      // so node can load it as an ES module with the correct package.json context.
-      let codexScript: string;
-      try {
-        codexScript = realpathSync(binary);
-      } catch {
-        codexScript = binary;
-      }
-      spawnCmd = [siblingNode, codexScript, ...args];
+    // Resolve the real path of the codex script (follows symlinks)
+    let codexScript: string;
+    try {
+      codexScript = realpathSync(binary);
+    } catch {
+      codexScript = binary;
+    }
+
+    // Find a Node.js binary to run codex — Bun.spawn doesn't reliably handle
+    // Node.js shebang scripts with stdio pipes. Check sibling first, then PATH.
+    let nodeForCodex = siblingNode;
+    if (!existsSync(nodeForCodex)) {
+      const systemNode = resolveBinary("node");
+      nodeForCodex = systemNode || "";
+    }
+
+    if (nodeForCodex && existsSync(nodeForCodex)) {
+      spawnCmd = [nodeForCodex, codexScript, ...args];
     } else {
       spawnCmd = [binary, ...args];
     }
@@ -608,13 +616,51 @@ export class CliLauncher {
 
     console.log(`[cli-launcher] Spawning Codex session ${sessionId}: ${spawnCmd.join(" ")}`);
 
-    const proc = Bun.spawn(spawnCmd, {
+    // Use Node's child_process.spawn instead of Bun.spawn for Codex.
+    // Bun.spawn has compatibility issues with stdio pipes to Node.js
+    // child processes — the transport closes prematurely.
+    const { spawn: nodeSpawn } = await import("node:child_process");
+    const cleanEnv: Record<string, string> = {};
+    for (const [k, v] of Object.entries(env)) {
+      if (v !== undefined) cleanEnv[k] = v;
+    }
+    const nodeProc = nodeSpawn(spawnCmd[0], spawnCmd.slice(1), {
       cwd: info.cwd,
-      env,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
+      env: cleanEnv,
+      stdio: ["pipe", "pipe", "pipe"],
     });
+
+    // Wrap Node child_process into a Bun-compatible Subprocess interface
+    const proc = {
+      pid: nodeProc.pid ?? 0,
+      stdin: new WritableStream({
+        write(chunk: Uint8Array) {
+          return new Promise<void>((resolve, reject) => {
+            nodeProc.stdin!.write(chunk, (err) => err ? reject(err) : resolve());
+          });
+        },
+      }),
+      stdout: new ReadableStream({
+        start(controller) {
+          nodeProc.stdout!.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
+          nodeProc.stdout!.on("end", () => controller.close());
+          nodeProc.stdout!.on("error", (err) => controller.error(err));
+        },
+      }),
+      stderr: new ReadableStream({
+        start(controller) {
+          nodeProc.stderr!.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
+          nodeProc.stderr!.on("end", () => controller.close());
+          nodeProc.stderr!.on("error", (err) => controller.error(err));
+        },
+      }),
+      exited: new Promise<number>((resolve) => {
+        nodeProc.on("exit", (code) => resolve(code ?? 1));
+      }),
+      kill(signal?: string) { nodeProc.kill(signal as NodeJS.Signals); },
+      ref() { nodeProc.ref(); },
+      unref() { nodeProc.unref(); },
+    } as unknown as Subprocess;
 
     info.pid = proc.pid;
     this.processes.set(sessionId, proc);
@@ -660,7 +706,6 @@ export class CliLauncher {
     info.state = "connected";
 
     // Monitor process exit
-    const spawnedAt = Date.now();
     proc.exited.then((exitCode) => {
       console.log(`[cli-launcher] Codex session ${sessionId} exited (code=${exitCode})`);
       const session = this.sessions.get(sessionId);
