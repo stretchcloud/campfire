@@ -19,12 +19,14 @@ import { AiderAdapter } from "./aider-adapter.js";
 import { OpenHandsAdapter } from "./openhands-adapter.js";
 import { OpenClawAdapter } from "./openclaw-adapter.js";
 import { OpenCodeAdapter } from "./opencode-adapter.js";
+import { ClaudeStdioAdapter } from "./claude-stdio-adapter.js";
 import type { AgentAdapter } from "./adapter-types.js";
 import { resolveBinary, getEnrichedPath } from "./path-resolver.js";
 import {
   getLegacyCodexHome,
   resolveCampfireCodexSessionHome,
 } from "./codex-home.js";
+import { getSettings } from "./settings-manager.js";
 
 export interface SdkSessionInfo {
   sessionId: string;
@@ -50,6 +52,8 @@ export interface SdkSessionInfo {
   name?: string;
   /** Which backend this session uses */
   backendType?: BackendType;
+  /** Claude transport used for this session. Undefined means legacy persisted data. */
+  claudeTransport?: "stdio" | "sdk-url";
   /** Git branch from bridge state (enriched by REST API) */
   gitBranch?: string;
   /** Git ahead count (enriched by REST API) */
@@ -109,11 +113,15 @@ export interface LaunchOptions {
 }
 
 /**
- * Manages CLI backend processes (Claude Code via --sdk-url WebSocket,
- * or Codex via app-server stdio).
+ * Manages CLI backend processes (Claude Code/Codex/Goose/etc. via stdio,
+ * with legacy Claude --sdk-url WebSocket available by environment flag).
  */
-/** Build Claude Code CLI arguments. */
-function buildClaudeArgs(sdkUrl: string, options: LaunchOptions & { resumeSessionId?: string }): string[] {
+function useClaudeSdkUrlTransport(): boolean {
+  return process.env.CAMPFIRE_CLAUDE_TRANSPORT === "sdk-url";
+}
+
+/** Build Claude Code CLI arguments for the legacy --sdk-url transport. */
+function buildClaudeSdkUrlArgs(sdkUrl: string, options: LaunchOptions & { resumeSessionId?: string }): string[] {
   const args = ["--sdk-url", sdkUrl, "--print", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose"];
   if (options.model) args.push("--model", options.model);
   if (options.permissionMode) {
@@ -126,13 +134,46 @@ function buildClaudeArgs(sdkUrl: string, options: LaunchOptions & { resumeSessio
   return args;
 }
 
+/** Build Claude Code CLI arguments for the long-lived stdio transport. */
+function buildClaudeStdioArgs(options: LaunchOptions & { resumeSessionId?: string }): string[] {
+  const args = [
+    "-p",
+    "--input-format", "stream-json",
+    "--output-format", "stream-json",
+    "--verbose",
+    "--permission-prompt-tool", "stdio",
+  ];
+  if (options.model) args.push("--model", options.model);
+  if (options.permissionMode) {
+    args.push("--permission-mode", options.permissionMode);
+    if (options.permissionMode === "bypassPermissions") args.push("--dangerously-skip-permissions");
+  }
+  if (options.allowedTools) {
+    for (const tool of options.allowedTools) args.push("--allowedTools", tool);
+  }
+  if (options.resumeSessionId) {
+    args.push("--resume", options.resumeSessionId);
+  }
+  return args;
+}
+
+function applyClaudeAuthEnv(env: Record<string, string | undefined>): void {
+  const settings = getSettings();
+  if (!env.CLAUDE_CODE_OAUTH_TOKEN && settings.claudeOAuthToken.trim()) {
+    env.CLAUDE_CODE_OAUTH_TOKEN = settings.claudeOAuthToken.trim();
+  }
+  if (!env.ANTHROPIC_API_KEY && settings.anthropicApiKey.trim()) {
+    env.ANTHROPIC_API_KEY = settings.anthropicApiKey.trim();
+  }
+}
+
 /** Build docker exec spawn command for running CLI inside a container. */
 function buildContainerSpawn(
-  sessionId: string, binary: string, args: string[], sdkUrl: string,
+  sessionId: string, binary: string, args: string[], sdkUrl: string | null,
   options: LaunchOptions & { containerId: string }, env: Record<string, string | undefined>,
 ): { spawnCmd: string[]; spawnEnv: Record<string, string | undefined>; spawnCwd: string | undefined } {
-  const containerSdkUrl = sdkUrl.replace("localhost", "host.docker.internal");
-  const containerArgs = args.map((a) => a === sdkUrl ? containerSdkUrl : a);
+  const containerSdkUrl = sdkUrl?.replace("localhost", "host.docker.internal") ?? null;
+  const containerArgs = containerSdkUrl ? args.map((a) => a === sdkUrl ? containerSdkUrl : a) : args;
   const dockerArgs = ["docker", "exec", "-i"];
   if (options.env) {
     for (const [k, v] of Object.entries(options.env)) {
@@ -213,9 +254,15 @@ export class CliLauncher {
       if (info.pid && info.state !== "exited") {
         try {
           process.kill(info.pid, 0); // signal 0 = just check if alive
-          info.state = "starting"; // WS not yet re-established, wait for CLI to reconnect
+          if (info.backendType === "claude" && info.claudeTransport === "stdio") {
+            try { process.kill(info.pid, "SIGTERM"); } catch {}
+            info.state = "exited";
+            info.exitCode = -1;
+          } else {
+            info.state = "starting"; // WS not yet re-established, wait for CLI to reconnect
+            recovered++;
+          }
           this.sessions.set(info.sessionId, info);
-          recovered++;
         } catch {
           // Process is dead
           info.state = "exited";
@@ -283,6 +330,9 @@ export class CliLauncher {
       cwd,
       createdAt: Date.now(),
       backendType,
+      claudeTransport: backendType === "claude"
+        ? (useClaudeSdkUrlTransport() ? "sdk-url" : "stdio")
+        : undefined,
     };
 
     if (backendType === "codex") {
@@ -418,7 +468,7 @@ export class CliLauncher {
     return Array.from(this.sessions.values()).filter((s) => s.state === "starting");
   }
 
-  private spawnCLI(sessionId: string, info: SdkSessionInfo, options: LaunchOptions & { resumeSessionId?: string }): void {
+  private prepareClaudeLaunch(sessionId: string, info: SdkSessionInfo, options: LaunchOptions & { resumeSessionId?: string }): string | null {
     let binary = options.claudeBinary || "claude";
     const resolved = resolveBinary(binary);
     if (resolved) {
@@ -428,12 +478,8 @@ export class CliLauncher {
       info.state = "exited";
       info.exitCode = 127;
       this.persistState();
-      return;
+      return null;
     }
-
-    const sdkUrl = `ws://localhost:${this.port}/ws/cli/${sessionId}`;
-
-    const args = buildClaudeArgs(sdkUrl, options);
 
     // Inject CLAUDE.md guardrails for worktree sessions
     if (info.isWorktree && info.branch) {
@@ -444,6 +490,30 @@ export class CliLauncher {
         info.actualBranch && info.actualBranch !== info.branch ? info.branch : undefined,
       );
     }
+
+    return binary;
+  }
+
+  private spawnCLI(sessionId: string, info: SdkSessionInfo, options: LaunchOptions & { resumeSessionId?: string }): void {
+    const binary = this.prepareClaudeLaunch(sessionId, info, options);
+    if (!binary) return;
+
+    if (useClaudeSdkUrlTransport()) {
+      this.spawnClaudeSdkUrl(sessionId, info, options, binary);
+    } else {
+      this.spawnClaudeStdio(sessionId, info, options, binary);
+    }
+  }
+
+  private spawnClaudeSdkUrl(
+    sessionId: string,
+    info: SdkSessionInfo,
+    options: LaunchOptions & { resumeSessionId?: string },
+    binary: string,
+  ): void {
+    info.claudeTransport = "sdk-url";
+    const sdkUrl = `ws://localhost:${this.port}/ws/cli/${sessionId}`;
+    const args = buildClaudeSdkUrlArgs(sdkUrl, options);
 
     // Always pass -p "" for headless mode. When relaunching, also pass --resume
     // to restore the CLI's conversation context.
@@ -460,6 +530,7 @@ export class CliLauncher {
       ...options.env,
       PATH: getEnrichedPath(),
     };
+    applyClaudeAuthEnv(env);
 
     const { spawnCmd, spawnEnv, spawnCwd } = options.containerId
       ? buildContainerSpawn(sessionId, binary, args, sdkUrl, options as LaunchOptions & { containerId: string }, env)
@@ -500,6 +571,93 @@ export class CliLauncher {
         }
       }
       // Notify proactive keepalive
+      this.onExited?.(sessionId, exitCode);
+      this.processes.delete(sessionId);
+      this.persistState();
+    });
+
+    this.persistState();
+  }
+
+  private spawnClaudeStdio(
+    sessionId: string,
+    info: SdkSessionInfo,
+    options: LaunchOptions & { resumeSessionId?: string },
+    binary: string,
+  ): void {
+    info.claudeTransport = "stdio";
+    const args = buildClaudeStdioArgs(options);
+
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      CLAUDECODE: undefined,
+      ...options.env,
+      PATH: getEnrichedPath(),
+    };
+    applyClaudeAuthEnv(env);
+
+    const { spawnCmd, spawnEnv, spawnCwd } = options.containerId
+      ? buildContainerSpawn(sessionId, binary, args, null, options as LaunchOptions & { containerId: string }, env)
+      : { spawnCmd: [binary, ...args], spawnEnv: env, spawnCwd: info.cwd };
+
+    if (!options.containerId) {
+      console.log(`[cli-launcher] Spawning Claude stdio session ${sessionId}: ${binary} ${args.join(" ")}`);
+    }
+
+    const proc = Bun.spawn(spawnCmd, {
+      cwd: spawnCwd,
+      env: spawnEnv,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    info.pid = proc.pid;
+    this.processes.set(sessionId, proc);
+
+    const stderr = proc.stderr;
+    if (stderr && typeof stderr !== "number") {
+      this.pipeStream(sessionId, stderr, "stderr");
+    }
+
+    const adapter = new ClaudeStdioAdapter(proc, sessionId, {
+      model: options.model,
+      cwd: info.cwd,
+      permissionMode: options.permissionMode,
+      recorder: this.recorder ?? undefined,
+    });
+
+    adapter.onInitError((error) => {
+      console.error(`[cli-launcher] Claude stdio session ${sessionId} init failed: ${error}`);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.state = "exited";
+        session.exitCode = 1;
+        session.cliSessionId = undefined;
+      }
+      this.persistState();
+    });
+
+    if (this.onAdapter) {
+      this.onAdapter(sessionId, adapter, "claude");
+    }
+
+    info.state = "connected";
+
+    const spawnedAt = Date.now();
+    proc.exited.then((exitCode) => {
+      console.log(`[cli-launcher] Claude stdio session ${sessionId} exited (code=${exitCode})`);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.state = "exited";
+        session.exitCode = exitCode;
+
+        const uptime = Date.now() - spawnedAt;
+        if (uptime < 5000 && options.resumeSessionId) {
+          console.error(`[cli-launcher] Claude stdio session ${sessionId} exited immediately after --resume (${uptime}ms). Clearing cliSessionId for fresh start.`);
+          session.cliSessionId = undefined;
+        }
+      }
       this.onExited?.(sessionId, exitCode);
       this.processes.delete(sessionId);
       this.persistState();
@@ -1369,4 +1527,3 @@ ${MARKER_END}`;
     return this.port;
   }
 }
-
