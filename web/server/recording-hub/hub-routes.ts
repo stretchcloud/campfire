@@ -17,6 +17,13 @@ export function registerHubRoutes(api: Hono, deps: RouteDeps): void {
 
   // ─── List hub recordings ────────────────────────────────────────────
   api.get("/hub/recordings", (c) => {
+    if (recorder) {
+      try {
+        hubStore.indexExistingRecordings(recorder);
+      } catch {
+        // Listing should remain available even if a filesystem scan fails.
+      }
+    }
     return c.json(hubStore.listHubRecordings());
   });
 

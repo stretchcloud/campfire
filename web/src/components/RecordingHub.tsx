@@ -262,8 +262,8 @@ export function RecordingHub({ embedded = false }: Readonly<{ embedded?: boolean
       {loading && <p className="text-cc-muted text-sm">Loading...</p>}
       {!loading && filtered.length === 0 && (
         <div className="text-center py-12 text-cc-muted">
-          <p className="text-sm">No recordings indexed yet</p>
-          <p className="text-xs mt-1">Click "Index Recordings" to import existing session recordings</p>
+          <p className="text-sm">No recordings found yet</p>
+          <p className="text-xs mt-1">Use "Index Recordings" to refresh the recording index</p>
         </div>
       )}
 
