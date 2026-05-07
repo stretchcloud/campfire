@@ -719,8 +719,8 @@ export class WsBridge {
       const queued = session.pendingMessages.splice(0);
       for (const raw of queued) {
         try {
-          const msg = JSON.parse(raw) as BrowserOutgoingMessage;
-          adapter.sendBrowserMessage(msg);
+          const msg = this.normalizeQueuedAdapterMessage(raw, backendType);
+          if (msg) adapter.sendBrowserMessage(msg);
         } catch {
           console.warn(`[ws-bridge] Failed to parse queued message for ${backendType}: ${raw.substring(0, 100)}`);
         }
@@ -730,6 +730,75 @@ export class WsBridge {
     // Notify browsers that the backend is connected
     this.broadcastToBrowsers(session, { type: "cli_connected" });
     console.log(`[ws-bridge] ${backendType} adapter attached for session ${sessionId}`);
+  }
+
+  private normalizeQueuedAdapterMessage(raw: string, backendType: BackendType): BrowserOutgoingMessage | null {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed.type === "user_message" || parsed.type === "permission_response" || parsed.type === "interrupt"
+      || parsed.type === "set_model" || parsed.type === "set_permission_mode" || parsed.type === "mcp_get_status"
+      || parsed.type === "mcp_toggle" || parsed.type === "mcp_reconnect" || parsed.type === "mcp_set_servers") {
+      return parsed as BrowserOutgoingMessage;
+    }
+
+    if (backendType !== "claude") return null;
+
+    if (parsed.type === "user") {
+      const message = parsed.message as { content?: unknown } | undefined;
+      const content = message?.content;
+      if (typeof content === "string") {
+        return { type: "user_message", content };
+      }
+      if (Array.isArray(content)) {
+        const text = content
+          .filter((block): block is { type: string; text: string } =>
+            !!block && typeof block === "object"
+            && (block as { type?: unknown }).type === "text"
+            && typeof (block as { text?: unknown }).text === "string")
+          .map((block) => block.text)
+          .join("\n");
+        return { type: "user_message", content: text };
+      }
+    }
+
+    if (parsed.type === "control_request") {
+      const request = parsed.request as Record<string, unknown> | undefined;
+      if (request?.subtype === "interrupt") return { type: "interrupt" };
+      if (request?.subtype === "set_model" && typeof request.model === "string") {
+        return { type: "set_model", model: request.model };
+      }
+      if (request?.subtype === "set_permission_mode" && typeof request.mode === "string") {
+        return { type: "set_permission_mode", mode: request.mode };
+      }
+      if (request?.subtype === "mcp_status") return { type: "mcp_get_status" };
+      if (request?.subtype === "mcp_toggle" && typeof request.serverName === "string" && typeof request.enabled === "boolean") {
+        return { type: "mcp_toggle", serverName: request.serverName, enabled: request.enabled };
+      }
+      if (request?.subtype === "mcp_reconnect" && typeof request.serverName === "string") {
+        return { type: "mcp_reconnect", serverName: request.serverName };
+      }
+      if (request?.subtype === "mcp_set_servers" && request.servers && typeof request.servers === "object") {
+        return { type: "mcp_set_servers", servers: request.servers as Record<string, McpServerConfig> };
+      }
+    }
+
+    if (parsed.type === "control_response") {
+      const responseEnvelope = parsed.response as { request_id?: unknown; response?: unknown } | undefined;
+      const response = responseEnvelope?.response as Record<string, unknown> | undefined;
+      const requestId = responseEnvelope?.request_id;
+      if (typeof requestId === "string" && (response?.behavior === "allow" || response?.behavior === "deny")) {
+        return {
+          type: "permission_response",
+          request_id: requestId,
+          behavior: response.behavior,
+          updated_input: response.updatedInput as Record<string, unknown> | undefined,
+          updated_permissions: response.updatedPermissions as import("./session-types.js").PermissionUpdate[] | undefined,
+          message: typeof response.message === "string" ? response.message : undefined,
+        };
+      }
+    }
+
+    console.warn(`[ws-bridge] Dropping unsupported queued ${backendType} adapter message: ${raw.substring(0, 100)}`);
+    return null;
   }
 
   // ── Adapter message dispatch (extracted for reduced complexity) ────────
@@ -794,6 +863,32 @@ export class WsBridge {
     }
   }
 
+  /** Preserve Claude-specific result handling when Claude runs through the stdio adapter. */
+  private handleClaudeAdapterResult(session: Session, msg: CLIResultMessage): void {
+    this.applyResultToSessionState(session, msg);
+    this.applyModelUsage(session, msg);
+    this.refreshGitInfo(session, { broadcastUpdate: true, notifyPoller: true });
+
+    if (!session.state.total_lines_added && !session.state.total_lines_removed) {
+      const { added, removed } = this.computeLinesFromToolBlocks(session);
+      if (added > 0 || removed > 0) {
+        session.state.total_lines_added = added;
+        session.state.total_lines_removed = removed;
+      }
+    }
+
+    this.broadcastToBrowsers(session, {
+      type: "session_update",
+      session: {
+        total_duration_api_ms: session.state.total_duration_api_ms,
+        total_lines_added: session.state.total_lines_added,
+        total_lines_removed: session.state.total_lines_removed,
+      },
+    });
+
+    this.emitResultWebhooks(session, msg);
+  }
+
   /** Try to trigger auto-naming after the first successful result in a session. */
   private tryAutoNaming(session: Session, msg: BrowserIncomingMessage): void {
     if (msg.type !== "result") return;
@@ -833,7 +928,11 @@ export class WsBridge {
       session.messageHistory.push({ ...msg, timestamp: msg.timestamp || Date.now() });
       this.persistSession(session);
     } else if (msg.type === "result") {
-      this.persistAdapterResultData(session, msg);
+      if (backendType === "claude") {
+        this.handleClaudeAdapterResult(session, msg.data);
+      } else {
+        this.persistAdapterResultData(session, msg);
+      }
       session.messageHistory.push(msg);
       this.persistSession(session);
     }
@@ -842,6 +941,11 @@ export class WsBridge {
     if (msg.type === "permission_request") {
       session.pendingPermissions.set(msg.request.request_id, msg.request);
       this.persistSession(session);
+      this.webhookManager?.emit("permission.requested", session.id, {
+        backendType: session.backendType,
+        toolName: msg.request.tool_name,
+        requestId: msg.request.request_id,
+      });
     }
 
     this.broadcastToBrowsers(session, msg);
@@ -1470,22 +1574,27 @@ export class WsBridge {
     }
 
     // Permission responses go through voting system for multi-viewer sessions
+    let outboundMsg = msg;
     if (msg.type === "permission_response") {
       const eligibleVoters = this.countEligibleVoters(session);
       if (eligibleVoters > 1) {
         this.recordVote(session, msg.request_id, ws, msg.behavior, msg);
         return;
       }
+      const pending = session.pendingPermissions.get(msg.request_id);
+      if (session.backendType === "claude" && msg.behavior === "allow" && !msg.updated_input && pending) {
+        outboundMsg = { ...msg, updated_input: pending.input };
+      }
       session.pendingPermissions.delete(msg.request_id);
       this.persistSession(session);
     }
 
     if (session.adapter) {
-      session.adapter.sendBrowserMessage(msg);
+      session.adapter.sendBrowserMessage(outboundMsg);
     } else {
       // Adapter not yet attached — queue for when it's ready.
       console.log(`[ws-bridge] ${session.backendType} adapter not yet attached for session ${session.id}, queuing ${msg.type}`);
-      session.pendingMessages.push(JSON.stringify(msg));
+      session.pendingMessages.push(JSON.stringify(outboundMsg));
     }
   }
 
@@ -1566,7 +1675,9 @@ export class WsBridge {
       this.rememberClientMessage(session, msg.client_msg_id);
     }
 
-    if (session.backendType === "claude") {
+    if (session.adapter) {
+      this.routeToAdapter(session, msg, ws);
+    } else if (session.backendType === "claude") {
       this.routeToClaude(session, msg, ws);
     } else {
       this.routeToAdapter(session, msg, ws);
@@ -1867,7 +1978,7 @@ export class WsBridge {
     });
 
     // For adapter-based sessions, send via adapter
-    if (session.backendType !== "claude" && session.adapter) {
+    if (session.adapter) {
       session.adapter.sendBrowserMessage({
         type: "permission_response",
         request_id: requestId,

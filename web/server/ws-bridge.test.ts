@@ -1,7 +1,9 @@
 import { vi } from "vitest";
 
 const mockExecSync = vi.hoisted(() => vi.fn());
-vi.mock("node:child_process", () => ({ execSync: mockExecSync }));
+vi.mock("node:child_process", () => ({
+  execFileSync: (_bin: string, args: string[]) => mockExecSync(args.join(" ")),
+}));
 vi.mock("node:crypto", () => ({ randomUUID: () => "test-uuid" }));
 
 import { WsBridge, type SocketData } from "./ws-bridge.js";
@@ -548,10 +550,10 @@ describe("Browser handlers", () => {
 
     expect(relaunchCb).toHaveBeenCalledWith("s1");
 
-    // Also sends cli_disconnected
+    // Relaunch path tells the browser that a new backend process is starting.
     const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
-    const disconnectedMsg = calls.find((c: any) => c.type === "cli_disconnected");
-    expect(disconnectedMsg).toBeDefined();
+    const launchingMsg = calls.find((c: any) => c.type === "cli_launching");
+    expect(launchingMsg).toBeDefined();
   });
 
   it("handleBrowserOpen: does NOT relaunch when Codex adapter is attached but still initializing", () => {
@@ -998,6 +1000,98 @@ describe("Browser message routing", () => {
     bridge.handleBrowserOpen(browser, "s1");
     cli.send.mockClear();
     browser.send.mockClear();
+  });
+
+  it("routes Claude browser messages to an attached stdio adapter instead of the CLI socket", () => {
+    const adapter = {
+      sendBrowserMessage: vi.fn(() => true),
+      onBrowserMessage: vi.fn(),
+      onSessionMeta: vi.fn(),
+      onDisconnect: vi.fn(),
+      onInitError: vi.fn(),
+      isConnected: vi.fn(() => true),
+      disconnect: vi.fn(async () => {}),
+      getBackendSessionId: vi.fn(() => "claude-internal-1"),
+    };
+    bridge.attachAdapter("s1", adapter as any, "claude");
+    cli.send.mockClear();
+    adapter.sendBrowserMessage.mockClear();
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "Use stdio",
+    }));
+
+    expect(adapter.sendBrowserMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "user_message",
+      content: "Use stdio",
+    }));
+    expect(cli.send).not.toHaveBeenCalled();
+  });
+
+  it("converts queued legacy Claude user NDJSON when a stdio adapter attaches", () => {
+    const adapter = {
+      sendBrowserMessage: vi.fn(() => true),
+      onBrowserMessage: vi.fn(),
+      onSessionMeta: vi.fn(),
+      onDisconnect: vi.fn(),
+      onInitError: vi.fn(),
+      isConnected: vi.fn(() => true),
+      disconnect: vi.fn(async () => {}),
+      getBackendSessionId: vi.fn(() => "claude-internal-1"),
+    };
+    const session = bridge.getSession("s1")!;
+    session.pendingMessages.push(JSON.stringify({
+      type: "user",
+      message: { role: "user", content: "queued before adapter" },
+      parent_tool_use_id: null,
+      session_id: "s1",
+    }));
+
+    bridge.attachAdapter("s1", adapter as any, "claude");
+
+    expect(adapter.sendBrowserMessage).toHaveBeenCalledWith({
+      type: "user_message",
+      content: "queued before adapter",
+    });
+    expect(session.pendingMessages).toEqual([]);
+  });
+
+  it("routes Claude adapter permission responses through voting with the pending input", () => {
+    const adapter = {
+      sendBrowserMessage: vi.fn(() => true),
+      onBrowserMessage: vi.fn(),
+      onSessionMeta: vi.fn(),
+      onDisconnect: vi.fn(),
+      onInitError: vi.fn(),
+      isConnected: vi.fn(() => true),
+      disconnect: vi.fn(async () => {}),
+      getBackendSessionId: vi.fn(() => "claude-internal-1"),
+    };
+    bridge.attachAdapter("s1", adapter as any, "claude");
+    const session = bridge.getSession("s1")!;
+    session.pendingPermissions.set("perm-1", {
+      request_id: "perm-1",
+      tool_name: "Bash",
+      input: { command: "pwd" },
+      tool_use_id: "tool-1",
+      timestamp: Date.now(),
+    });
+    adapter.sendBrowserMessage.mockClear();
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "permission_response",
+      request_id: "perm-1",
+      behavior: "allow",
+    }));
+
+    expect(adapter.sendBrowserMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "permission_response",
+      request_id: "perm-1",
+      behavior: "allow",
+      updated_input: { command: "pwd" },
+    }));
+    expect(session.pendingPermissions.has("perm-1")).toBe(false);
   });
 
   it("user_message: sends NDJSON to CLI and stores in history", () => {

@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { EventEmitter } from "node:events";
 
 // ─── Hoisted mocks ──────────────────────────────────────────────────────────
 
@@ -12,6 +13,28 @@ vi.mock("node:crypto", () => ({ randomUUID: () => "test-session-id" }));
 const mockResolveBinary = vi.hoisted(() => vi.fn((_name: string): string | null => "/usr/bin/claude"));
 const mockGetEnrichedPath = vi.hoisted(() => vi.fn(() => "/usr/bin:/usr/local/bin"));
 vi.mock("./path-resolver.js", () => ({ resolveBinary: mockResolveBinary, getEnrichedPath: mockGetEnrichedPath }));
+const defaultSettings = {
+  openrouterApiKey: "",
+  openrouterModel: "openrouter/free",
+  moltbookApiKey: "",
+  linearApiKey: "",
+  claudeOAuthToken: "",
+  openaiApiKey: "",
+  anthropicApiKey: "",
+  embeddingProvider: "none",
+  embeddingApiKey: "",
+  embeddingModel: "",
+  embeddingBaseUrl: "http://localhost:11434",
+  onboardingCompleted: true,
+  updatedAt: 0,
+};
+const mockGetSettings = vi.hoisted(() => vi.fn(() => defaultSettings));
+vi.mock("./settings-manager.js", () => ({ getSettings: mockGetSettings }));
+const mockNodeSpawn = vi.hoisted(() => vi.fn());
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, spawn: mockNodeSpawn };
+});
 
 // Mock fs operations for worktree guardrails (CLAUDE.md in .claude dirs)
 const mockMkdirSync = vi.hoisted(() => vi.fn());
@@ -72,25 +95,35 @@ function createMockProc(pid = 12345) {
     pid,
     kill: vi.fn(),
     exited: exitedPromise,
-    stdout: null,
-    stderr: null,
-  };
-}
-
-function createMockCodexProc(pid = 12345) {
-  let resolve: (code: number) => void;
-  const exitedPromise = new Promise<number>((r) => {
-    resolve = r;
-  });
-  exitResolve = resolve!;
-  return {
-    pid,
-    kill: vi.fn(),
-    exited: exitedPromise,
     stdin: new WritableStream<Uint8Array>(),
     stdout: new ReadableStream<Uint8Array>(),
     stderr: new ReadableStream<Uint8Array>(),
   };
+}
+
+function createMockCodexProc(pid = 12345) {
+  const proc = new EventEmitter() as EventEmitter & {
+    pid: number;
+    stdin: { write: (chunk: Uint8Array, cb?: (err?: Error | null) => void) => boolean };
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    kill: ReturnType<typeof vi.fn>;
+    ref: ReturnType<typeof vi.fn>;
+    unref: ReturnType<typeof vi.fn>;
+  };
+  proc.pid = pid;
+  proc.stdin = {
+    write: (_chunk, cb) => {
+      cb?.();
+      return true;
+    },
+  };
+  proc.stdout = new EventEmitter();
+  proc.stderr = new EventEmitter();
+  proc.kill = vi.fn();
+  proc.ref = vi.fn();
+  proc.unref = vi.fn();
+  return proc;
 }
 
 const mockSpawn = vi.fn();
@@ -109,7 +142,10 @@ beforeEach(() => {
   launcher = new CliLauncher(4567);
   launcher.setStore(store);
   mockSpawn.mockReturnValue(createMockProc());
+  mockNodeSpawn.mockReturnValue(createMockCodexProc());
   mockResolveBinary.mockReturnValue("/usr/bin/claude");
+  mockGetSettings.mockReturnValue(defaultSettings);
+  delete process.env.CAMPFIRE_CLAUDE_TRANSPORT;
 });
 
 afterEach(() => {
@@ -119,16 +155,16 @@ afterEach(() => {
 // ─── launch ──────────────────────────────────────────────────────────────────
 
 describe("launch", () => {
-  it("creates a session with a UUID and starting state", () => {
+  it("creates a session with a UUID and connected state for stdio Claude", () => {
     const info = launcher.launch({ cwd: "/tmp/project" });
 
     expect(info.sessionId).toBe("test-session-id");
-    expect(info.state).toBe("starting");
+    expect(info.state).toBe("connected");
     expect(info.cwd).toBe("/tmp/project");
     expect(info.createdAt).toBeGreaterThan(0);
   });
 
-  it("spawns CLI with correct --sdk-url and flags", () => {
+  it("spawns Claude with stdio stream-json args by default", () => {
     launcher.launch({ cwd: "/tmp/project" });
 
     expect(mockSpawn).toHaveBeenCalledOnce();
@@ -138,22 +174,34 @@ describe("launch", () => {
     expect(cmdAndArgs[0]).toBe("/usr/bin/claude");
 
     // Core required flags
-    expect(cmdAndArgs).toContain("--sdk-url");
-    expect(cmdAndArgs).toContain("ws://localhost:4567/ws/cli/test-session-id");
-    expect(cmdAndArgs).toContain("--print");
+    expect(cmdAndArgs).not.toContain("--sdk-url");
+    expect(cmdAndArgs).toContain("-p");
     expect(cmdAndArgs).toContain("--output-format");
     expect(cmdAndArgs).toContain("stream-json");
     expect(cmdAndArgs).toContain("--input-format");
     expect(cmdAndArgs).toContain("--verbose");
-
-    // Headless prompt
-    expect(cmdAndArgs).toContain("-p");
-    expect(cmdAndArgs).toContain("");
+    expect(cmdAndArgs).toContain("--permission-prompt-tool");
+    expect(cmdAndArgs).toContain("stdio");
 
     // Spawn options
     expect(options.cwd).toBe("/tmp/project");
+    expect(options.stdin).toBe("pipe");
     expect(options.stdout).toBe("pipe");
     expect(options.stderr).toBe("pipe");
+  });
+
+  it("keeps legacy Claude --sdk-url mode behind CAMPFIRE_CLAUDE_TRANSPORT", () => {
+    process.env.CAMPFIRE_CLAUDE_TRANSPORT = "sdk-url";
+
+    launcher.launch({ cwd: "/tmp/project" });
+
+    const [cmdAndArgs, options] = mockSpawn.mock.calls[0];
+    expect(cmdAndArgs).toContain("--sdk-url");
+    expect(cmdAndArgs).toContain("ws://localhost:4567/ws/cli/test-session-id");
+    expect(cmdAndArgs).toContain("--print");
+    expect(cmdAndArgs).toContain("-p");
+    expect(cmdAndArgs).toContain("");
+    expect(options.stdin).toBeUndefined();
   });
 
   it("passes --model when provided", () => {
@@ -368,11 +416,26 @@ describe("launch", () => {
     expect(options.env.CLAUDECODE).toBeUndefined();
   });
 
-  it("enables Codex web search when codexInternetAccess=true", () => {
-    // Use a fake path where no sibling `node` exists, so the spawn uses
-    // the codex binary directly (the explicit-node path is tested separately).
-    mockResolveBinary.mockReturnValue("/opt/fake/codex");
-    mockSpawn.mockReturnValueOnce(createMockCodexProc());
+  it("injects stored Claude auth without overriding explicit env", () => {
+    mockGetSettings.mockReturnValue({
+      ...defaultSettings,
+      claudeOAuthToken: "stored-oauth",
+      anthropicApiKey: "stored-anthropic",
+    });
+
+    launcher.launch({
+      cwd: "/tmp",
+      env: { CLAUDE_CODE_OAUTH_TOKEN: "explicit-oauth" },
+    });
+
+    const [, options] = mockSpawn.mock.calls[0];
+    expect(options.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("explicit-oauth");
+    expect(options.env.ANTHROPIC_API_KEY).toBe("stored-anthropic");
+  });
+
+  it("enables Codex web search when codexInternetAccess=true", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockResolveBinary.mockImplementation((name: string) => name === "node" ? null : "/bin/true");
 
     launcher.launch({
       backendType: "codex",
@@ -381,17 +444,15 @@ describe("launch", () => {
       codexSandbox: "danger-full-access",
     });
 
-    const [cmdAndArgs, options] = mockSpawn.mock.calls[0];
-    expect(cmdAndArgs[0]).toBe("/opt/fake/codex");
-    expect(cmdAndArgs).toContain("app-server");
-    expect(cmdAndArgs).toContain("-c");
-    expect(cmdAndArgs).toContain("tools.webSearch=true");
-    expect(options.cwd).toBe("/tmp/project");
+    await vi.dynamicImportSettled();
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("/bin/true app-server -c tools.webSearch=true"));
+    logSpy.mockRestore();
   });
 
-  it("disables Codex web search when codexInternetAccess=false", () => {
-    mockResolveBinary.mockReturnValue("/opt/fake/codex");
-    mockSpawn.mockReturnValueOnce(createMockCodexProc());
+  it("disables Codex web search when codexInternetAccess=false", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockResolveBinary.mockImplementation((name: string) => name === "node" ? null : "/bin/true");
 
     launcher.launch({
       backendType: "codex",
@@ -400,13 +461,13 @@ describe("launch", () => {
       codexSandbox: "workspace-write",
     });
 
-    const [cmdAndArgs] = mockSpawn.mock.calls[0];
-    expect(cmdAndArgs).toContain("app-server");
-    expect(cmdAndArgs).toContain("-c");
-    expect(cmdAndArgs).toContain("tools.webSearch=false");
+    await vi.dynamicImportSettled();
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("/bin/true app-server -c tools.webSearch=false"));
+    logSpy.mockRestore();
   });
 
-  it("spawns codex via sibling node binary to bypass shebang issues", () => {
+  it("spawns codex via sibling node binary to bypass shebang issues", async () => {
     // When a `node` binary exists next to the resolved `codex`, the launcher
     // should invoke `node <codex-script>` directly instead of relying on
     // the #!/usr/bin/env node shebang (which may resolve to system Node v12).
@@ -414,12 +475,14 @@ describe("launch", () => {
     const tmpBinDir = mkdtempSync(join(tmpdir(), "codex-test-"));
     const fakeCodex = join(tmpBinDir, "codex");
     const fakeNode = join(tmpBinDir, "node");
-    const { writeFileSync: realWriteFileSync } = require("node:fs");
+    const { writeFileSync: realWriteFileSync, chmodSync: realChmodSync } = require("node:fs");
     realWriteFileSync(fakeCodex, "#!/usr/bin/env node\n");
     realWriteFileSync(fakeNode, "#!/bin/sh\n");
+    realChmodSync(fakeCodex, 0o755);
+    realChmodSync(fakeNode, 0o755);
 
     mockResolveBinary.mockReturnValue(fakeCodex);
-    mockSpawn.mockReturnValueOnce(createMockCodexProc());
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     launcher.launch({
       backendType: "codex",
@@ -427,12 +490,11 @@ describe("launch", () => {
       codexSandbox: "workspace-write",
     });
 
-    const [cmdAndArgs] = mockSpawn.mock.calls[0];
+    await vi.dynamicImportSettled();
+
     // Sibling node exists, so it should use explicit node invocation
-    expect(cmdAndArgs[0]).toBe(fakeNode);
-    // The codex script path should be arg 1
-    expect(cmdAndArgs[1]).toContain("codex");
-    expect(cmdAndArgs).toContain("app-server");
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining(`${fakeNode} ${fakeCodex} app-server`));
+    logSpy.mockRestore();
 
     // Cleanup
     rmSync(tmpBinDir, { recursive: true, force: true });
@@ -647,8 +709,9 @@ describe("relaunch", () => {
       pid: 12345,
       kill: vi.fn(() => { resolveFirst(0); }),
       exited: new Promise<number>((r) => { resolveFirst = r; }),
-      stdout: null,
-      stderr: null,
+      stdin: new WritableStream<Uint8Array>(),
+      stdout: new ReadableStream<Uint8Array>(),
+      stderr: new ReadableStream<Uint8Array>(),
     };
     mockSpawn.mockReturnValueOnce(firstProc);
 
@@ -671,11 +734,11 @@ describe("relaunch", () => {
     expect(cmdAndArgs).toContain("--resume");
     expect(cmdAndArgs).toContain("cli-resume-id");
 
-    // Session state should be reset to starting (set by relaunch before spawnCLI)
+    // Stdio Claude sessions are connected as soon as the adapter is attached.
     // Allow microtask queue to flush
     await new Promise((r) => setTimeout(r, 10));
     const session = launcher.getSession("test-session-id");
-    expect(session?.state).toBe("starting");
+    expect(session?.state).toBe("connected");
   });
 
   it("returns false for unknown session", async () => {
@@ -723,6 +786,39 @@ describe("persistence", () => {
       // Live PIDs get state reset to "starting" awaiting WS reconnect
       expect(session?.state).toBe("starting");
       expect(session?.cliSessionId).toBe("cli-abc");
+
+      killSpy.mockRestore();
+    });
+
+    it("marks live Claude stdio sessions exited so they can relaunch after restart", () => {
+      const savedSessions = [
+        {
+          sessionId: "stdio-1",
+          pid: 99999,
+          state: "connected" as const,
+          cwd: "/tmp/project",
+          createdAt: Date.now(),
+          backendType: "claude" as const,
+          claudeTransport: "stdio" as const,
+          cliSessionId: "cli-stdio",
+        },
+      ];
+      store.saveLauncher(savedSessions);
+
+      const killSpy = vi.spyOn(process, "kill").mockImplementation(((
+        _pid: number,
+        _signal?: string | number,
+      ) => true) as any);
+
+      const newLauncher = new CliLauncher(4567);
+      newLauncher.setStore(store);
+      const recovered = newLauncher.restoreFromDisk();
+
+      expect(recovered).toBe(0);
+      const session = newLauncher.getSession("stdio-1");
+      expect(session?.state).toBe("exited");
+      expect(session?.exitCode).toBe(-1);
+      expect(killSpy).toHaveBeenCalledWith(99999, "SIGTERM");
 
       killSpy.mockRestore();
     });
@@ -806,6 +902,7 @@ describe("persistence", () => {
 
 describe("getStartingSessions", () => {
   it("returns only sessions in starting state", () => {
+    process.env.CAMPFIRE_CLAUDE_TRANSPORT = "sdk-url";
     launcher.launch({ cwd: "/tmp" });
 
     const starting = launcher.getStartingSessions();
@@ -814,6 +911,7 @@ describe("getStartingSessions", () => {
   });
 
   it("excludes sessions that have been connected", () => {
+    process.env.CAMPFIRE_CLAUDE_TRANSPORT = "sdk-url";
     launcher.launch({ cwd: "/tmp" });
     launcher.markConnected("test-session-id");
 
