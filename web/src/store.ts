@@ -83,6 +83,7 @@ interface AppState {
   // Update info
   updateInfo: UpdateInfo | null;
   updateDismissedVersion: string | null;
+  updateOverlayActive: boolean;
 
   // UI
   darkMode: boolean;
@@ -188,6 +189,7 @@ interface AppState {
   // Update actions
   setUpdateInfo: (info: UpdateInfo | null) => void;
   dismissUpdate: (version: string) => void;
+  setUpdateOverlayActive: (active: boolean) => void;
 
   // Diff panel actions
   setActiveTab: (tab: "chat" | "diff" | "files") => void;
@@ -300,6 +302,7 @@ export const useStore = create<AppState>((set) => ({
   replaySessionId: null,
   updateInfo: null,
   updateDismissedVersion: getInitialDismissedVersion(),
+  updateOverlayActive: false,
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
   notificationDesktop: getInitialNotificationDesktop(),
@@ -860,6 +863,7 @@ export const useStore = create<AppState>((set) => ({
     localStorage.setItem("cc-update-dismissed", version);
     set({ updateDismissedVersion: version });
   },
+  setUpdateOverlayActive: (active) => set({ updateOverlayActive: active }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 

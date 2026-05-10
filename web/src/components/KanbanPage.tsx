@@ -105,10 +105,7 @@ function KanbanColumn({ column, tasks }: { column: Column; tasks: TaskItem[] }) 
 
 export function KanbanPage() {
   const currentSessionId = useStore((s) => s.currentSessionId);
-  const allTasks = useStore((s) => {
-    if (!currentSessionId) return new Map<string, TaskItem[]>();
-    return s.sessionTasks;
-  });
+  const sessionTasks = useStore((s) => s.sessionTasks);
   const sessionNames = useStore((s) => s.sessionNames);
   const sdkSessions = useStore((s) => s.sdkSessions);
 
@@ -121,8 +118,8 @@ export function KanbanPage() {
     // If there's a current session, show that session's tasks
     // Otherwise, aggregate all
     const sessionsToShow = currentSessionId
-      ? [[currentSessionId, allTasks.get(currentSessionId) || []] as const]
-      : Array.from(allTasks.entries());
+      ? [[currentSessionId, sessionTasks.get(currentSessionId) || []] as const]
+      : Array.from(sessionTasks.entries());
 
     for (const [, tasks] of sessionsToShow) {
       for (const task of tasks) {
@@ -141,7 +138,7 @@ export function KanbanPage() {
       totalCount: pending.length + in_progress.length + completed.length,
       sessionId: currentSessionId,
     };
-  }, [allTasks, currentSessionId]);
+  }, [sessionTasks, currentSessionId]);
 
   const sessionName = sessionId
     ? sessionNames.get(sessionId) || sdkSessions.find((s) => s.sessionId === sessionId)?.name || sessionId.slice(0, 8)
