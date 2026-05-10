@@ -1,6 +1,6 @@
 <h1 align="center">Campfire</h1>
 <p align="center"><strong>The collaborative web platform for AI coding agents.</strong></p>
-<p align="center">A collaborative web platform for AI coding agents. Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, permission voting, session replay, scheduled tasks, and 30+ integrations.</p>
+<p align="center">A collaborative web platform for AI coding agents. Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, multi-agent orchestration, permission voting, session replay, scheduled tasks, and 30+ integrations.</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/the-campfire"><img src="https://img.shields.io/npm/v/the-campfire.svg" alt="npm version" /></a>
@@ -40,6 +40,7 @@
   - [Workspace File Tree](#workspace-file-tree)
   - [Mermaid Diagram Rendering](#mermaid-diagram-rendering)
   - [Orchestrator Pipelines](#orchestrator-pipelines)
+  - [Multi-Agent Orchestration](#multi-agent-orchestration)
   - [Message Queue](#message-queue)
   - [Kanban Task Board](#kanban-task-board)
   - [Authentication](#authentication)
@@ -1355,6 +1356,46 @@ A multi-stage automation engine for chaining sequential AI sessions into workflo
 
 Pipeline and run data is persisted to `~/.campfire/orchestrator/`.
 
+### Multi-Agent Orchestration
+
+Campfire can now coordinate agents as a group instead of only running independent sessions. The orchestration layer lets lead agents delegate one-turn subtasks to other backends, runs parallel "agent races" in isolated worktrees, and detects project environment integrations before a session starts.
+
+**Agent-to-agent delegation:**
+
+- Lead Claude Code and Codex sessions can receive an internal `campfire_agents` MCP server.
+- The MCP server exposes `ask_codex`, `ask_goose`, `ask_aider`, `ask_openhands`, and `ask_claude` tools, excluding the lead session's own backend.
+- Each `ask_*` tool launches a temporary sub-session in the same working directory, injects the subtask prompt, waits for the result, collects changed files and cost, then returns the result to the lead agent.
+- Sub-agent progress is streamed back to the parent session through `sub_agent_update` events and appears in the session activity UI.
+- Set `CAMPFIRE_ENABLE_AGENT_MCP=0` to disable automatic agent MCP injection.
+
+**Agent races:**
+
+Open **Agent Races** at `#/races` from the sidebar to run the same prompt across multiple backends in parallel.
+
+1. Choose a repository root and task prompt.
+2. Select at least two backends. The UI currently offers Claude, Codex, Goose, Aider, and OpenHands; the REST API also accepts OpenClaw and OpenCode.
+3. Campfire creates one git worktree and branch per backend, launches a session in each worktree, and sends the same prompt to every agent.
+4. The comparison view shows status, wall-clock time, cost, changed file count, line changes, output summary, and a loadable diff for each entry.
+5. Click **Merge** on the winning entry to merge its race branch into the repository root and clean up the other race worktrees.
+
+Race results are saved to `~/.campfire/races/` so completed comparisons remain available after a server restart.
+
+**Environment detection:**
+
+Every launched session scans its working directory for project signals such as Supabase, Stripe, Vercel/Next.js, Prisma, Docker, Fly.io, GitHub Actions, and database configuration. Detected rules appear in the TaskPanel environment card with required environment variables marked as configured or missing. For Claude and Codex sessions, detected MCP servers are injected automatically unless `CAMPFIRE_AUTO_INJECT_ENV_MCP=0` is set.
+
+**REST API:**
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/races` | Start a race with `{ prompt, repoRoot, backends, baseBranch?, modelByBackend? }` |
+| `GET` | `/api/races` | List saved races |
+| `GET` | `/api/races/:id` | Get race status and entries |
+| `GET` | `/api/races/:id/entries/:entryId/diff` | Load a race entry's git diff |
+| `POST` | `/api/races/:id/pick` | Merge the winning entry by `sessionId` |
+| `POST` | `/api/races/:id/cancel` | Cancel a running race and clean up worktrees |
+| `DELETE` | `/api/races/:id` | Delete a saved race record |
+
 ### Message Queue
 
 When the agent is busy processing a request (status "running"), new messages are queued instead of being dropped. Features include:
@@ -1804,6 +1845,7 @@ All state is file-based — no database required:
 | Environments | `~/.campfire/envs/` | JSON per profile |
 | Cron jobs | `~/.campfire/cron/` | JSON per job |
 | Gallery entries | `~/.campfire/gallery/` | JSON per entry |
+| Agent races | `~/.campfire/races/` | JSON per race |
 | Webhooks | `~/.campfire/webhooks/` | JSON per webhook |
 | Adapters | `~/.campfire/adapters/` | npm packages |
 | Settings | `~/.campfire/settings.json` | Single JSON file |
@@ -2043,6 +2085,18 @@ All endpoints are under `/api`.
 | `POST` | `/api/sessions/create-with-progress` | Create a container session with SSE progress (returns `text/event-stream`) |
 | `GET` | `/api/sessions/detect` | Detect running Claude Code CLI processes |
 | `POST` | `/api/sessions/adopt` | Adopt a detected process into Campfire |
+
+### Agent Races
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/races` | Start a race across two or more agent backends |
+| `GET` | `/api/races` | List saved race results |
+| `GET` | `/api/races/:id` | Get race status and entries |
+| `GET` | `/api/races/:id/entries/:entryId/diff` | Load the git diff for one race entry |
+| `POST` | `/api/races/:id/pick` | Merge the selected winner by `sessionId` |
+| `POST` | `/api/races/:id/cancel` | Cancel a running race |
+| `DELETE` | `/api/races/:id` | Delete a saved race record |
 
 ### Authentication
 
