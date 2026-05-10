@@ -39,6 +39,7 @@ export function ModelSwitcher({ sessionId }: Readonly<{ sessionId: string }>) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const backendType = resolveBackendType(sdkSession?.backendType, runtimeSession?.backend_type);
+  const isCodex = backendType === "codex";
   const currentModel = runtimeSession?.model ?? sdkSession?.model ?? getDefaultModel(backendType);
   const models = getModelsForBackend(backendType);
   const currentOption = findCurrentOption(models, currentModel);
@@ -91,7 +92,7 @@ export function ModelSwitcher({ sessionId }: Readonly<{ sessionId: string }>) {
   }
 
   // Don't render if we have no model info at all
-  if (!currentOption) return null;
+  if (isCodex || !currentOption) return null;
 
   return (
     <div className="relative" ref={containerRef}>

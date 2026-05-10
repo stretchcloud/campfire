@@ -1351,7 +1351,7 @@ export const api = {
   getRace: (id: string) => get<RaceInfo>(`/races/${encodeURIComponent(id)}`),
   getRaceEntryDiff: (raceId: string, entryId: string) =>
     get<{ diff: string; files: string[] }>(`/races/${encodeURIComponent(raceId)}/entries/${encodeURIComponent(entryId)}/diff`),
-  createRace: (data: { prompt: string; backends: string[]; repoRoot: string; baseBranch?: string }) =>
+  createRace: (data: { prompt: string; backends: string[]; repoRoot: string; baseBranch?: string; envSlug?: string; env?: Record<string, string> }) =>
     post<RaceInfo>("/races", data),
   pickRaceWinner: (id: string, sessionId: string) =>
     post<RaceInfo>(`/races/${encodeURIComponent(id)}/pick`, { sessionId }),

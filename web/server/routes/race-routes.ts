@@ -17,12 +17,16 @@ export function registerRaceRoutes(api: Hono, deps: RouteDeps): void {
       repoRoot?: string;
       baseBranch?: string;
       modelByBackend?: Partial<Record<BackendType, string>>;
+      envSlug?: string;
+      env?: Record<string, string>;
     }>().catch(() => ({} as {
       prompt?: string;
       backends?: string[];
       repoRoot?: string;
       baseBranch?: string;
       modelByBackend?: Partial<Record<BackendType, string>>;
+      envSlug?: string;
+      env?: Record<string, string>;
     }));
 
     const prompt = body.prompt?.trim() || "";
@@ -38,6 +42,8 @@ export function registerRaceRoutes(api: Hono, deps: RouteDeps): void {
         repoRoot: body.repoRoot,
         baseBranch: body.baseBranch,
         modelByBackend: body.modelByBackend,
+        envSlug: body.envSlug,
+        env: body.env,
       });
       return c.json(race, 201);
     } catch (err) {
