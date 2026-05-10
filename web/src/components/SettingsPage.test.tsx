@@ -18,6 +18,7 @@ interface MockStoreState {
   toggleNotificationSound: ReturnType<typeof vi.fn>;
   setNotificationDesktop: ReturnType<typeof vi.fn>;
   setUpdateInfo: ReturnType<typeof vi.fn>;
+  setUpdateOverlayActive: ReturnType<typeof vi.fn>;
 }
 
 let mockState: MockStoreState;
@@ -32,6 +33,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     toggleNotificationSound: vi.fn(),
     setNotificationDesktop: vi.fn(),
     setUpdateInfo: vi.fn(),
+    setUpdateOverlayActive: vi.fn(),
     ...overrides,
   };
 }
@@ -361,6 +363,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(mockApi.triggerUpdate).toHaveBeenCalledTimes(1);
     });
+    expect(mockState.setUpdateOverlayActive).toHaveBeenCalledWith(true);
     expect(await screen.findByText("Update started. Server will restart shortly.")).toBeInTheDocument();
   });
 

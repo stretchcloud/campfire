@@ -1,6 +1,6 @@
 {
   "name": "the-campfire",
-  "version": "0.42.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "Web UI for launching and interacting with Claude Code agents",
   "license": "MIT",

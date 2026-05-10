@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { UpdateInfo } from "../api.js";
 
 const mockSetUpdateInfo = vi.fn();
 const mockDismissUpdate = vi.fn();
+const mockSetUpdateOverlayActive = vi.fn();
 const mockTriggerUpdate = vi.fn();
 
 let storeState: Record<string, unknown> = {};
@@ -40,6 +41,7 @@ beforeEach(() => {
     updateInfo: null,
     updateDismissedVersion: null,
     dismissUpdate: mockDismissUpdate,
+    setUpdateOverlayActive: mockSetUpdateOverlayActive,
   };
 });
 
@@ -98,7 +100,7 @@ describe("UpdateBanner service mode", () => {
   it("shows install hint in foreground mode", () => {
     storeState.updateInfo = makeUpdateInfo({ isServiceMode: false });
     render(<UpdateBanner />);
-    expect(screen.getByText("campfire install")).toBeTruthy();
+    expect(screen.getByText("the-campfire install")).toBeTruthy();
   });
 
   it("shows Updating... when update is in progress", () => {
@@ -121,6 +123,17 @@ describe("UpdateBanner interactions", () => {
 
     fireEvent.click(screen.getByText("Update & Restart"));
     expect(mockTriggerUpdate).toHaveBeenCalledOnce();
+  });
+
+  it("shows the update overlay after the update starts", async () => {
+    mockTriggerUpdate.mockResolvedValue({ ok: true });
+    storeState.updateInfo = makeUpdateInfo({ isServiceMode: true });
+    render(<UpdateBanner />);
+
+    fireEvent.click(screen.getByText("Update & Restart"));
+    await waitFor(() => {
+      expect(mockSetUpdateOverlayActive).toHaveBeenCalledWith(true);
+    });
   });
 
   it("calls dismissUpdate with the latest version when dismiss is clicked", () => {
