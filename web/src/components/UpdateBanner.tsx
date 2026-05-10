@@ -6,6 +6,7 @@ export function UpdateBanner() {
   const updateInfo = useStore((s) => s.updateInfo);
   const dismissedVersion = useStore((s) => s.updateDismissedVersion);
   const dismissUpdate = useStore((s) => s.dismissUpdate);
+  const setUpdateOverlayActive = useStore((s) => s.setUpdateOverlayActive);
   const [updating, setUpdating] = useState(false);
 
   if (!updateInfo?.updateAvailable || !updateInfo.latestVersion) return null;
@@ -15,6 +16,7 @@ export function UpdateBanner() {
     setUpdating(true);
     try {
       await api.triggerUpdate();
+      setUpdateOverlayActive(true);
     } catch (err) {
       console.error("Update failed:", err);
       setUpdating(false);
@@ -50,7 +52,7 @@ export function UpdateBanner() {
         <span className="text-xs text-cc-muted">
           Run{" "}
           <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">
-            campfire install
+            the-campfire install
           </code>{" "}
           for auto-updates
         </span>
