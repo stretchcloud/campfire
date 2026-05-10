@@ -442,6 +442,11 @@ export function HomePage() {
     <div className="flex-1 h-full flex items-start justify-center px-3 sm:px-4 pt-[12vh] sm:pt-[18vh] overflow-y-auto">
       <div className="w-full max-w-xl">
         {/* Greeting */}
+        <img
+          src="/icon-512.png"
+          alt="Campfire"
+          className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-5 rounded-[22px] shadow-lg"
+        />
         <h1 className="text-2xl sm:text-3xl font-light text-cc-fg text-center">
           What are you working on?
         </h1>
