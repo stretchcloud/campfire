@@ -24,6 +24,7 @@ export function createRoutes(
   adapterRegistry?: import("./adapter-registry.js").AdapterRegistry,
   agentExecutor?: import("./agent-executor.js").AgentExecutor,
   protocolMonitor?: import("./protocol-monitor.js").ProtocolMonitor,
+  agentMcpBridge?: import("./agent-mcp-bridge.js").AgentMcpBridge,
 ) {
   return _createRoutes({
     launcher,
@@ -38,5 +39,6 @@ export function createRoutes(
     adapterRegistry,
     agentExecutor,
     protocolMonitor,
+    agentMcpBridge,
   });
 }

@@ -14,6 +14,7 @@ import type { UpdateInfo, GitHubPRInfo } from "../api.js";
 import { GitHubPRDisplay, CodexRateLimitsSection, CodexTokenDetailsSection, ClaudeTokenDetailsSection } from "./TaskPanel.js";
 import { CostCard } from "./CostCard.js";
 import { GalleryCard } from "./GalleryCard.js";
+import { EnvironmentPanel } from "./EnvironmentPanel.js";
 import type { GalleryEntryInfo } from "../api.js";
 
 // ─── Mock Data ──────────────────────────────────────────────────────────────
@@ -1113,6 +1114,23 @@ export function Playground() {
               </div>
             </Card>
           </div>
+        </Section>
+
+        <Section title="Environment Detection" description="Detected project services and missing environment variables shown in the session panel">
+          <Card label="Detected Next.js, Prisma, and Stripe">
+            <div className="w-[280px] border border-cc-border rounded-xl overflow-hidden bg-cc-bg py-1">
+              <EnvironmentPanel detected={{
+                cwd: "/Users/stan/Dev/project",
+                scannedAt: Date.now(),
+                mcpServers: {},
+                rules: [
+                  { id: "vercel", name: "Vercel", description: "Vercel or Next.js deployment target detected." },
+                  { id: "prisma", name: "Prisma", description: "Prisma schema or dependency detected.", envRequired: ["DATABASE_URL"], envMissing: ["DATABASE_URL"], envPresent: [] },
+                  { id: "stripe", name: "Stripe", description: "Stripe SDK or secret key detected.", envRequired: ["STRIPE_SECRET_KEY"], envPresent: ["STRIPE_SECRET_KEY"], envMissing: [] },
+                ],
+              }} />
+            </div>
+          </Card>
         </Section>
 
         {/* ─── Cost Card ────────────────────────────────────── */}
