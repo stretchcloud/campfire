@@ -48,11 +48,6 @@ export const CLAUDE_MODELS: ModelOption[] = [
 ];
 
 export const CODEX_MODELS: ModelOption[] = [
-  { value: "gpt-5.3-codex", label: "GPT-5.3 Codex", icon: "\u2733" },
-  { value: "gpt-5.2-codex", label: "GPT-5.2 Codex", icon: "\u25C6" },
-  { value: "gpt-5.1-codex-max", label: "GPT-5.1 Max", icon: "\u25A0" },
-  { value: "gpt-5.2", label: "GPT-5.2", icon: "\u25CF" },
-  { value: "gpt-5.1-codex-mini", label: "GPT-5.1 Mini", icon: "\u26A1" },
 ];
 
 /** Goose supports many providers — these are common defaults.
@@ -140,7 +135,7 @@ export function getModesForBackend(backend: BackendType): ModeOption[] {
 }
 
 export function getDefaultModel(backend: BackendType): string {
-  if (backend === "codex") return CODEX_MODELS[0].value;
+  if (backend === "codex") return "";
   if (backend === "goose") return GOOSE_MODELS[0].value;
   if (backend === "aider") return AIDER_MODELS[0].value;
   if (backend === "openhands") return OPENHANDS_MODELS[0].value;

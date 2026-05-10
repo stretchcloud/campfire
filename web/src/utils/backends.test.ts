@@ -81,6 +81,7 @@ describe("getModelsForBackend", () => {
 
   it("returns codex models for codex backend", () => {
     expect(getModelsForBackend("codex")).toBe(CODEX_MODELS);
+    expect(getModelsForBackend("codex")).toEqual([]);
   });
 
   it("returns goose models for goose backend", () => {
@@ -115,8 +116,8 @@ describe("getDefaultModel", () => {
     expect(getDefaultModel("claude")).toBe(CLAUDE_MODELS[0].value);
   });
 
-  it("returns first codex model for codex backend", () => {
-    expect(getDefaultModel("codex")).toBe(CODEX_MODELS[0].value);
+  it("returns no codex model override for codex backend", () => {
+    expect(getDefaultModel("codex")).toBe("");
   });
 
   it("returns first goose model for goose backend", () => {
@@ -147,10 +148,8 @@ describe("getDefaultMode", () => {
 });
 
 describe("static model/mode lists", () => {
-  it("has codex models with GPT-5.x slugs", () => {
-    for (const m of CODEX_MODELS) {
-      expect(m.value).toMatch(/^gpt-5/);
-    }
+  it("does not advertise static codex launch models", () => {
+    expect(CODEX_MODELS).toEqual([]);
   });
 
   it("has claude models with claude- prefix", () => {
