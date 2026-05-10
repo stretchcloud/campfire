@@ -777,6 +777,30 @@ describe("CodexAdapter", () => {
     expect(allWritten).toContain('"cwd":"/workspace/app"');
   });
 
+  it("omits model from thread/start when no explicit model override is provided", async () => {
+    new CodexAdapter(proc as never, "test-session", {
+      cwd: "/workspace/app",
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    stdout.push(JSON.stringify({ id: 1, result: { userAgent: "codex" } }) + "\n");
+    await new Promise((r) => setTimeout(r, 50));
+
+    const requests = stdin.chunks
+      .join("")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { method?: string; params?: Record<string, unknown> });
+    const startRequest = requests.find((request) => request.method === "thread/start");
+
+    // Without a Campfire override, Codex should fall through to its own
+    // configuration and login defaults instead of receiving a stale model slug.
+    expect(startRequest).toBeDefined();
+    expect(startRequest!.params).not.toHaveProperty("model");
+    expect(startRequest!.params).toHaveProperty("cwd", "/workspace/app");
+  });
+
   // ── Init error handling ────────────────────────────────────────────────────
 
   it("calls onInitError when initialization fails", async () => {

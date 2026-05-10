@@ -615,6 +615,22 @@ describe("Sidebar", () => {
     expect(codexPills.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("uses the shared Campfire logo for codex sessions", () => {
+    // The sidebar header brand should stay stable across backend types. Codex
+    // sessions still get their backend pill in the session row.
+    const session = makeSession("s1", { backend_type: "codex" });
+    const sdk = makeSdkSession("s1", { backendType: "codex" });
+    mockState = createMockState({
+      sessions: new Map([["s1", session]]),
+      sdkSessions: [sdk],
+      currentSessionId: "s1",
+    });
+
+    const { container } = render(<Sidebar />);
+    const brandLogo = container.querySelector("aside img");
+    expect(brandLogo).toHaveAttribute("src", "/logo.svg");
+  });
+
   it("sessions are grouped by project directory", () => {
     const session1 = makeSession("s1", { cwd: "/home/user/project-a" });
     const session2 = makeSession("s2", { cwd: "/home/user/project-a" });

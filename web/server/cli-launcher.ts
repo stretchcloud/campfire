@@ -331,18 +331,21 @@ export class CliLauncher {
     const sessionId = randomUUID();
     const cwd = options.cwd || process.cwd();
     const backendType = options.backendType || "claude";
-    const detectedEnvironment = options.detectedEnvironment ?? detectEnvironment(cwd);
+    const launchOptions = backendType === "codex" && !options.model?.trim()
+      ? { ...options, model: undefined }
+      : options;
+    const detectedEnvironment = launchOptions.detectedEnvironment ?? detectEnvironment(cwd);
 
     const info: SdkSessionInfo = {
       sessionId,
       state: "starting",
-      model: options.model,
-      permissionMode: options.permissionMode,
+      model: launchOptions.model,
+      permissionMode: launchOptions.permissionMode,
       cwd,
       createdAt: Date.now(),
       backendType,
-      parentSessionId: options.parentSessionId,
-      orchestrationRole: options.orchestrationRole,
+      parentSessionId: launchOptions.parentSessionId,
+      orchestrationRole: launchOptions.orchestrationRole,
       detectedEnvironment,
       claudeTransport: backendType === "claude"
         ? (useClaudeSdkUrlTransport() ? "sdk-url" : "stdio")
@@ -350,40 +353,40 @@ export class CliLauncher {
     };
 
     if (backendType === "codex") {
-      info.codexInternetAccess = options.codexInternetAccess === true;
-      info.codexSandbox = options.codexSandbox;
-      info.codexReasoningEffort = options.codexReasoningEffort;
+      info.codexInternetAccess = launchOptions.codexInternetAccess === true;
+      info.codexSandbox = launchOptions.codexSandbox;
+      info.codexReasoningEffort = launchOptions.codexReasoningEffort;
     }
 
     // Persist env vars so they survive server restarts and relaunches
-    if (options.env && Object.keys(options.env).length > 0) {
-      info.sessionEnv = options.env;
+    if (launchOptions.env && Object.keys(launchOptions.env).length > 0) {
+      info.sessionEnv = launchOptions.env;
     }
 
     // Store worktree metadata if provided
-    if (options.worktreeInfo) {
-      info.isWorktree = options.worktreeInfo.isWorktree;
-      info.repoRoot = options.worktreeInfo.repoRoot;
-      info.branch = options.worktreeInfo.branch;
-      info.actualBranch = options.worktreeInfo.actualBranch;
+    if (launchOptions.worktreeInfo) {
+      info.isWorktree = launchOptions.worktreeInfo.isWorktree;
+      info.repoRoot = launchOptions.worktreeInfo.repoRoot;
+      info.branch = launchOptions.worktreeInfo.branch;
+      info.actualBranch = launchOptions.worktreeInfo.actualBranch;
     }
 
     this.sessions.set(sessionId, info);
 
     if (backendType === "codex") {
-      this.spawnCodex(sessionId, info, options);
+      this.spawnCodex(sessionId, info, launchOptions);
     } else if (backendType === "goose") {
-      this.spawnGoose(sessionId, info, options);
+      this.spawnGoose(sessionId, info, launchOptions);
     } else if (backendType === "aider") {
-      this.spawnAider(sessionId, info, options);
+      this.spawnAider(sessionId, info, launchOptions);
     } else if (backendType === "openhands") {
-      this.spawnOpenHands(sessionId, info, options);
+      this.spawnOpenHands(sessionId, info, launchOptions);
     } else if (backendType === "openclaw") {
-      this.spawnOpenClaw(sessionId, info, options);
+      this.spawnOpenClaw(sessionId, info, launchOptions);
     } else if (backendType === "opencode") {
-      this.spawnOpenCode(sessionId, info, options);
+      this.spawnOpenCode(sessionId, info, launchOptions);
     } else {
-      this.spawnCLI(sessionId, info, options);
+      this.spawnCLI(sessionId, info, launchOptions);
     }
     return info;
   }
@@ -561,12 +564,22 @@ export class CliLauncher {
       console.log(`[cli-launcher] Spawning session ${sessionId}: ${binary} ${args.join(" ")}`);
     }
 
-    const proc = Bun.spawn(spawnCmd, {
-      cwd: spawnCwd,
-      env: spawnEnv,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    let proc: Subprocess;
+    try {
+      proc = Bun.spawn(spawnCmd, {
+        cwd: spawnCwd,
+        env: spawnEnv,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch (error) {
+      console.error(`[cli-launcher] Failed to spawn Claude session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+      info.state = "exited";
+      info.exitCode = 127;
+      this.processes.delete(sessionId);
+      this.persistState();
+      return;
+    }
 
     info.pid = proc.pid;
     this.processes.set(sessionId, proc);
@@ -625,13 +638,24 @@ export class CliLauncher {
       console.log(`[cli-launcher] Spawning Claude stdio session ${sessionId}: ${binary} ${args.join(" ")}`);
     }
 
-    const proc = Bun.spawn(spawnCmd, {
-      cwd: spawnCwd,
-      env: spawnEnv,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    let proc: Subprocess;
+    try {
+      proc = Bun.spawn(spawnCmd, {
+        cwd: spawnCwd,
+        env: spawnEnv,
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch (error) {
+      console.error(`[cli-launcher] Failed to spawn Claude stdio session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+      info.state = "exited";
+      info.exitCode = 127;
+      info.cliSessionId = undefined;
+      this.processes.delete(sessionId);
+      this.persistState();
+      return;
+    }
 
     info.pid = proc.pid;
     this.processes.set(sessionId, proc);
@@ -729,6 +753,7 @@ export class CliLauncher {
   }
 
   private async spawnCodex(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): Promise<void> {
+    const model = options.model?.trim() ? options.model : undefined;
     let binary = options.codexBinary || "codex";
     const resolved = resolveBinary(binary);
     if (resolved) {
@@ -808,6 +833,30 @@ export class CliLauncher {
       env: cleanEnv,
       stdio: ["pipe", "pipe", "pipe"],
     });
+    let processExited = false;
+    const markProcessExited = (exitCode: number): void => {
+      if (processExited) return;
+      processExited = true;
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.state = "exited";
+        session.exitCode = exitCode;
+      }
+      this.processes.delete(sessionId);
+      this.persistState();
+    };
+    const procExited = new Promise<number>((resolve) => {
+      nodeProc.once("error", (err) => {
+        console.error(`[cli-launcher] Codex session ${sessionId} failed to spawn: ${err.message}`);
+        markProcessExited(127);
+        resolve(127);
+      });
+      nodeProc.once("exit", (code) => {
+        const exitCode = code ?? 1;
+        markProcessExited(exitCode);
+        resolve(exitCode);
+      });
+    });
 
     // Wrap Node child_process into a Bun-compatible Subprocess interface
     const proc = {
@@ -833,9 +882,7 @@ export class CliLauncher {
           nodeProc.stderr!.on("error", (err) => controller.error(err));
         },
       }),
-      exited: new Promise<number>((resolve) => {
-        nodeProc.on("exit", (code) => resolve(code ?? 1));
-      }),
+      exited: procExited,
       kill(signal?: string) { nodeProc.kill(signal as NodeJS.Signals); },
       ref() { nodeProc.ref(); },
       unref() { nodeProc.unref(); },
@@ -853,7 +900,7 @@ export class CliLauncher {
     // Create the CodexAdapter which handles JSON-RPC and message translation
     // Pass the raw permission mode — the adapter maps it to Codex's approval policy
     const adapter = new CodexAdapter(proc, sessionId, {
-      model: options.model,
+      model,
       cwd: info.cwd,
       approvalMode: options.permissionMode,
       threadId: info.cliSessionId,
@@ -887,13 +934,6 @@ export class CliLauncher {
     // Monitor process exit
     proc.exited.then((exitCode) => {
       console.log(`[cli-launcher] Codex session ${sessionId} exited (code=${exitCode})`);
-      const session = this.sessions.get(sessionId);
-      if (session) {
-        session.state = "exited";
-        session.exitCode = exitCode;
-      }
-      this.processes.delete(sessionId);
-      this.persistState();
     });
 
     this.persistState();

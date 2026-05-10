@@ -170,7 +170,7 @@ export function AgentsPage({ embedded = false }: Readonly<{ embedded?: boolean }
       description: form.description,
       icon: form.icon,
       backendType: form.backendType,
-      model: form.model,
+      model: form.backendType === "codex" ? "" : form.model,
       permissionMode: form.permissionMode,
       cwd: form.cwd,
       prompt: form.prompt,
@@ -373,13 +373,19 @@ export function AgentsPage({ embedded = false }: Readonly<{ embedded?: boolean }
                 >
                   {BACKEND_OPTIONS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
                 </select>
-                <select
-                  value={form.model}
-                  onChange={(e) => setForm({ ...form, model: e.target.value })}
-                  className="flex-1 h-9 px-2 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-fg cursor-pointer"
-                >
-                  {getModelsForBackend(form.backendType).map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
+                {form.backendType === "codex" ? (
+                  <div className="flex-1 h-9 px-2 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-muted flex items-center">
+                    Codex default
+                  </div>
+                ) : (
+                  <select
+                    value={form.model}
+                    onChange={(e) => setForm({ ...form, model: e.target.value })}
+                    className="flex-1 h-9 px-2 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-fg cursor-pointer"
+                  >
+                    {getModelsForBackend(form.backendType).map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                )}
               </div>
 
               {/* Permission mode */}
