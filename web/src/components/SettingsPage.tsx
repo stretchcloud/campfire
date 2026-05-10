@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api.js";
+import { api, setAuthToken } from "../api.js";
 import { useStore } from "../store.js";
 import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "../analytics.js";
 
@@ -416,7 +416,15 @@ function SecurityTab({ authEnabled, setAuthEnabled, authPassword, setAuthPasswor
             onPasswordChange={setAuthPassword}
             onEnable={async () => {
               setAuthSaving(true); setAuthError("");
-              try { await api.setAuthPassword(authPassword); setAuthEnabled(true); setAuthPassword(""); setAuthSaved(true); setTimeout(() => setAuthSaved(false), 2000); }
+              try {
+                await api.setupAuth(authPassword);
+                const { token } = await api.login(authPassword);
+                setAuthToken(token);
+                setAuthEnabled(true);
+                setAuthPassword("");
+                setAuthSaved(true);
+                setTimeout(() => setAuthSaved(false), 2000);
+              }
               catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "Failed to enable auth"); }
               finally { setAuthSaving(false); }
             }}

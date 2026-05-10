@@ -41,6 +41,11 @@ const mockApi = {
   updateSettings: vi.fn(),
   forceCheckForUpdate: vi.fn(),
   triggerUpdate: vi.fn(),
+  getAuthStatus: vi.fn(),
+  setupAuth: vi.fn(),
+  login: vi.fn(),
+  disableAuth: vi.fn(),
+  setAuthToken: vi.fn(),
 };
 
 const mockTelemetry = {
@@ -54,7 +59,12 @@ vi.mock("../api.js", () => ({
     updateSettings: (...args: unknown[]) => mockApi.updateSettings(...args),
     forceCheckForUpdate: (...args: unknown[]) => mockApi.forceCheckForUpdate(...args),
     triggerUpdate: (...args: unknown[]) => mockApi.triggerUpdate(...args),
+    getAuthStatus: (...args: unknown[]) => mockApi.getAuthStatus(...args),
+    setupAuth: (...args: unknown[]) => mockApi.setupAuth(...args),
+    login: (...args: unknown[]) => mockApi.login(...args),
+    disableAuth: (...args: unknown[]) => mockApi.disableAuth(...args),
   },
+  setAuthToken: (...args: unknown[]) => mockApi.setAuthToken(...args),
 }));
 
 vi.mock("../analytics.js", () => ({
@@ -94,6 +104,20 @@ beforeEach(() => {
     ok: true,
     message: "Update started. Server will restart shortly.",
   });
+  mockApi.getAuthStatus.mockResolvedValue({
+    enabled: false,
+    hasPassword: false,
+    activeSessions: 0,
+    isLoggedIn: true,
+  });
+  mockApi.setupAuth.mockResolvedValue({
+    ok: true,
+    enabled: true,
+    hasPassword: true,
+    activeSessions: 0,
+  });
+  mockApi.login.mockResolvedValue({ token: "new-session-token" });
+  mockApi.disableAuth.mockResolvedValue({ ok: true });
   mockTelemetry.getTelemetryPreferenceEnabled.mockReturnValue(true);
 });
 
@@ -338,5 +362,23 @@ describe("SettingsPage", () => {
       expect(mockApi.triggerUpdate).toHaveBeenCalledTimes(1);
     });
     expect(await screen.findByText("Update started. Server will restart shortly.")).toBeInTheDocument();
+  });
+
+  it("sets up password authentication from the Security tab", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("OpenRouter key configured");
+
+    fireEvent.click(screen.getByRole("button", { name: "Security" }));
+    fireEvent.change(screen.getByLabelText("Set a password"), {
+      target: { value: "valid-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enable Authentication" }));
+
+    await waitFor(() => {
+      expect(mockApi.setupAuth).toHaveBeenCalledWith("valid-password");
+    });
+    expect(mockApi.login).toHaveBeenCalledWith("valid-password");
+    expect(mockApi.setAuthToken).toHaveBeenCalledWith("new-session-token");
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
 });
