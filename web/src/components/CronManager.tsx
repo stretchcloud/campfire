@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { api, type CronJobInfo } from "../api.js";
 
 const CodeEditor = lazy(() => import("./CodeEditor.js").then((m) => ({ default: m.CodeEditor })));
-import { getModelsForBackend, getDefaultModel, toModelOptions, type ModelOption } from "../utils/backends.js";
+import { getModelsForBackend, getDefaultModel } from "../utils/backends.js";
 import { FolderPicker } from "./FolderPicker.js";
 
 interface Props {
@@ -158,7 +158,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
         schedule,
         recurring: createForm.recurring,
         backendType: createForm.backendType,
-        model: createForm.model.trim() || undefined,
+        model: createForm.backendType === "codex" ? "" : createForm.model.trim() || undefined,
         cwd: createForm.cwd.trim() || undefined,
       } as Partial<CronJobInfo>);
       setCreateForm(EMPTY_FORM);
@@ -211,7 +211,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
         schedule,
         recurring: editForm.recurring,
         backendType: editForm.backendType,
-        model: editForm.model.trim() || undefined,
+        model: editForm.backendType === "codex" ? "" : editForm.model.trim() || undefined,
         cwd: editForm.cwd.trim() || undefined,
       } as Partial<CronJobInfo>);
       setEditingId(null);
@@ -544,31 +544,12 @@ function JobForm({
   const update = (partial: Partial<JobFormData>) =>
     onChange({ ...form, ...partial });
 
-  // ─── Dynamic model fetching (same pattern as HomePage) ──────────
-  const [dynamicModels, setDynamicModels] = useState<ModelOption[] | null>(null);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
-  const models = dynamicModels || getModelsForBackend(form.backendType);
+  const models = getModelsForBackend(form.backendType);
   const selectedModel = models.find((m) => m.value === form.model) || models[0];
-
-  // Fetch dynamic models when backend changes
-  useEffect(() => {
-    setDynamicModels(null);
-    if (form.backendType !== "codex") return;
-    api.getBackendModels(form.backendType).then((fetched) => {
-      if (fetched.length > 0) {
-        const options = toModelOptions(fetched);
-        setDynamicModels(options);
-        if (!options.some((m) => m.value === form.model)) {
-          update({ model: options[0].value });
-        }
-      }
-    }).catch(() => {
-      // Fall back to hardcoded models silently
-    });
-  }, [form.backendType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Set default model if empty
   useEffect(() => {
@@ -704,38 +685,43 @@ function JobForm({
           {form.backendType === "codex" ? "Codex" : "Claude Code"}
         </button>
 
-        {/* Model dropdown */}
-        <div className="relative" ref={modelDropdownRef}>
-          <button
-            onClick={() => setShowModelDropdown(!showModelDropdown)}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-cc-muted hover:text-cc-fg rounded-lg hover:bg-cc-hover transition-colors cursor-pointer border border-cc-border"
-          >
-            <span>{selectedModel?.icon}</span>
-            <span>{selectedModel?.label}</span>
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
-              <path d="M4 6l4 4 4-4" />
-            </svg>
-          </button>
-          {showModelDropdown && (
-            <div className="absolute left-0 bottom-full mb-1 w-52 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1">
-              {models.map((m) => (
-                <button
-                  key={m.value}
-                  onClick={() => {
-                    update({ model: m.value });
-                    setShowModelDropdown(false);
-                  }}
-                  className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 ${
-                    m.value === form.model ? "text-cc-primary font-medium" : "text-cc-fg"
-                  }`}
-                >
-                  <span>{m.icon}</span>
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {form.backendType === "codex" ? (
+          <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-cc-muted rounded-lg border border-cc-border">
+            Codex default
+          </div>
+        ) : (
+          <div className="relative" ref={modelDropdownRef}>
+            <button
+              onClick={() => setShowModelDropdown(!showModelDropdown)}
+              className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-cc-muted hover:text-cc-fg rounded-lg hover:bg-cc-hover transition-colors cursor-pointer border border-cc-border"
+            >
+              <span>{selectedModel?.icon}</span>
+              <span>{selectedModel?.label}</span>
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+                <path d="M4 6l4 4 4-4" />
+              </svg>
+            </button>
+            {showModelDropdown && (
+              <div className="absolute left-0 bottom-full mb-1 w-52 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 py-1">
+                {models.map((m) => (
+                  <button
+                    key={m.value}
+                    onClick={() => {
+                      update({ model: m.value });
+                      setShowModelDropdown(false);
+                    }}
+                    className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 ${
+                      m.value === form.model ? "text-cc-primary font-medium" : "text-cc-fg"
+                    }`}
+                  >
+                    <span>{m.icon}</span>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Folder picker */}
         <button

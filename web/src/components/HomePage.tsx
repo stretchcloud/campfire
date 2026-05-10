@@ -4,7 +4,7 @@ import { api, type CampfireEnv, type GitRepoInfo, type GitBranchInfo, type Backe
 import { connectSession, waitForConnection, sendToSession, disconnectSession } from "../ws.js";
 import { generateUniqueSessionName } from "../utils/names.js";
 import { getRecentDirs, addRecentDir } from "../utils/recent-dirs.js";
-import { getModelsForBackend, getModesForBackend, getDefaultModel, getDefaultMode, toModelOptions, type ModelOption } from "../utils/backends.js";
+import { getModelsForBackend, getModesForBackend, getDefaultModel, getDefaultMode } from "../utils/backends.js";
 import type { BackendType } from "../types.js";
 import { EnvManager } from "./EnvManager.js";
 import { LinearSection } from "./LinearSection.js";
@@ -55,7 +55,6 @@ export function HomePage() {
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [dynamicModels, setDynamicModels] = useState<ModelOption[] | null>(null);
   const [codexInternetAccess, setCodexInternetAccess] = useState(() =>
     localStorage.getItem("cc-codex-internet-access") === "1",
   );
@@ -63,7 +62,7 @@ export function HomePage() {
     (localStorage.getItem("cc-codex-reasoning-effort") as "low" | "medium" | "high") || "medium",
   );
 
-  const MODELS = dynamicModels || getModelsForBackend(backend);
+  const MODELS = getModelsForBackend(backend);
   const MODES = getModesForBackend(backend);
 
   // Environment state
@@ -145,30 +144,9 @@ export function HomePage() {
   function switchBackend(newBackend: BackendType) {
     setBackend(newBackend);
     localStorage.setItem("cc-backend", newBackend);
-    setDynamicModels(null);
     setModel(getDefaultModel(newBackend));
     setMode(getDefaultMode(newBackend));
   }
-
-  // Fetch dynamic models for the selected backend
-  useEffect(() => {
-    if (backend !== "codex") {
-      setDynamicModels(null);
-      return;
-    }
-    api.getBackendModels(backend).then((models) => {
-      if (models.length > 0) {
-        const options = toModelOptions(models);
-        setDynamicModels(options);
-        // If current model isn't in the list, switch to first
-        if (!options.some((m) => m.value === model)) {
-          setModel(options[0].value);
-        }
-      }
-    }).catch(() => {
-      // Fall back to hardcoded models silently
-    });
-  }, [backend]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -337,7 +315,7 @@ export function HomePage() {
 
       const branchName = worktreeBranch.trim() || undefined;
       const baseOpts = {
-        model,
+        ...(backend === "codex" ? {} : { model }),
         permissionMode: mode,
         cwd: cwd || undefined,
         envSlug: selectedEnv || undefined,
@@ -620,20 +598,28 @@ export function HomePage() {
         {showOptions && (
           <div id="options-panel" className="mt-4 p-4 bg-cc-card rounded-2xl border border-cc-border/50 shadow-sm">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {/* Model selector */}
-              <div>
-                <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="model-select">Model</label>
-                <select
-                  id="model-select"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg focus:outline-none focus:border-cc-primary/50 cursor-pointer"
-                >
-                  {MODELS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
+              {backend === "codex" ? (
+                <div>
+                  <div className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5">Model</div>
+                  <div className="w-full px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-muted">
+                    Codex default
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="model-select">Model</label>
+                  <select
+                    id="model-select"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full px-3 py-2 text-[12px] bg-cc-bg border border-cc-border rounded-xl text-cc-fg focus:outline-none focus:border-cc-primary/50 cursor-pointer"
+                  >
+                    {MODELS.map((m) => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Mode selector */}
               <div>

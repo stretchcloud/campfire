@@ -271,6 +271,39 @@ describe("launch", () => {
     expect(mockSpawn).not.toHaveBeenCalled();
   });
 
+  it("marks only the Claude stdio session exited when Bun.spawn throws", () => {
+    mockSpawn.mockImplementationOnce(() => {
+      throw new Error("ENOENT: no such file or directory, posix_spawn '/home/user/.local/bin/claude'");
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const info = launcher.launch({ cwd: "/tmp/project" });
+
+    // Restored sessions may contain a stale Claude binary path. That should
+    // fail the affected session without crashing the Campfire server.
+    expect(info.state).toBe("exited");
+    expect(info.exitCode).toBe(127);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to spawn Claude stdio session"));
+    errorSpy.mockRestore();
+  });
+
+  it("marks only the Claude sdk-url session exited when Bun.spawn throws", () => {
+    process.env.CAMPFIRE_CLAUDE_TRANSPORT = "sdk-url";
+    mockSpawn.mockImplementationOnce(() => {
+      throw new Error("ENOENT: no such file or directory, posix_spawn '/home/user/.local/bin/claude'");
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const info = launcher.launch({ cwd: "/tmp/project" });
+
+    // The legacy transport uses a different spawn path, so it needs the same
+    // containment as stdio.
+    expect(info.state).toBe("exited");
+    expect(info.exitCode).toBe(127);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to spawn Claude session"));
+    errorSpy.mockRestore();
+  });
+
   it("stores worktree metadata when worktreeInfo provided", () => {
     const info = launcher.launch({
       cwd: "/tmp/worktrees/feature-branch",
@@ -465,6 +498,44 @@ describe("launch", () => {
 
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("/bin/true app-server -c tools.webSearch=false"));
     logSpy.mockRestore();
+  });
+
+  it("normalizes a blank Codex model to no model override", async () => {
+    mockResolveBinary.mockReturnValue(null);
+
+    const info = launcher.launch({
+      backendType: "codex",
+      model: "",
+      cwd: "/tmp/project",
+      codexSandbox: "workspace-write",
+    });
+
+    // Blank model values can come from existing profiles or cron jobs. They
+    // must not become an explicit empty model override in Codex app-server.
+    expect(info.model).toBeUndefined();
+  });
+
+  it("marks only the Codex session exited when node spawn emits an error", async () => {
+    const codexProc = createMockCodexProc();
+    mockNodeSpawn.mockReturnValueOnce(codexProc);
+    mockResolveBinary.mockImplementation((name: string) => name === "node" ? null : "/usr/bin/true");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const info = launcher.launch({
+      backendType: "codex",
+      cwd: "/tmp/project",
+      codexSandbox: "workspace-write",
+    });
+
+    await vi.dynamicImportSettled();
+    codexProc.emit("error", new Error("spawn /usr/bin/node ENOENT"));
+    await vi.waitFor(() => expect(info.state).toBe("exited"));
+
+    // A missing Node/Codex executable should fail the affected session without
+    // becoming an uncaught child_process error that crashes the Campfire server.
+    expect(info.exitCode).toBe(127);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("failed to spawn"));
+    errorSpy.mockRestore();
   });
 
   it("spawns codex via sibling node binary to bypass shebang issues", async () => {
