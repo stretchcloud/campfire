@@ -24,6 +24,8 @@ import { PRPoller } from "./pr-poller.js";
 import { RecorderManager } from "./recorder.js";
 import { CronScheduler } from "./cron-scheduler.js";
 import { AgentExecutor } from "./agent-executor.js";
+import { AgentMcpBridge } from "./agent-mcp-bridge.js";
+import { SubSessionManager } from "./sub-session-manager.js";
 import { ProtocolMonitor } from "./protocol-monitor.js";
 import { ProactiveKeepalive } from "./proactive-keepalive.js";
 import { securityHeaders, rateLimiter } from "./security-middleware.js";
@@ -59,6 +61,8 @@ const cronScheduler = new CronScheduler(launcher, wsBridge);
 const webhookManager = new WebhookManager();
 const adapterRegistry = new AdapterRegistry();
 const agentExecutor = new AgentExecutor(launcher, wsBridge);
+const subSessionManager = new SubSessionManager(launcher, wsBridge);
+const agentMcpBridge = new AgentMcpBridge(wsBridge, subSessionManager, { port, packageRoot });
 const protocolMonitor = new ProtocolMonitor();
 // Proactive keepalive — auto-relaunches crashed CLI sessions with exponential backoff.
 const _keepalive = new ProactiveKeepalive(launcher);
@@ -71,6 +75,7 @@ wsBridge.setRecorder(recorder);
 wsBridge.setWebhookManager(webhookManager);
 wsBridge.setProtocolMonitor(protocolMonitor);
 wsBridge.setCollectiveIntelligence(collectiveIntelligenceLayer);
+wsBridge.setAgentMcpBridge(agentMcpBridge);
 launcher.setStore(sessionStore);
 launcher.setRecorder(recorder);
 launcher.restoreFromDisk();
@@ -141,7 +146,7 @@ app.onError((err, c) => {
 app.use("/*", securityHeaders);
 app.use("/api/*", rateLimiter);
 app.use("/api/*", cors());
-app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, webhookManager, adapterRegistry, agentExecutor, protocolMonitor));
+app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, webhookManager, adapterRegistry, agentExecutor, protocolMonitor, agentMcpBridge));
 
 // In production, serve built frontend using absolute path (works when installed as npm package)
 if (process.env.NODE_ENV === "production") {

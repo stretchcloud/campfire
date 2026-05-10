@@ -23,12 +23,15 @@ import { registerAgentRoutes } from "./agent-routes.js";
 import { registerHubRoutes } from "../recording-hub/hub-routes.js";
 import { registerMonitorRoutes } from "./monitor-routes.js";
 import { registerCommandsRoutes } from "./commands-routes.js";
+import { registerAgentMcpRoutes } from "./agent-mcp-routes.js";
+import { registerRaceRoutes } from "./race-routes.js";
 
 export function createRoutes(deps: RouteDeps): Hono {
   const api = new Hono();
 
   // Auth routes must be registered BEFORE the middleware
   registerAuthRoutes(api, deps);
+  registerAgentMcpRoutes(api, deps);
 
   // Auth middleware protects all other routes
   api.use("/*", authMiddleware());
@@ -55,6 +58,7 @@ export function createRoutes(deps: RouteDeps): Hono {
   registerHubRoutes(api, deps);
   registerMonitorRoutes(api, deps);
   registerCommandsRoutes(api, deps);
+  registerRaceRoutes(api, deps);
 
   return api;
 }

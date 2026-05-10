@@ -199,6 +199,12 @@ export function registerSessionRoutes(api: Hono, deps: RouteDeps): void {
         containerId: containerInfo?.containerId,
       });
 
+      wsBridge.markSessionOrchestration(session.sessionId, {
+        role: session.orchestrationRole,
+        parentSessionId: session.parentSessionId,
+        detectedEnvironment: session.detectedEnvironment,
+      });
+
       // Re-track container with real session ID
       if (containerInfo) {
         containerManager.retrack(containerInfo.containerId, session.sessionId);

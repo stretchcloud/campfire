@@ -38,6 +38,7 @@ import { CollectiveMindPanel } from "./components/CollectiveMindPanel.js";
 import { DmuxPage } from "./components/DmuxPage.js";
 import { DmuxReplayViewer } from "./components/DmuxReplayViewer.js";
 import { OrchestratorPage } from "./components/OrchestratorPage.js";
+import { RacePage } from "./components/RacePage.js";
 import { KanbanPage } from "./components/KanbanPage.js";
 import { SkillsPage } from "./components/SkillsPage.js";
 
@@ -125,6 +126,7 @@ export default function App() {
   const isDmuxReplayPage = !!dmuxReplayMatch;
   const isCollectiveMindPage = hash === "#/collective";
   const isOrchestratorPage = hash === "#/orchestrator";
+  const isRacesPage = hash === "#/races" || hash.startsWith("#/races/");
   const isKanbanPage = hash === "#/kanban";
   const isSkillsPage = hash === "#/skills";
   // Replay routes: #/replay/:filename or #/replay/session/:id
@@ -135,7 +137,7 @@ export default function App() {
   const publicReplayMatch = hash.match(/^#\/public-replay\/(.+)$/);
   const isPublicReplayPage = !!publicReplayMatch;
 
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentsPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isKanbanPage && !isSkillsPage && !isReplayPage && !isPublicReplayPage && !isHubPage && !isMonitorPage && !isCommandsPage;
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentsPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isRacesPage && !isKanbanPage && !isSkillsPage && !isReplayPage && !isPublicReplayPage && !isHubPage && !isMonitorPage && !isCommandsPage;
 
   useEffect(() => {
     capturePageView(hash || "#/");
@@ -354,6 +356,12 @@ export default function App() {
           {isOrchestratorPage && (
             <div className="absolute inset-0">
               <OrchestratorPage />
+            </div>
+          )}
+
+          {isRacesPage && (
+            <div className="absolute inset-0">
+              <RacePage />
             </div>
           )}
 
