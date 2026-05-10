@@ -4,6 +4,8 @@ import type { CliLauncher } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
 import type { BackendType, BrowserIncomingMessage } from "./session-types.js";
 import * as gitUtils from "./git-utils.js";
+import * as envManager from "./env-manager.js";
+import { getSettings } from "./settings-manager.js";
 import { getRace, saveRace, type RaceEntry, type RaceResult } from "./race-store.js";
 
 interface StartRaceOptions {
@@ -12,6 +14,8 @@ interface StartRaceOptions {
   repoRoot: string;
   baseBranch?: string;
   modelByBackend?: Partial<Record<BackendType, string>>;
+  envSlug?: string;
+  env?: Record<string, string>;
 }
 
 const POLL_MS = 1000;
@@ -68,6 +72,32 @@ function collectMetrics(worktreePath: string, startedAt: number, costUsd: number
     linesAdded,
     linesRemoved,
   };
+}
+
+function resolveEnvVars(options: StartRaceOptions, backend: BackendType): Record<string, string> | undefined {
+  let envVars: Record<string, string> | undefined = options.env ? { ...options.env } : undefined;
+
+  if (options.envSlug) {
+    const campfireEnv = envManager.getEnv(options.envSlug);
+    if (campfireEnv) {
+      envVars = { ...campfireEnv.variables, ...envVars };
+    } else {
+      console.warn(`[race-controller] Environment "${options.envSlug}" not found, ignoring`);
+    }
+  }
+
+  const globalSettings = getSettings();
+  if (backend === "claude" && globalSettings.claudeOAuthToken && !envVars?.["CLAUDE_CODE_OAUTH_TOKEN"]) {
+    envVars = { ...envVars, CLAUDE_CODE_OAUTH_TOKEN: globalSettings.claudeOAuthToken };
+  }
+  if (backend === "codex" && globalSettings.openaiApiKey && !envVars?.["OPENAI_API_KEY"]) {
+    envVars = { ...envVars, OPENAI_API_KEY: globalSettings.openaiApiKey };
+  }
+  if (globalSettings.anthropicApiKey && !envVars?.["ANTHROPIC_API_KEY"]) {
+    envVars = { ...envVars, ANTHROPIC_API_KEY: globalSettings.anthropicApiKey };
+  }
+
+  return envVars;
 }
 
 export function collectChangedFiles(worktreePath: string): string[] {
@@ -182,6 +212,7 @@ export class RaceController {
       backendType,
       model: options.modelByBackend?.[backendType],
       permissionMode: "bypassPermissions",
+      env: resolveEnvVars(options, backendType),
       orchestrationRole: "race_entry",
       worktreeInfo: {
         isWorktree: true,

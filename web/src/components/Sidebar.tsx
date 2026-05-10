@@ -559,11 +559,6 @@ export function Sidebar() {
 
   const activeSessions = allSessionList.filter((s) => !s.archived);
   const archivedSessions = allSessionList.filter((s) => s.archived);
-  const currentSession = currentSessionId
-    ? allSessionList.find((s) => s.id === currentSessionId)
-    : null;
-  const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
-
   /* ─── Search filtering ─────────────────────────────────────────── */
 
   const filteredActiveSessions = useMemo(() => {
@@ -728,7 +723,7 @@ export function Sidebar() {
       <div className="px-3 pt-3 pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src={logoSrc} alt="" className="w-5 h-5 opacity-80" />
+            <img src="/logo.svg" alt="" className="w-5 h-5 opacity-80" />
             <span className="text-[13px] font-semibold text-cc-fg tracking-tight">
               Campfire
             </span>
