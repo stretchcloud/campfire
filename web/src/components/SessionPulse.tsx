@@ -45,7 +45,7 @@ function sessionStatusColor(status: SessionActivity["status"]): string {
 
 function agentStatusColor(status: BackgroundAgentItem["status"]): string {
   if (status === "running") return "bg-cc-primary";
-  if (status === "failed") return "bg-cc-error";
+  if (status === "failed" || status === "timeout") return "bg-cc-error";
   return "bg-cc-success";
 }
 
@@ -451,9 +451,16 @@ function AgentRow({ agent }: Readonly<{ agent: BackgroundAgentItem }>) {
           </span>
         </div>
         {(hasSummary && showSummary) && (
-          <p className="text-[10px] text-cc-muted/60 mt-0.5 leading-tight">
-            {agent.summary}
-          </p>
+          <div className="mt-0.5 space-y-0.5">
+            <p className="text-[10px] text-cc-muted/60 leading-tight">
+              {agent.summary}
+            </p>
+            {(agent.costUsd || agent.filesChanged?.length || agent.error) && (
+              <p className="text-[9px] text-cc-muted/50 font-mono-code truncate">
+                {agent.error || `${agent.costUsd ? `$${agent.costUsd.toFixed(4)}` : "$0"}${agent.filesChanged?.length ? ` / ${agent.filesChanged.length} files` : ""}`}
+              </p>
+            )}
+          </div>
         )}
       </div>
       <span className="text-[10px] text-cc-muted/50 font-mono-code tabular-nums shrink-0">

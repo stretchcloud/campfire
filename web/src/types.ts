@@ -11,9 +11,12 @@ import type {
   PermissionVote,
   McpServerDetail,
   McpServerConfig,
+  DetectedEnvironment,
+  DetectedEnvironmentRule,
+  SubAgentUpdate,
 } from "../server/session-types.js";
 
-export type { SessionState, PermissionRequest, ContentBlock, BrowserIncomingMessage, BrowserOutgoingMessage, BackendType, SessionRole, PresenceViewer, VotingPolicy, PermissionVote, McpServerDetail, McpServerConfig };
+export type { SessionState, PermissionRequest, ContentBlock, BrowserIncomingMessage, BrowserOutgoingMessage, BackendType, SessionRole, PresenceViewer, VotingPolicy, PermissionVote, McpServerDetail, McpServerConfig, DetectedEnvironment, DetectedEnvironmentRule, SubAgentUpdate };
 
 export interface ChatMessage {
   id: string;
@@ -48,7 +51,7 @@ export interface TaskItem {
   blockedBy?: string[];
 }
 
-export type BackgroundAgentStatus = "running" | "completed" | "failed";
+export type BackgroundAgentStatus = "running" | "completed" | "failed" | "timeout";
 
 export interface BackgroundAgentItem {
   /** The tool_use_id of the Agent tool call that spawned this */
@@ -59,6 +62,8 @@ export interface BackgroundAgentItem {
   description: string;
   /** Agent type (e.g., "Explore", "general-purpose") */
   agentType: string;
+  backendType?: BackendType;
+  sessionId?: string;
   /** Current status */
   status: BackgroundAgentStatus;
   /** Timestamp when detected */
@@ -67,6 +72,10 @@ export interface BackgroundAgentItem {
   completedAt?: number;
   /** Result summary (truncated) */
   summary?: string;
+  costUsd?: number;
+  durationMs?: number;
+  filesChanged?: string[];
+  error?: string;
 }
 
 export interface SdkSessionInfo {
@@ -96,6 +105,9 @@ export interface SdkSessionInfo {
   cronJobName?: string;
   /** ID of the session this was forked from */
   forkedFrom?: string;
+  parentSessionId?: string;
+  orchestrationRole?: "lead" | "subagent" | "race_entry";
+  detectedEnvironment?: DetectedEnvironment;
 }
 
 // ─── Collective Intelligence Types ───────────────────────────────────────────

@@ -663,6 +663,41 @@ export interface OrchestratorRun {
   totalDurationMs: number;
 }
 
+export interface RaceEntryInfo {
+  id: string;
+  sessionId: string;
+  backendType: string;
+  model?: string;
+  worktreePath: string;
+  branch: string;
+  status: "pending" | "running" | "completed" | "failed" | "timeout";
+  startedAt: number;
+  completedAt?: number;
+  error?: string;
+  outputSummary?: string;
+  filesChanged?: string[];
+  metrics?: {
+    wallClockMs: number;
+    costUsd: number;
+    filesChanged: number;
+    linesAdded: number;
+    linesRemoved: number;
+  };
+}
+
+export interface RaceInfo {
+  raceId: string;
+  prompt: string;
+  repoRoot: string;
+  baseBranch: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  createdAt: number;
+  completedAt?: number;
+  entries: RaceEntryInfo[];
+  winnerId?: string;
+  error?: string;
+}
+
 export interface DmuxRecordingMeta {
   filename: string;
   cwd: string;
@@ -756,7 +791,7 @@ export const api = {
   disableAuth: () => post<{ ok: boolean }>("/auth/disable"),
 
   createSession: (opts?: CreateSessionOpts) =>
-    post<{ sessionId: string; state: string; cwd: string }>(
+    post<SdkSessionInfo>(
       "/sessions/create",
       opts,
     ),
@@ -1310,4 +1345,18 @@ export const api = {
     post<OrchestratorRun>(`/orchestrator/pipelines/${encodeURIComponent(id)}/run`),
   cancelRun: (id: string) =>
     post<{ ok: boolean }>(`/orchestrator/runs/${encodeURIComponent(id)}/cancel`),
+
+  // Races
+  listRaces: () => get<RaceInfo[]>("/races"),
+  getRace: (id: string) => get<RaceInfo>(`/races/${encodeURIComponent(id)}`),
+  getRaceEntryDiff: (raceId: string, entryId: string) =>
+    get<{ diff: string; files: string[] }>(`/races/${encodeURIComponent(raceId)}/entries/${encodeURIComponent(entryId)}/diff`),
+  createRace: (data: { prompt: string; backends: string[]; repoRoot: string; baseBranch?: string }) =>
+    post<RaceInfo>("/races", data),
+  pickRaceWinner: (id: string, sessionId: string) =>
+    post<RaceInfo>(`/races/${encodeURIComponent(id)}/pick`, { sessionId }),
+  cancelRace: (id: string) =>
+    post<RaceInfo>(`/races/${encodeURIComponent(id)}/cancel`),
+  deleteRace: (id: string) =>
+    del<{ ok: boolean }>(`/races/${encodeURIComponent(id)}`),
 };

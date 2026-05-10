@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { useStore } from "../store.js";
 import { api, type UsageLimits, type GitHubPRInfo } from "../api.js";
-import type { TaskItem } from "../types.js";
+import type { BackgroundAgentItem, TaskItem } from "../types.js";
+import { connectSession } from "../ws.js";
 import { McpSection } from "./McpPanel.js";
 import { CostCard } from "./CostCard.js";
+import { EnvironmentPanel } from "./EnvironmentPanel.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
+const EMPTY_AGENTS: BackgroundAgentItem[] = [];
 const POLL_INTERVAL = 60_000;
 
 // Module-level cache — survives session switches so limits don't flash empty
@@ -640,6 +643,42 @@ function CollapsibleMcpSection({ sessionId }: Readonly<{ sessionId: string }>) {
   );
 }
 
+function SubAgentsSection({ agents }: Readonly<{ agents: BackgroundAgentItem[] }>) {
+  const setCurrentSession = useStore((s) => s.setCurrentSession);
+  if (agents.length === 0) return null;
+  return (
+    <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">
+      <div className="px-3 py-2.5 border-b border-cc-border/40 flex items-center justify-between">
+        <span className="text-[12px] font-semibold text-cc-fg">Sub-Agents</span>
+        <span className="text-[10px] text-cc-muted tabular-nums">{agents.length}</span>
+      </div>
+      <div className="divide-y divide-cc-border/30">
+        {agents.map((agent) => (
+          <button
+            key={agent.toolUseId}
+            onClick={() => {
+              if (!agent.sessionId) return;
+              setCurrentSession(agent.sessionId);
+              connectSession(agent.sessionId);
+              window.location.hash = "";
+            }}
+            className="w-full px-3 py-2 text-left hover:bg-cc-hover/50"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-medium text-cc-fg truncate">{agent.name}</span>
+              <span className="text-[9px] uppercase font-mono-code text-cc-muted shrink-0">{agent.status}</span>
+            </div>
+            <p className="mt-0.5 text-[10px] text-cc-muted/70 truncate">
+              {agent.backendType || agent.agentType}{agent.costUsd ? ` / $${agent.costUsd.toFixed(4)}` : ""}
+            </p>
+            {agent.summary && <p className="mt-1 text-[10px] text-cc-muted/60 line-clamp-2">{agent.summary}</p>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 // ─── Task Panel ──────────────────────────────────────────────────────────────
 
@@ -647,6 +686,7 @@ export { CodexRateLimitsSection, CodexTokenDetailsSection, ClaudeTokenDetailsSec
 
 export function TaskPanel({ sessionId }: Readonly<{ sessionId: string }>) {
   const tasks = useStore((s) => s.sessionTasks.get(sessionId) || EMPTY_TASKS);
+  const agents = useStore((s) => s.sessionBackgroundAgents.get(sessionId) || EMPTY_AGENTS);
   const session = useStore((s) => s.sessions.get(sessionId));
   const sdkBackendType = useStore((s) => s.sdkSessions.find((x) => x.sessionId === sessionId)?.backendType);
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
@@ -710,11 +750,15 @@ export function TaskPanel({ sessionId }: Readonly<{ sessionId: string }>) {
         {/* Cost card — shown when session has completed at least one turn */}
         <CostCardSection sessionId={sessionId} />
 
+        <EnvironmentPanel detected={session?.detected_environment} />
+
         {/* GitHub PR status */}
         <GitHubPRSection sessionId={sessionId} />
 
         {/* MCP servers — collapsible with count badge */}
         <CollapsibleMcpSection sessionId={sessionId} />
+
+        <SubAgentsSection agents={agents} />
 
         {showTasks && (
           <div className="mx-3 mt-3 rounded-lg border border-cc-border/60 bg-cc-card overflow-hidden">

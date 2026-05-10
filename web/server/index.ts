@@ -7,6 +7,7 @@ import { getEnrichedPath } from "./path-resolver.js";
 process.env.PATH = getEnrichedPath();
 
 import { dirname, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -24,6 +25,8 @@ import { PRPoller } from "./pr-poller.js";
 import { RecorderManager } from "./recorder.js";
 import { CronScheduler } from "./cron-scheduler.js";
 import { AgentExecutor } from "./agent-executor.js";
+import { AgentMcpBridge } from "./agent-mcp-bridge.js";
+import { SubSessionManager } from "./sub-session-manager.js";
 import { ProtocolMonitor } from "./protocol-monitor.js";
 import { ProactiveKeepalive } from "./proactive-keepalive.js";
 import { securityHeaders, rateLimiter } from "./security-middleware.js";
@@ -59,6 +62,8 @@ const cronScheduler = new CronScheduler(launcher, wsBridge);
 const webhookManager = new WebhookManager();
 const adapterRegistry = new AdapterRegistry();
 const agentExecutor = new AgentExecutor(launcher, wsBridge);
+const subSessionManager = new SubSessionManager(launcher, wsBridge);
+const agentMcpBridge = new AgentMcpBridge(wsBridge, subSessionManager, { port, packageRoot });
 const protocolMonitor = new ProtocolMonitor();
 // Proactive keepalive — auto-relaunches crashed CLI sessions with exponential backoff.
 const _keepalive = new ProactiveKeepalive(launcher);
@@ -71,6 +76,7 @@ wsBridge.setRecorder(recorder);
 wsBridge.setWebhookManager(webhookManager);
 wsBridge.setProtocolMonitor(protocolMonitor);
 wsBridge.setCollectiveIntelligence(collectiveIntelligenceLayer);
+wsBridge.setAgentMcpBridge(agentMcpBridge);
 launcher.setStore(sessionStore);
 launcher.setRecorder(recorder);
 launcher.restoreFromDisk();
@@ -141,13 +147,40 @@ app.onError((err, c) => {
 app.use("/*", securityHeaders);
 app.use("/api/*", rateLimiter);
 app.use("/api/*", cors());
-app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, webhookManager, adapterRegistry, agentExecutor, protocolMonitor));
+app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, webhookManager, adapterRegistry, agentExecutor, protocolMonitor, agentMcpBridge));
+
+function publicOriginForRequest(req: Request): string {
+  const configured = process.env.CAMPFIRE_PUBLIC_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+
+  const url = new URL(req.url);
+  const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const host = forwardedHost || req.headers.get("host") || url.host;
+  const proto = forwardedProto || url.protocol.replace(/:$/, "");
+  return `${proto}://${host}`;
+}
+
+function isHtmlNavigation(req: Request, path: string): boolean {
+  if (req.method !== "GET") return false;
+  if (path.startsWith("/api/") || path.startsWith("/ws/")) return false;
+  if (/\.[a-zA-Z0-9]+$/.test(path)) return false;
+  const accept = req.headers.get("accept") || "";
+  return accept.includes("text/html") || accept === "*/*" || accept === "";
+}
 
 // In production, serve built frontend using absolute path (works when installed as npm package)
 if (process.env.NODE_ENV === "production") {
   const distDir = resolve(packageRoot, "dist");
+  const indexPath = resolve(distDir, "index.html");
+  app.get("/*", (c, next) => {
+    if (!isHtmlNavigation(c.req.raw, c.req.path)) return next();
+    const html = readFileSync(indexPath, "utf-8")
+      .replaceAll("__CAMPFIRE_ORIGIN__", publicOriginForRequest(c.req.raw));
+    return c.html(html);
+  });
   app.use("/*", serveStatic({ root: distDir }));
-  app.get("/*", serveStatic({ path: resolve(distDir, "index.html") }));
+  app.get("/*", serveStatic({ path: indexPath }));
 }
 
 // ── WebSocket auth helper ──────────────────────────────────────────────────

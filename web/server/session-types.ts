@@ -231,6 +231,7 @@ export type BrowserIncomingMessageBase =
   | { type: "capability_probe"; probeId: string; taskDescription: string; instruction: string }
   | { type: "route_result"; result: import("./capability-discovery.js").RouteTaskResult }
   | { type: "agent_capabilities"; capabilities: import("./capability-discovery.js").AgentCapabilities }
+  | { type: "sub_agent_update"; agent: SubAgentUpdate }
   // Layer 4: Shared Context
   | { type: "shared_thought"; fragment: import("./shared-context.js").ContextFragment }
   | { type: "semantic_link_added"; sourceId: string; targetId: string; relation: string }
@@ -252,6 +253,8 @@ export type BackendType = "claude" | "codex" | "goose" | "aider" | "openhands" |
 export interface SessionState {
   session_id: string;
   backend_type?: BackendType;
+  parent_session_id?: string;
+  orchestration_role?: "lead" | "subagent" | "race_entry";
   model: string;
   cwd: string;
   tools: string[];
@@ -276,6 +279,10 @@ export interface SessionState {
   total_lines_removed: number;
   /** Cumulative API duration across all turns (from result.duration_api_ms). */
   total_duration_api_ms: number;
+  /** Cost accumulated by child sessions spawned from this session. */
+  sub_agent_cost_usd?: number;
+  /** Environment detections and MCP recommendations computed for this session cwd. */
+  detected_environment?: DetectedEnvironment;
   // Codex-specific token details (forwarded from thread/tokenUsage/updated)
   codex_token_details?: {
     inputTokens: number;
@@ -302,6 +309,39 @@ export interface SessionState {
   cronJobId?: string;
   /** Human-readable name of the cron job that spawned this session */
   cronJobName?: string;
+}
+
+export interface DetectedEnvironmentRule {
+  id: string;
+  name: string;
+  description: string;
+  envRequired?: string[];
+  envPresent?: string[];
+  envMissing?: string[];
+}
+
+export interface DetectedEnvironment {
+  cwd: string;
+  scannedAt: number;
+  rules: DetectedEnvironmentRule[];
+  mcpServers: Record<string, McpServerConfig>;
+}
+
+export interface SubAgentUpdate {
+  parentSessionId: string;
+  toolUseId: string;
+  sessionId?: string;
+  backendType: BackendType;
+  name: string;
+  description: string;
+  status: "running" | "completed" | "failed" | "timeout";
+  startedAt: number;
+  completedAt?: number;
+  costUsd?: number;
+  durationMs?: number;
+  filesChanged?: string[];
+  summary?: string;
+  error?: string;
 }
 
 // ─── MCP Types ───────────────────────────────────────────────────────────────

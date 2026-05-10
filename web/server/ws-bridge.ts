@@ -27,6 +27,8 @@ import type {
   PermissionVote,
   McpServerDetail,
   McpServerConfig,
+  DetectedEnvironment,
+  SubAgentUpdate,
 } from "./session-types.js";
 import type { SessionStore } from "./session-store.js";
 import type { CodexAdapter } from "./codex-adapter.js";
@@ -117,6 +119,11 @@ interface Session {
 }
 
 type GitSessionKey = "git_branch" | "is_worktree" | "repo_root" | "git_ahead" | "git_behind";
+
+interface AgentMcpBridgeHook {
+  onSessionReady(sessionId: string, backendType: BackendType, cwd: string): void;
+  handlePermissionRequest?(sessionId: string, msg: CLIControlRequestMessage): boolean;
+}
 
 function makeDefaultState(sessionId: string, backendType: BackendType = "claude"): SessionState {
   return {
@@ -297,6 +304,8 @@ export class WsBridge {
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
   private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
+  private agentMcpBridge: AgentMcpBridgeHook | null = null;
+  private readonly environmentMcpInjected = new Set<string>();
   private readonly autoNamingAttempted = new Set<string>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
@@ -333,6 +342,58 @@ export class WsBridge {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     this.broadcastToBrowsers(session, msg);
+  }
+
+  setAgentMcpBridge(bridge: AgentMcpBridgeHook): void {
+    this.agentMcpBridge = bridge;
+  }
+
+  markSessionOrchestration(
+    sessionId: string,
+    data: {
+      parentSessionId?: string;
+      role?: "lead" | "subagent" | "race_entry";
+      detectedEnvironment?: DetectedEnvironment;
+    },
+  ): void {
+    const session = this.getOrCreateSession(sessionId);
+    if (data.parentSessionId) session.state.parent_session_id = data.parentSessionId;
+    if (data.role) session.state.orchestration_role = data.role;
+    if (data.detectedEnvironment) session.state.detected_environment = data.detectedEnvironment;
+    this.persistSession(session);
+  }
+
+  broadcastSubAgentUpdate(parentSessionId: string, agent: SubAgentUpdate): void {
+    this.broadcastToSession(parentSessionId, { type: "sub_agent_update", agent });
+  }
+
+  addSubAgentCost(parentSessionId: string, costUsd: number): void {
+    if (!Number.isFinite(costUsd) || costUsd <= 0) return;
+    const session = this.sessions.get(parentSessionId);
+    if (!session) return;
+    session.state.sub_agent_cost_usd = (session.state.sub_agent_cost_usd || 0) + costUsd;
+    this.broadcastToBrowsers(session, {
+      type: "session_update",
+      session: { sub_agent_cost_usd: session.state.sub_agent_cost_usd },
+    });
+    this.persistSession(session);
+  }
+
+  setMcpServers(sessionId: string, servers: Record<string, McpServerConfig>): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    this.routeBrowserMessage(session, { type: "mcp_set_servers", servers });
+  }
+
+  private injectDetectedEnvironmentMcp(session: Session): void {
+    if (this.environmentMcpInjected.has(session.id)) return;
+    if (session.state.parent_session_id || session.state.orchestration_role === "subagent") return;
+    if (session.backendType !== "claude" && session.backendType !== "codex") return;
+    const servers = session.state.detected_environment?.mcpServers;
+    if (!servers || Object.keys(servers).length === 0) return;
+    if (process.env.CAMPFIRE_AUTO_INJECT_ENV_MCP === "0") return;
+    this.environmentMcpInjected.add(session.id);
+    this.routeBrowserMessage(session, { type: "mcp_set_servers", servers });
   }
 
   // ── Invite tokens ────────────────────────────────────────────────────
@@ -914,6 +975,8 @@ export class WsBridge {
       this.preserveSessionStatsOnInit(session, msg.session, backendType);
       this.refreshGitInfo(session, { notifyPoller: true });
       this.persistSession(session);
+      this.injectDetectedEnvironmentMcp(session);
+      this.agentMcpBridge?.onSessionReady(session.id, backendType, session.state.cwd);
     } else if (msg.type === "session_update") {
       session.state = { ...session.state, ...msg.session, backend_type: backendType };
       this.refreshGitInfo(session, { notifyPoller: true });
@@ -1243,6 +1306,8 @@ export class WsBridge {
         session: session.state,
       });
       this.persistSession(session);
+      this.injectDetectedEnvironmentMcp(session);
+      this.agentMcpBridge?.onSessionReady(session.id, session.backendType, session.state.cwd);
     } else if (msg.subtype === "status") {
       session.state.is_compacting = msg.status === "compacting";
 
@@ -1464,6 +1529,9 @@ export class WsBridge {
 
   private handleControlRequest(session: Session, msg: CLIControlRequestMessage) {
     if (msg.request.subtype === "can_use_tool") {
+      if (this.agentMcpBridge?.handlePermissionRequest?.(session.id, msg)) {
+        return;
+      }
       const perm: PermissionRequest = {
         request_id: msg.request_id,
         tool_name: msg.request.tool_name,
