@@ -17,7 +17,8 @@ import { RecordingHub } from "./components/RecordingHub.js";
 import { ProtocolMonitorPage } from "./components/ProtocolMonitorPage.js";
 import { CommandsPage } from "./components/CommandsPage.js";
 import { OnboardingWizard } from "./components/OnboardingWizard.js";
-// UpdateBanner removed — not relevant for the Campfire fork
+import { UpdateBanner } from "./components/UpdateBanner.js";
+import { UpdateOverlay } from "./components/UpdateOverlay.js";
 import { SettingsPage } from "./components/SettingsPage.js";
 import { EnvManager } from "./components/EnvManager.js";
 import { CronManager } from "./components/CronManager.js";
@@ -94,6 +95,7 @@ export default function App() {
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
+  const updateOverlayActive = useStore((s) => s.updateOverlayActive);
   const hash = useHash();
   const isSettingsPage = hash === "#/settings";
   const isTerminalPage = hash === "#/terminal";
@@ -190,10 +192,20 @@ export default function App() {
     }
   }, []);
 
-  // Update polling disabled for Campfire fork
+  // Keep update state warm so Settings and the update banner never sit at "Loading...".
   useEffect(() => {
-    return () => {};
-  }, []);
+    if (!authChecked || authRequired) return;
+
+    const check = () => {
+      api.checkForUpdate()
+        .then((info) => useStore.getState().setUpdateInfo(info))
+        .catch(() => {});
+    };
+
+    check();
+    const interval = setInterval(check, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [authChecked, authRequired]);
 
   // Auth gates — placed after all hooks to satisfy Rules of Hooks
   if (!authChecked) {
@@ -235,6 +247,7 @@ export default function App() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar />
+        <UpdateBanner />
         <div className="flex-1 overflow-hidden relative">
           {isSettingsPage && (
             <div className="absolute inset-0">
@@ -450,6 +463,7 @@ export default function App() {
 
       {/* Onboarding wizard (first run only) */}
       {showOnboarding && <OnboardingWizard onComplete={() => setShowOnboarding(false)} />}
+      <UpdateOverlay active={updateOverlayActive} />
     </div>
   );
 }

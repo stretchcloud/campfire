@@ -574,7 +574,7 @@ function UpdatesTab({ updateInfo, updateError, updateStatus, checkingUpdates, up
             </button>
           ) : (
             <p className="text-[11px] text-cc-fg/55 self-center">
-              Run <code className="font-mono-code bg-cc-code-bg px-1.5 py-0.5 rounded text-cc-code-fg text-[10px]">campfire install</code> to enable one-click updates
+              Run <code className="font-mono-code bg-cc-code-bg px-1.5 py-0.5 rounded text-cc-code-fg text-[10px]">the-campfire install</code> to enable one-click updates
             </p>
           )}
         </div>
@@ -622,6 +622,7 @@ export function SettingsPage({ embedded = false }: Readonly<SettingsPageProps>) 
   const setNotificationDesktop = useStore((s) => s.setNotificationDesktop);
   const updateInfo = useStore((s) => s.updateInfo);
   const setUpdateInfo = useStore((s) => s.setUpdateInfo);
+  const setUpdateOverlayActive = useStore((s) => s.setUpdateOverlayActive);
   const notificationApiAvailable = typeof Notification !== "undefined";
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingApp, setUpdatingApp] = useState(false);
@@ -706,6 +707,7 @@ export function SettingsPage({ embedded = false }: Readonly<SettingsPageProps>) 
     try {
       const res = await api.triggerUpdate();
       setUpdateStatus(res.message);
+      setUpdateOverlayActive(true);
     } catch (err: unknown) {
       setUpdateError(err instanceof Error ? err.message : "Unknown error");
       setUpdatingApp(false);
