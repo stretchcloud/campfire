@@ -63,6 +63,15 @@ const NAV_TOOLS: NavItem[] = [
     ),
   },
   {
+    label: "Races",
+    hash: "#/races",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+        <path d="M3 2.5A1.5 1.5 0 014.5 1h1A1.5 1.5 0 017 2.5v1A1.5 1.5 0 015.5 5h-1A1.5 1.5 0 013 3.5v-1zM9 2.5A1.5 1.5 0 0110.5 1h1A1.5 1.5 0 0113 2.5v1A1.5 1.5 0 0111.5 5h-1A1.5 1.5 0 019 3.5v-1zM3 12.5A1.5 1.5 0 014.5 11h1A1.5 1.5 0 017 12.5v1A1.5 1.5 0 015.5 15h-1A1.5 1.5 0 013 13.5v-1zM9 12.5a1.5 1.5 0 011.5-1.5h1a1.5 1.5 0 011.5 1.5v1a1.5 1.5 0 01-1.5 1.5h-1A1.5 1.5 0 019 13.5v-1zM5 6h1v1.5h4V6h1v4h-1V8.5H6V10H5V6z" />
+      </svg>
+    ),
+  },
+  {
     label: "Kanban",
     hash: "#/kanban",
     icon: (

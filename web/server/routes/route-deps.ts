@@ -11,6 +11,7 @@ import type { WebhookManager } from "../webhook-manager.js";
 import type { AdapterRegistry } from "../adapter-registry.js";
 import type { AgentExecutor } from "../agent-executor.js";
 import type { ProtocolMonitor } from "../protocol-monitor.js";
+import type { AgentMcpBridge } from "../agent-mcp-bridge.js";
 
 export interface RouteDeps {
   launcher: CliLauncher;
@@ -25,6 +26,7 @@ export interface RouteDeps {
   adapterRegistry?: AdapterRegistry;
   agentExecutor?: AgentExecutor;
   protocolMonitor?: ProtocolMonitor;
+  agentMcpBridge?: AgentMcpBridge;
 }
 
 export type RegisterRoutes = (api: Hono, deps: RouteDeps) => void;

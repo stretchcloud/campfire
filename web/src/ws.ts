@@ -193,6 +193,33 @@ function extractBackgroundAgentsFromBlocks(sessionId: string, blocks: ContentBlo
   }
 }
 
+function applySubAgentUpdate(sessionId: string, agent: import("./types.js").SubAgentUpdate) {
+  const store = useStore.getState();
+  const current = store.sessionBackgroundAgents.get(sessionId) || [];
+  const existing = current.find((item) => item.toolUseId === agent.toolUseId);
+  const item: BackgroundAgentItem = {
+    toolUseId: agent.toolUseId,
+    name: agent.name,
+    description: agent.description,
+    agentType: agent.backendType,
+    backendType: agent.backendType,
+    sessionId: agent.sessionId,
+    status: agent.status === "timeout" ? "timeout" : agent.status,
+    startedAt: agent.startedAt,
+    completedAt: agent.completedAt,
+    summary: agent.summary,
+    costUsd: agent.costUsd,
+    durationMs: agent.durationMs,
+    filesChanged: agent.filesChanged,
+    error: agent.error,
+  };
+  if (existing) {
+    store.updateBackgroundAgent(sessionId, agent.toolUseId, item);
+  } else {
+    store.addBackgroundAgent(sessionId, item);
+  }
+}
+
 function sendBrowserNotification(title: string, body: string, tag: string) {
   if (typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;
@@ -545,6 +572,11 @@ function handleParsedMessage(
         store.removeChangedFile(sessionId, resolved);
       }
       store.removePermission(sessionId, data.request_id);
+      break;
+    }
+
+    case "sub_agent_update": {
+      applySubAgentUpdate(sessionId, data.agent);
       break;
     }
 

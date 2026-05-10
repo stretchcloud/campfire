@@ -11,7 +11,7 @@ import {
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import type { SessionStore } from "./session-store.js";
-import type { BackendType } from "./session-types.js";
+import type { BackendType, DetectedEnvironment } from "./session-types.js";
 import type { RecorderManager } from "./recorder.js";
 import { CodexAdapter } from "./codex-adapter.js";
 import { GooseAdapter } from "./goose-adapter.js";
@@ -27,6 +27,7 @@ import {
   resolveCampfireCodexSessionHome,
 } from "./codex-home.js";
 import { getSettings } from "./settings-manager.js";
+import { detectEnvironment } from "./environment-detector.js";
 
 export interface SdkSessionInfo {
   sessionId: string;
@@ -76,6 +77,12 @@ export interface SdkSessionInfo {
   cronJobName?: string;
   /** Environment variables injected at session creation (persisted for relaunch) */
   sessionEnv?: Record<string, string>;
+  /** Session that spawned this one, when used as a sub-agent. */
+  parentSessionId?: string;
+  /** Orchestration role assigned by Campfire. */
+  orchestrationRole?: "lead" | "subagent" | "race_entry";
+  /** Environment detections computed for the session cwd. */
+  detectedEnvironment?: DetectedEnvironment;
 }
 
 export interface LaunchOptions {
@@ -110,6 +117,9 @@ export interface LaunchOptions {
     actualBranch: string;
     worktreePath: string;
   };
+  parentSessionId?: string;
+  orchestrationRole?: "lead" | "subagent" | "race_entry";
+  detectedEnvironment?: DetectedEnvironment;
 }
 
 /**
@@ -321,6 +331,7 @@ export class CliLauncher {
     const sessionId = randomUUID();
     const cwd = options.cwd || process.cwd();
     const backendType = options.backendType || "claude";
+    const detectedEnvironment = options.detectedEnvironment ?? detectEnvironment(cwd);
 
     const info: SdkSessionInfo = {
       sessionId,
@@ -330,6 +341,9 @@ export class CliLauncher {
       cwd,
       createdAt: Date.now(),
       backendType,
+      parentSessionId: options.parentSessionId,
+      orchestrationRole: options.orchestrationRole,
+      detectedEnvironment,
       claudeTransport: backendType === "claude"
         ? (useClaudeSdkUrlTransport() ? "sdk-url" : "stdio")
         : undefined,
@@ -413,6 +427,7 @@ export class CliLauncher {
         codexInternetAccess: info.codexInternetAccess,
         codexReasoningEffort: info.codexReasoningEffort,
         env: relaunchEnv,
+        detectedEnvironment: info.detectedEnvironment,
       });
     } else if (info.backendType === "goose") {
       this.spawnGoose(sessionId, info, {
@@ -420,6 +435,7 @@ export class CliLauncher {
         permissionMode: info.permissionMode,
         cwd: info.cwd,
         env: relaunchEnv,
+        detectedEnvironment: info.detectedEnvironment,
       });
     } else if (info.backendType === "aider") {
       this.spawnAider(sessionId, info, {
@@ -427,6 +443,7 @@ export class CliLauncher {
         permissionMode: info.permissionMode,
         cwd: info.cwd,
         env: relaunchEnv,
+        detectedEnvironment: info.detectedEnvironment,
       });
     } else if (info.backendType === "openhands") {
       this.spawnOpenHands(sessionId, info, {
@@ -434,6 +451,7 @@ export class CliLauncher {
         permissionMode: info.permissionMode,
         cwd: info.cwd,
         env: relaunchEnv,
+        detectedEnvironment: info.detectedEnvironment,
       });
     } else if (info.backendType === "openclaw") {
       this.spawnOpenClaw(sessionId, info, {
@@ -441,6 +459,7 @@ export class CliLauncher {
         permissionMode: info.permissionMode,
         cwd: info.cwd,
         env: relaunchEnv,
+        detectedEnvironment: info.detectedEnvironment,
       });
     } else if (info.backendType === "opencode") {
       this.spawnOpenCode(sessionId, info, {
@@ -448,6 +467,7 @@ export class CliLauncher {
         permissionMode: info.permissionMode,
         cwd: info.cwd,
         env: relaunchEnv,
+        detectedEnvironment: info.detectedEnvironment,
       });
     } else {
       this.spawnCLI(sessionId, info, {
@@ -456,6 +476,7 @@ export class CliLauncher {
         cwd: info.cwd,
         resumeSessionId: info.cliSessionId,
         env: relaunchEnv,
+        detectedEnvironment: info.detectedEnvironment,
       });
     }
     return true;
