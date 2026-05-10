@@ -7,6 +7,7 @@ import { getEnrichedPath } from "./path-resolver.js";
 process.env.PATH = getEnrichedPath();
 
 import { dirname, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -148,11 +149,38 @@ app.use("/api/*", rateLimiter);
 app.use("/api/*", cors());
 app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, webhookManager, adapterRegistry, agentExecutor, protocolMonitor, agentMcpBridge));
 
+function publicOriginForRequest(req: Request): string {
+  const configured = process.env.CAMPFIRE_PUBLIC_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+
+  const url = new URL(req.url);
+  const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const host = forwardedHost || req.headers.get("host") || url.host;
+  const proto = forwardedProto || url.protocol.replace(/:$/, "");
+  return `${proto}://${host}`;
+}
+
+function isHtmlNavigation(req: Request, path: string): boolean {
+  if (req.method !== "GET") return false;
+  if (path.startsWith("/api/") || path.startsWith("/ws/")) return false;
+  if (/\.[a-zA-Z0-9]+$/.test(path)) return false;
+  const accept = req.headers.get("accept") || "";
+  return accept.includes("text/html") || accept === "*/*" || accept === "";
+}
+
 // In production, serve built frontend using absolute path (works when installed as npm package)
 if (process.env.NODE_ENV === "production") {
   const distDir = resolve(packageRoot, "dist");
+  const indexPath = resolve(distDir, "index.html");
+  app.get("/*", (c, next) => {
+    if (!isHtmlNavigation(c.req.raw, c.req.path)) return next();
+    const html = readFileSync(indexPath, "utf-8")
+      .replaceAll("__CAMPFIRE_ORIGIN__", publicOriginForRequest(c.req.raw));
+    return c.html(html);
+  });
   app.use("/*", serveStatic({ root: distDir }));
-  app.get("/*", serveStatic({ path: resolve(distDir, "index.html") }));
+  app.get("/*", serveStatic({ path: indexPath }));
 }
 
 // ── WebSocket auth helper ──────────────────────────────────────────────────
