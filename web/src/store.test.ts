@@ -206,6 +206,41 @@ describe("Session management", () => {
     expect(state.sdkSessions[0].sessionId).toBe("s2");
   });
 
+  it("setSdkSessions: clears connected state for exited sessions", () => {
+    // The browser can replay old cli_connected events from a restored session
+    // buffer. The SDK session list is the source of truth for exited workers.
+    useStore.getState().setCliConnected("child-1", true);
+    useStore.getState().setCliLaunching("child-1", true);
+
+    useStore.getState().setSdkSessions([{
+      sessionId: "child-1",
+      state: "exited",
+      cwd: "/repo",
+      createdAt: Date.now(),
+      parentSessionId: "parent-1",
+      orchestrationRole: "subagent",
+    }]);
+
+    const state = useStore.getState();
+    expect(state.cliConnected.get("child-1")).toBe(false);
+    expect(state.cliLaunching.has("child-1")).toBe(false);
+  });
+
+  it("setSdkSessions: records exited subagent sessions as terminal", () => {
+    // Completion has to survive later name/list refreshes so completed
+    // one-shot workers do not briefly look reconnectable in ChatView.
+    useStore.getState().setSdkSessions([{
+      sessionId: "child-1",
+      state: "exited",
+      cwd: "/repo",
+      createdAt: Date.now(),
+      parentSessionId: "parent-1",
+      orchestrationRole: "subagent",
+    }]);
+
+    expect(useStore.getState().completedSubagentSessions.get("child-1")).toBe("completed");
+  });
+
   it("removeSession: does not clear currentSessionId if a different session is removed", () => {
     useStore.getState().addSession(makeSession("s1"));
     useStore.getState().addSession(makeSession("s2"));

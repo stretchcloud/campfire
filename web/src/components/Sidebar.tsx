@@ -263,6 +263,7 @@ export function Sidebar() {
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionStatus = useStore((s) => s.sessionStatus);
+  const completedSubagentSessions = useStore((s) => s.completedSubagentSessions);
   const removeSession = useStore((s) => s.removeSession);
   const sessionNames = useStore((s) => s.sessionNames);
   const recentlyRenamed = useStore((s) => s.recentlyRenamed);
@@ -553,6 +554,9 @@ export function Sidebar() {
         permCount: pendingPermissions.get(id)?.size ?? 0,
         cronJobId: bridgeState?.cronJobId || sdkInfo?.cronJobId,
         cronJobName: bridgeState?.cronJobName || sdkInfo?.cronJobName,
+        parentSessionId: bridgeState?.parent_session_id || sdkInfo?.parentSessionId,
+        orchestrationRole: bridgeState?.orchestration_role || sdkInfo?.orchestrationRole,
+        subagentTerminalStatus: completedSubagentSessions.get(id),
       };
     })
     .sort((a, b) => b.createdAt - a.createdAt);

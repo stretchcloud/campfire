@@ -7,7 +7,7 @@ import { getEnrichedPath } from "./path-resolver.js";
 process.env.PATH = getEnrichedPath();
 
 import { dirname, resolve } from "node:path";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -67,7 +67,10 @@ const agentMcpBridge = new AgentMcpBridge(wsBridge, subSessionManager, { port, p
 const protocolMonitor = new ProtocolMonitor();
 // Proactive keepalive — auto-relaunches crashed CLI sessions with exponential backoff.
 const _keepalive = new ProactiveKeepalive(launcher);
-process.on("SIGTERM", () => _keepalive.destroy());
+process.once("SIGTERM", () => {
+  _keepalive.destroy();
+  process.exit(0);
+});
 const dmuxWatcher = new DmuxWatcher();
 
 // ── Restore persisted sessions from disk ────────────────────────────────────
@@ -99,37 +102,63 @@ wsBridge.onSessionGitInfoReadyCallback((sessionId, cwd, branch) => {
 
 // Auto-relaunch CLI when a browser connects to a session with no CLI
 const relaunchingSet = new Set<string>();
-wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
-  if (relaunchingSet.has(sessionId)) return;
+function cwdIsUsable(cwd: string | undefined): boolean {
+  if (!cwd || !existsSync(cwd)) return false;
+  try {
+    return statSync(cwd).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+wsBridge.onCLIRelaunchNeededCallback((sessionId) => {
+  if (relaunchingSet.has(sessionId)) return true;
   const info = launcher.getSession(sessionId);
-  if (info?.archived) return;
-  if (info && info.state !== "starting") {
-    relaunchingSet.add(sessionId);
-    console.log(`[server] Auto-relaunching CLI for session ${sessionId}`);
-    wsBridge.notifyLaunching(sessionId);
+  if (!info || info.archived || info.state === "exited") {
+    return false;
+  }
+  if (info.parentSessionId || info.orchestrationRole === "subagent" || info.orchestrationRole === "race_entry") {
+    launcher.markSessionExited(sessionId, info.exitCode ?? 0);
+    return false;
+  }
+  if (info.state === "starting") return true;
+  if (!cwdIsUsable(info.cwd)) {
+    console.warn(`[server] Not auto-relaunching session ${sessionId}: working directory is unavailable (${info.cwd || "empty"})`);
+    launcher.markSessionExited(sessionId, 127);
+    return false;
+  }
+
+  relaunchingSet.add(sessionId);
+  console.log(`[server] Auto-relaunching CLI for session ${sessionId}`);
+  wsBridge.notifyLaunching(sessionId);
+  void (async () => {
     try {
       await launcher.relaunch(sessionId);
     } finally {
       setTimeout(() => relaunchingSet.delete(sessionId), 5000);
     }
-  }
+  })();
+  return true;
 });
 
 // Auto-generate session title after first turn completes
 wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
   // Don't overwrite a name that was already set (manual rename or prior auto-name)
-  if (sessionNames.getName(sessionId)) return;
-  if (!getSettings().openrouterApiKey.trim()) return;
+  if (sessionNames.getName(sessionId)) return true;
+  if (!getSettings().openrouterApiKey.trim()) return true;
   const info = launcher.getSession(sessionId);
   const model = info?.model || "claude-sonnet-4-5-20250929";
   console.log(`[server] Auto-naming session ${sessionId} via OpenRouter with model ${model}...`);
   const title = await generateSessionTitle(firstUserMessage, model);
   // Re-check: a manual rename may have occurred while we were generating
+  if (sessionNames.getName(sessionId)) return true;
   if (title && !sessionNames.getName(sessionId)) {
     console.log(`[server] Auto-named session ${sessionId}: "${title}"`);
     sessionNames.setName(sessionId, title);
     wsBridge.broadcastNameUpdate(sessionId, title);
+    return true;
   }
+  return false;
 });
 
 console.log(`[server] Session persistence: ${sessionStore.directory}`);

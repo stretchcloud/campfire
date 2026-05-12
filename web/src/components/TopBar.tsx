@@ -31,6 +31,7 @@ export function TopBar() {
   const sessionStatus = useStore((s) => s.sessionStatus);
   const sessionNames = useStore((s) => s.sessionNames);
   const sdkSessions = useStore((s) => s.sdkSessions);
+  const completedSubagentSessions = useStore((s) => s.completedSubagentSessions);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const setSidebarOpen = useStore((s) => s.setSidebarOpen);
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
@@ -87,6 +88,17 @@ export function TopBar() {
 
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
+  const currentSession = useStore((s) => currentSessionId ? s.sessions.get(currentSessionId) : undefined);
+  const currentSdkSession = currentSessionId
+    ? sdkSessions.find((s) => s.sessionId === currentSessionId)
+    : undefined;
+  const isSubagent =
+    currentSession?.orchestration_role === "subagent" ||
+    !!currentSession?.parent_session_id ||
+    currentSdkSession?.orchestrationRole === "subagent" ||
+    !!currentSdkSession?.parentSessionId;
+  const terminalSubagentStatus = currentSessionId ? completedSubagentSessions.get(currentSessionId) : undefined;
+  const isCompletedSubagent = !!terminalSubagentStatus || (isSubagent && !isConnected && currentSdkSession?.state === "exited");
   const sessionName = currentSessionId
     ? (sessionNames?.get(currentSessionId) ||
       sdkSessions.find((s) => s.sessionId === currentSessionId)?.name ||
@@ -257,9 +269,14 @@ export function TopBar() {
                 <span className="text-[10px] text-cc-primary/70 font-mono-code">running</span>
               </div>
             )}
+            {isCompletedSubagent && (
+              <span className="text-[10px] text-cc-muted font-mono-code ml-1">
+                {terminalSubagentStatus ?? "completed"}
+              </span>
+            )}
 
             {/* Reconnect button */}
-            {!isConnected && !isSpectator && (
+            {!isConnected && !isSpectator && !isCompletedSubagent && (
               <button
                 onClick={() => currentSessionId && api.relaunchSession(currentSessionId).catch(console.error)}
                 className="text-[10px] text-cc-warning/80 hover:text-cc-warning font-medium font-mono-code cursor-pointer ml-1 hidden sm:inline"

@@ -13,6 +13,21 @@ export function ChatView({ sessionId }: Readonly<{ sessionId: string }>) {
   );
   const cliConnected = useStore((s) => s.cliConnected.get(sessionId) ?? false);
   const cliLaunching = useStore((s) => s.cliLaunching.get(sessionId) ?? false);
+  const session = useStore((s) => s.sessions.get(sessionId));
+  const sdkSession = useStore((s) => s.sdkSessions.find((sdk) => sdk.sessionId === sessionId));
+  const terminalSubagentStatus = useStore((s) => s.completedSubagentSessions.get(sessionId));
+  const isSubagent =
+    session?.orchestration_role === "subagent" ||
+    !!session?.parent_session_id ||
+    sdkSession?.orchestrationRole === "subagent" ||
+    !!sdkSession?.parentSessionId;
+  const isCompletedSubagent = !!terminalSubagentStatus || (isSubagent && !cliConnected && sdkSession?.state === "exited");
+  const subagentTerminalLabel =
+    terminalSubagentStatus === "failed"
+      ? "subagent failed"
+      : terminalSubagentStatus === "timeout"
+        ? "subagent timed out"
+        : "subagent completed";
 
   const perms = useMemo(
     () => (sessionPerms ? Array.from(sessionPerms.values()) : []),
@@ -31,8 +46,18 @@ export function ChatView({ sessionId }: Readonly<{ sessionId: string }>) {
         </div>
       )}
 
+      {/* Completed subagent banner — one-shot MCP workers stop after returning their result */}
+      {isCompletedSubagent && !cliLaunching && (
+        <div className="px-4 py-1.5 bg-cc-hover/40 border-b border-cc-border text-center flex items-center justify-center gap-2">
+          <span className="w-1 h-1 rounded-full bg-cc-muted/60" />
+          <span className="text-[11px] text-cc-muted font-mono-code">
+            {subagentTerminalLabel}
+          </span>
+        </div>
+      )}
+
       {/* CLI disconnected banner — only when not launching */}
-      {connStatus === "connected" && !cliConnected && !cliLaunching && (
+      {connStatus === "connected" && !cliConnected && !cliLaunching && !isCompletedSubagent && (
         <div className="px-4 py-1.5 bg-cc-warning/5 border-b border-cc-border text-center flex items-center justify-center gap-3">
           <span className="w-1 h-1 rounded-full bg-cc-warning animate-pulse" />
           <span className="text-[11px] text-cc-warning/80 font-mono-code">
@@ -48,7 +73,7 @@ export function ChatView({ sessionId }: Readonly<{ sessionId: string }>) {
       )}
 
       {/* WebSocket disconnected banner */}
-      {connStatus === "disconnected" && (
+      {connStatus === "disconnected" && !isCompletedSubagent && (
         <div className="px-4 py-1.5 bg-cc-warning/5 border-b border-cc-border text-center flex items-center justify-center gap-2">
           <span className="w-1 h-1 rounded-full bg-cc-warning animate-pulse" />
           <span className="text-[11px] text-cc-warning/80 font-mono-code">

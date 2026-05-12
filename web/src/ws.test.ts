@@ -126,6 +126,35 @@ describe("connectSession", () => {
       JSON.stringify({ type: "session_subscribe", last_seq: 12 }),
     );
   });
+
+  it("replaces a stale closed socket for the same session", () => {
+    // Browser implementations can retain a closed socket object briefly after
+    // a server restart; reconnect must not no-op just because the map has one.
+    wsModule.connectSession("s1");
+    const staleWs = lastWs;
+    staleWs.readyState = MockWebSocket.CLOSED;
+
+    wsModule.connectSession("s1");
+
+    expect(lastWs).not.toBe(staleWs);
+    expect(staleWs.close).toHaveBeenCalled();
+    expect(useStore.getState().connectionStatus.get("s1")).toBe("connecting");
+  });
+});
+
+describe("connectAllSessions", () => {
+  it("skips archived and exited sessions during sidebar polling", () => {
+    wsModule.connectAllSessions([
+      { sessionId: "active", state: "connected", cwd: "/repo", createdAt: 1 },
+      { sessionId: "exited", state: "exited", cwd: "/repo", createdAt: 2 },
+      { sessionId: "archived", state: "connected", cwd: "/repo", createdAt: 3, archived: true },
+    ]);
+
+    const statuses = useStore.getState().connectionStatus;
+    expect(statuses.get("active")).toBe("connecting");
+    expect(statuses.has("exited")).toBe(false);
+    expect(statuses.has("archived")).toBe(false);
+  });
 });
 
 // ===========================================================================
@@ -186,6 +215,47 @@ describe("disconnectSession", () => {
     wsModule.sendToSession("s1", { type: "interrupt" });
     expect(ws.send).not.toHaveBeenCalled();
   });
+
+  it("does not let a stale close event overwrite a newer socket state", () => {
+    // Reconnecting immediately after an intentional close leaves the old
+    // browser socket free to fire onclose later; that stale event must not
+    // make the live session look disconnected.
+    wsModule.connectSession("s1");
+    const staleWs = lastWs;
+    staleWs.onopen?.(new Event("open"));
+
+    wsModule.disconnectSession("s1");
+    wsModule.connectSession("s1");
+    const liveWs = lastWs;
+    liveWs.onopen?.(new Event("open"));
+
+    staleWs.onclose?.();
+
+    expect(useStore.getState().connectionStatus.get("s1")).toBe("connected");
+  });
+
+  it("does not auto-reconnect sessions that are already exited", () => {
+    // One-shot subagents are persisted as exited when they complete. If their
+    // browser socket closes later, the client should leave the transcript idle
+    // instead of reconnecting and showing a broken-agent state.
+    useStore.getState().setSdkSessions([{
+      sessionId: "child-1",
+      state: "exited",
+      cwd: "/repo",
+      createdAt: Date.now(),
+      parentSessionId: "parent-1",
+      orchestrationRole: "subagent",
+    }]);
+    wsModule.connectSession("child-1");
+    const closedWs = lastWs;
+    closedWs.onopen?.(new Event("open"));
+
+    closedWs.onclose?.();
+    vi.advanceTimersByTime(2100);
+
+    expect(lastWs).toBe(closedWs);
+    expect(useStore.getState().connectionStatus.get("child-1")).toBe("disconnected");
+  });
 });
 
 // ===========================================================================
@@ -204,6 +274,24 @@ describe("handleMessage: session_init", () => {
     expect(state.cliConnected.get("s1")).toBe(true);
     expect(state.sessionStatus.get("s1")).toBe("idle");
     expect(state.sessionNames.get("s1")).toBe("Test Session");
+  });
+
+  it("does not mark an exited SDK session connected from session_init", () => {
+    // Restored one-shot subagents can still have a browser session snapshot,
+    // but launcher state says they are complete and offline.
+    useStore.getState().setSdkSessions([{
+      sessionId: "s1",
+      state: "exited",
+      cwd: "/repo",
+      createdAt: Date.now(),
+      parentSessionId: "parent-1",
+      orchestrationRole: "subagent",
+    }]);
+
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    expect(useStore.getState().cliConnected.get("s1")).toBe(false);
   });
 
   it("does not overwrite an existing session name", () => {
@@ -610,6 +698,51 @@ describe("handleMessage: cli_disconnected/connected", () => {
 
     fireMessage({ type: "cli_connected" });
     expect(useStore.getState().cliConnected.get("s1")).toBe(true);
+  });
+
+  it("ignores stale cli_connected replay for exited SDK sessions", () => {
+    // Event replay may include old cli_connected entries from before a
+    // subagent completed. Do not let those resurrect completed workers.
+    useStore.getState().setSdkSessions([{
+      sessionId: "s1",
+      state: "exited",
+      cwd: "/repo",
+      createdAt: Date.now(),
+      parentSessionId: "parent-1",
+      orchestrationRole: "subagent",
+    }]);
+
+    wsModule.connectSession("s1");
+    fireMessage({ type: "cli_connected" });
+
+    expect(useStore.getState().cliConnected.get("s1")).toBe(false);
+  });
+});
+
+// ===========================================================================
+// handleMessage: sub_agent_update
+// ===========================================================================
+describe("handleMessage: sub_agent_update", () => {
+  it("marks terminal child subagent sessions as completed", () => {
+    // Parent-session subagent updates are the earliest reliable signal that a
+    // child transcript has become terminal.
+    wsModule.connectSession("parent-1");
+    fireMessage({
+      type: "sub_agent_update",
+      agent: {
+        parentSessionId: "parent-1",
+        toolUseId: "tool-1",
+        sessionId: "child-1",
+        backendType: "claude",
+        name: "Child agent",
+        description: "Inspect issue",
+        status: "completed",
+        startedAt: Date.now() - 1000,
+        completedAt: Date.now(),
+      },
+    });
+
+    expect(useStore.getState().completedSubagentSessions.get("child-1")).toBe("completed");
   });
 });
 

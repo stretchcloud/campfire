@@ -64,12 +64,16 @@ export function SessionItem({
   const isRunning = s.status === "running";
   const isCompacting = s.status === "compacting";
   const isEditing = editingSessionId === s.id;
+  const isSubagent = s.orchestrationRole === "subagent" || !!s.parentSessionId;
+  const isCompletedSubagent = !!s.subagentTerminalStatus || (isSubagent && !s.isConnected && s.sdkState === "exited");
 
   // Full-height left border color by status
   const borderColor = archived
     ? "bg-cc-muted/30"
     : permCount > 0
     ? "bg-cc-warning"
+    : isCompletedSubagent
+    ? "bg-cc-muted/40"
     : s.sdkState === "exited"
     ? "bg-cc-muted/30"
     : isRunning
@@ -148,6 +152,14 @@ export function SessionItem({
                 {s.cronJobId && (
                   <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-violet-500 bg-violet-500/10">
                     Cron
+                  </span>
+                )}
+                {isCompletedSubagent && (
+                  <span
+                    className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-cc-muted bg-cc-hover"
+                    title="Subagent reached a terminal state and is offline"
+                  >
+                    {s.subagentTerminalStatus ?? "completed"}
                   </span>
                 )}
               </>
