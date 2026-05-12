@@ -556,6 +556,23 @@ describe("Browser handlers", () => {
     expect(launchingMsg).toBeDefined();
   });
 
+  it("handleBrowserOpen: sends disconnected when relaunch callback declines", () => {
+    const relaunchCb = vi.fn(() => false);
+    bridge.onCLIRelaunchNeededCallback(relaunchCb);
+
+    bridge.getOrCreateSession("s1");
+    const browser = makeBrowserSocket("s1");
+    bridge.handleBrowserOpen(browser, "s1");
+
+    expect(relaunchCb).toHaveBeenCalledWith("s1");
+
+    // Terminal or unrelaunchable sessions should not be put into a fake
+    // launching state; the browser can show history without a live backend.
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    expect(calls.find((c: any) => c.type === "cli_launching")).toBeUndefined();
+    expect(calls.find((c: any) => c.type === "cli_disconnected")).toBeDefined();
+  });
+
   it("handleBrowserOpen: does NOT relaunch when Codex adapter is attached but still initializing", () => {
     const relaunchCb = vi.fn();
     bridge.onCLIRelaunchNeededCallback(relaunchCb);
@@ -1092,6 +1109,56 @@ describe("Browser message routing", () => {
       updated_input: { command: "pwd" },
     }));
     expect(session.pendingPermissions.has("perm-1")).toBe(false);
+  });
+
+  it("auto-allows Campfire agent MCP permission requests from adapters without broadcasting generic approval UI", () => {
+    let emitFromAdapter: ((msg: any) => void) | undefined;
+    const adapter = {
+      sendBrowserMessage: vi.fn(() => true),
+      onBrowserMessage: vi.fn((cb) => { emitFromAdapter = cb; }),
+      onSessionMeta: vi.fn(),
+      onDisconnect: vi.fn(),
+      onInitError: vi.fn(),
+      isConnected: vi.fn(() => true),
+      disconnect: vi.fn(async () => {}),
+      getBackendSessionId: vi.fn(() => "codex-thread-1"),
+    };
+    bridge.attachAdapter("s1", adapter as any, "codex");
+    bridge.setAgentMcpBridge({
+      onSessionReady: vi.fn(),
+      handleAdapterPermissionRequest: vi.fn((_sessionId, request, respond) => {
+        respond({
+          type: "permission_response",
+          request_id: request.request_id,
+          behavior: "allow",
+          updated_input: request.input,
+        });
+        return true;
+      }),
+    });
+    const session = bridge.getSession("s1")!;
+    browser.send.mockClear();
+    adapter.sendBrowserMessage.mockClear();
+
+    emitFromAdapter?.({
+      type: "permission_request",
+      request: {
+        request_id: "perm-agent-1",
+        tool_name: "mcp:campfire_agents:ask_claude",
+        input: { prompt: "Review the diff" },
+        tool_use_id: "mcp-tool-1",
+        timestamp: Date.now(),
+      },
+    });
+
+    expect(adapter.sendBrowserMessage).toHaveBeenCalledWith({
+      type: "permission_response",
+      request_id: "perm-agent-1",
+      behavior: "allow",
+      updated_input: { prompt: "Review the diff" },
+    });
+    expect(session.pendingPermissions.has("perm-agent-1")).toBe(false);
+    expect(browser.send).not.toHaveBeenCalled();
   });
 
   it("user_message: sends NDJSON to CLI and stores in history", () => {
@@ -2411,6 +2478,62 @@ describe("onFirstTurnCompletedCallback", () => {
     }));
 
     expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows a later result to retry auto-naming when the callback reports failure", async () => {
+    const callback = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    bridge.onFirstTurnCompletedCallback(callback);
+
+    const cli = makeCliSocket("s1");
+    bridge.handleCLIOpen(cli, "s1");
+    bridge.handleCLIMessage(cli, makeInitMsg());
+
+    const browser = makeBrowserSocket("s1");
+    bridge.handleBrowserOpen(browser, "s1");
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "Name should retry",
+    }));
+
+    // First successful turn attempted OpenRouter naming, but the generator returned
+    // no usable title, so the bridge should not burn the session's only chance.
+    bridge.handleCLIMessage(cli, JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      duration_ms: 1000,
+      duration_api_ms: 800,
+      num_turns: 1,
+      total_cost_usd: 0.05,
+      stop_reason: "end_turn",
+      usage: { input_tokens: 500, output_tokens: 200, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      uuid: "uuid-first",
+      session_id: "s1",
+    }));
+    await Promise.resolve();
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "Second message",
+    }));
+    bridge.handleCLIMessage(cli, JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      duration_ms: 1000,
+      duration_api_ms: 800,
+      num_turns: 2,
+      total_cost_usd: 0.10,
+      stop_reason: "end_turn",
+      usage: { input_tokens: 800, output_tokens: 300, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      uuid: "uuid-second",
+      session_id: "s1",
+    }));
+
+    expect(callback).toHaveBeenCalledTimes(2);
+    expect(callback).toHaveBeenNthCalledWith(2, "s1", "Name should retry");
   });
 
   it("does not fire on error results", () => {

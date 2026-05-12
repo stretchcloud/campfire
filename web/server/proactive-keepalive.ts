@@ -25,6 +25,7 @@ export class ProactiveKeepalive {
   private readonly intentionalKills = new Set<string>();
   /** Tracks when each session was last relaunched by keepalive. */
   private readonly launchTimes = new Map<string, number>();
+  private destroyed = false;
 
   constructor(launcher: CliLauncher) {
     this.launcher = launcher;
@@ -52,6 +53,7 @@ export class ProactiveKeepalive {
 
   /** Stop all timers (graceful shutdown). */
   destroy(): void {
+    this.destroyed = true;
     for (const timer of this.timers.values()) {
       clearTimeout(timer);
     }
@@ -61,6 +63,8 @@ export class ProactiveKeepalive {
   }
 
   private handleExit(sessionId: string, exitCode: number | null): void {
+    if (this.destroyed) return;
+
     // Skip intentional kills
     if (this.intentionalKills.has(sessionId)) {
       this.intentionalKills.delete(sessionId);
@@ -100,6 +104,7 @@ export class ProactiveKeepalive {
 
     const timer = setTimeout(async () => {
       this.timers.delete(sessionId);
+      if (this.destroyed) return;
       try {
         const success = await this.launcher.relaunch(sessionId);
         if (success) {

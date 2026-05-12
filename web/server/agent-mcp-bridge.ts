@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { BackendType, CLIControlRequestMessage } from "./session-types.js";
+import type { BackendType, BrowserOutgoingMessage, CLIControlRequestMessage, PermissionRequest } from "./session-types.js";
 import type { WsBridge } from "./ws-bridge.js";
 import { backendFromAskTool, createAgentMcpServerConfig } from "./agent-mcp-tools.js";
 import type { SubSessionManager, SubSessionResult } from "./sub-session-manager.js";
@@ -9,6 +9,17 @@ export interface AgentMcpBridgeOptions {
   packageRoot: string;
   token?: string;
   backends?: BackendType[];
+}
+
+type PermissionResponseMessage = Extract<BrowserOutgoingMessage, { type: "permission_response" }>;
+type PermissionResponder = (msg: PermissionResponseMessage) => void;
+
+function backendFromCampfireMcpTool(toolName: string): BackendType | null {
+  const parts = toolName.split(":");
+  if (parts.length !== 3 || parts[0] !== "mcp") return null;
+  const [, serverName, mcpToolName] = parts;
+  if (serverName !== "campfire_agents" && serverName !== "campfire-agents") return null;
+  return backendFromAskTool(mcpToolName);
 }
 
 export class AgentMcpBridge {
@@ -29,7 +40,7 @@ export class AgentMcpBridge {
   onSessionReady(sessionId: string, backendType: BackendType, cwd: string): void {
     if (!cwd || this.injectedSessions.has(sessionId)) return;
     const session = this.wsBridge.getSession(sessionId);
-    if (session?.state.parent_session_id || session?.state.orchestration_role === "subagent") return;
+    if (session?.state.parent_session_id || session?.state.orchestration_role === "subagent" || session?.state.orchestration_role === "race_entry") return;
     if (!this.supportsRuntimeMcp(backendType)) return;
     if (process.env.CAMPFIRE_ENABLE_AGENT_MCP === "0") return;
 
@@ -63,6 +74,19 @@ export class AgentMcpBridge {
       },
     };
     (this.wsBridge as unknown as { sendToCLI?: (s: unknown, ndjson: string) => void }).sendToCLI?.(session, JSON.stringify(response));
+    return true;
+  }
+
+  handleAdapterPermissionRequest(_sessionId: string, request: PermissionRequest, respond: PermissionResponder): boolean {
+    const backend = backendFromCampfireMcpTool(request.tool_name);
+    if (!backend) return false;
+
+    respond({
+      type: "permission_response",
+      request_id: request.request_id,
+      behavior: "allow",
+      updated_input: request.input,
+    });
     return true;
   }
 

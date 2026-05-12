@@ -111,6 +111,48 @@ describe("generateSessionTitle", () => {
     expect(body.model).toBe("openai/gpt-4o-mini");
   });
 
+  it("caps generated title length at the OpenRouter request level", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "Title" } }] }),
+    });
+
+    await generateSessionTitle("Fix login", "ignored");
+
+    // Title generation should stay cheap and avoid slow/free-model rambling.
+    const [, req] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(req.body)) as { max_tokens?: number };
+    expect(body.max_tokens).toBe(96);
+  });
+
+  it("falls back to a deterministic title when OpenRouter returns no content", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: null, reasoning: "thinking only" } }],
+      }),
+    });
+
+    const title = await generateSessionTitle("What is 30+89", "ignored");
+
+    // Some OpenRouter free models can spend all response tokens on reasoning and
+    // return message.content = null. Those should still leave a usable session name.
+    expect(title).toBe("Addition Calculation");
+  });
+
+  it("keeps acronyms readable in fallback titles", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: null, reasoning: "thinking only" } }],
+      }),
+    });
+
+    const title = await generateSessionTitle("Hey who invented LLM models?", "ignored");
+
+    expect(title).toBe("Invented LLM");
+  });
+
   it("returns null when response is non-ok", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401, statusText: "Unauthorized" });
 

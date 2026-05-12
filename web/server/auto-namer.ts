@@ -8,6 +8,36 @@ function sanitizeTitle(raw: string): string | null {
   return title;
 }
 
+function titleCaseWord(word: string): string {
+  if (/^[A-Z0-9]{2,}$/.test(word)) return word;
+  const lower = word.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+function fallbackTitleFromRequest(request: string): string | null {
+  const arithmetic = request.match(/\b\d+(?:\s*[+\-*/]\s*\d+)+\b/);
+  if (arithmetic) {
+    const expression = arithmetic[0];
+    if (expression.includes("+")) return "Addition Calculation";
+    if (expression.includes("-")) return "Subtraction Calculation";
+    if (expression.includes("*")) return "Multiplication Calculation";
+    if (expression.includes("/")) return "Division Calculation";
+    return "Math Calculation";
+  }
+
+  const words = request
+    .replace(/['"`]/g, "")
+    .split(/[^A-Za-z0-9]+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 2)
+    .filter((word) => !/^(hey|what|who|why|how|when|where|please|could|would|should|about|into|with|from|that|this|there|their|models?)$/i.test(word))
+    .slice(0, 5)
+    .map(titleCaseWord);
+
+  if (words.length === 0) return null;
+  return words.join(" ");
+}
+
 function extractTextContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -37,7 +67,7 @@ export async function generateSessionTitle(
     timeoutMs?: number;
   },
 ): Promise<string | null> {
-  const timeout = options?.timeoutMs || 15_000;
+  const timeout = options?.timeoutMs || 25_000;
   const settings = getSettings();
   const apiKey = settings.openrouterApiKey.trim();
 
@@ -67,6 +97,7 @@ export async function generateSessionTitle(
             content: userPrompt,
           },
         ],
+        max_tokens: 96,
         temperature: 0.2,
       }),
       signal: controller.signal,
@@ -86,7 +117,12 @@ export async function generateSessionTitle(
     };
 
     const raw = extractTextContent(data.choices?.[0]?.message?.content);
-    return sanitizeTitle(raw);
+    const title = sanitizeTitle(raw);
+    if (title) return title;
+    if (raw.trim()) return null;
+
+    console.warn("[auto-namer] OpenRouter returned no usable title; using fallback title");
+    return fallbackTitleFromRequest(firstUserMessage);
   } catch (err) {
     console.warn("[auto-namer] Failed to generate session title via OpenRouter:", err);
     return null;

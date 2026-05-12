@@ -1,5 +1,5 @@
 // Campfire Service Worker — caching + push notifications
-const CACHE_NAME = "campfire-v2";
+const CACHE_NAME = "campfire-v4";
 
 // Assets to pre-cache on install (shell resources)
 const PRECACHE_URLS = [
@@ -39,6 +39,25 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   // Skip API requests — always go to network
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/ws/")) return;
+
+  // HTML navigations must prefer the network so deploys do not leave tabs
+  // pinned to an old hashed JS bundle.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse.ok && url.origin === self.location.origin) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || new Response("Offline", { status: 503 })))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
