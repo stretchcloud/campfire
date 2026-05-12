@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { CliLauncher } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
 import type { BackendType, BrowserIncomingMessage, CLIResultMessage, SubAgentUpdate } from "./session-types.js";
+import { generateSessionTitle } from "./auto-namer.js";
+import * as sessionNames from "./session-names.js";
 
 export interface SubSessionOptions {
   timeoutMs?: number;
@@ -79,6 +81,11 @@ function findResult(messages: BrowserIncomingMessage[], afterIndex: number): CLI
   return null;
 }
 
+function inheritedEnv(env: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!env || Object.keys(env).length === 0) return undefined;
+  return { ...env };
+}
+
 export class SubSessionManager {
   private readonly childrenByParent = new Map<string, Set<string>>();
 
@@ -115,11 +122,13 @@ export class SubSessionManager {
     };
     this.wsBridge.broadcastSubAgentUpdate(parentSessionId, runningUpdate);
 
+    const parentSession = this.launcher.getSession(parentSessionId);
     const info = this.launcher.launch({
       cwd,
       backendType,
       model: opts.model,
       permissionMode: opts.permissionMode ?? "bypassPermissions",
+      env: inheritedEnv(parentSession?.sessionEnv),
       parentSessionId,
       orchestrationRole: "subagent",
     });
@@ -164,7 +173,7 @@ export class SubSessionManager {
         durationMs,
         error,
       };
-      this.wsBridge.broadcastSubAgentUpdate(parentSessionId, {
+      const completedUpdate: SubAgentUpdate = {
         ...runningUpdate,
         sessionId: info.sessionId,
         status: error ? "failed" : "completed",
@@ -174,7 +183,9 @@ export class SubSessionManager {
         filesChanged,
         summary: text.slice(0, 500),
         error,
-      });
+      };
+      this.wsBridge.broadcastSubAgentUpdate(parentSessionId, completedUpdate);
+      void this.applyGeneratedSubAgentName(parentSessionId, info.sessionId, completedUpdate, prompt, opts.model ?? backendType);
       return finalResult;
     } catch (err) {
       const isTimeout = err instanceof Error && err.message.includes("Timed out");
@@ -199,6 +210,7 @@ export class SubSessionManager {
       };
     } finally {
       await this.launcher.kill(info.sessionId).catch(() => false);
+      this.launcher.markSessionExited(info.sessionId, error ? 1 : 0);
     }
   }
 
@@ -209,6 +221,24 @@ export class SubSessionManager {
       this.childrenByParent.set(parentSessionId, children);
     }
     children.add(childSessionId);
+  }
+
+  private async applyGeneratedSubAgentName(
+    parentSessionId: string,
+    childSessionId: string,
+    completedUpdate: SubAgentUpdate,
+    prompt: string,
+    model: string,
+  ): Promise<void> {
+    const existing = sessionNames.getName(childSessionId);
+    const title = existing ?? await generateSessionTitle(prompt, model, { timeoutMs: 15_000 });
+    if (!title) return;
+    if (!existing) sessionNames.setName(childSessionId, title);
+    this.wsBridge.broadcastNameUpdate(childSessionId, title);
+    this.wsBridge.broadcastSubAgentUpdate(parentSessionId, {
+      ...completedUpdate,
+      name: title,
+    });
   }
 
   private async waitForConnection(sessionId: string, timeoutMs: number): Promise<void> {

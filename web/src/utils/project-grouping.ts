@@ -20,6 +20,9 @@ export interface SessionItem {
   permCount: number;
   cronJobId?: string;
   cronJobName?: string;
+  parentSessionId?: string;
+  orchestrationRole?: "lead" | "subagent" | "race_entry";
+  subagentTerminalStatus?: "completed" | "failed" | "timeout";
 }
 
 export interface ProjectGroup {

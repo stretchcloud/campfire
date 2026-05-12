@@ -42,6 +42,7 @@ interface MockStoreState {
   currentSessionId: string | null;
   cliConnected: Map<string, boolean>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
+  completedSubagentSessions: Map<string, "completed" | "failed" | "timeout">;
   sessionNames: Map<string, string>;
   recentlyRenamed: Set<string>;
   pendingPermissions: Map<string, Map<string, unknown>>;
@@ -106,6 +107,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     currentSessionId: null,
     cliConnected: new Map(),
     sessionStatus: new Map(),
+    completedSubagentSessions: new Map(),
     sessionNames: new Map(),
     recentlyRenamed: new Set(),
     pendingPermissions: new Map(),
@@ -613,6 +615,44 @@ describe("Sidebar", () => {
     const codexPills = screen.getAllByText("Codex");
     expect(claudePills.length).toBeGreaterThanOrEqual(1);
     expect(codexPills.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("marks exited subagent sessions as completed in the sidebar", () => {
+    // MCP-spawned subagents are one-shot workers. Their transcript should
+    // remain visible without looking like a broken reconnecting session.
+    const sdk = makeSdkSession("child-1", {
+      backendType: "codex",
+      model: "gpt-5-codex",
+      state: "exited",
+      parentSessionId: "parent-1",
+      orchestrationRole: "subagent",
+    });
+    mockState = createMockState({
+      sdkSessions: [sdk],
+      cliConnected: new Map([["child-1", false]]),
+    });
+
+    render(<Sidebar />);
+
+    expect(screen.getByText("completed")).toBeInTheDocument();
+    expect(screen.getByTitle("Subagent reached a terminal state and is offline")).toBeInTheDocument();
+  });
+
+  it("does not mark normal exited sessions as completed subagents", () => {
+    // Normal disconnected sessions should keep their existing reconnect affordance.
+    const sdk = makeSdkSession("normal-1", {
+      backendType: "codex",
+      model: "gpt-5-codex",
+      state: "exited",
+    });
+    mockState = createMockState({
+      sdkSessions: [sdk],
+      cliConnected: new Map([["normal-1", false]]),
+    });
+
+    render(<Sidebar />);
+
+    expect(screen.queryByText("completed")).not.toBeInTheDocument();
   });
 
   it("uses the shared Campfire logo for codex sessions", () => {
