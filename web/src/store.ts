@@ -38,6 +38,9 @@ interface AppState {
   // Background agents per session (Agent tool calls with run_in_background)
   sessionBackgroundAgents: Map<string, BackgroundAgentItem[]>;
 
+  // Terminal child subagent sessions, keyed by child session ID.
+  completedSubagentSessions: Map<string, "completed" | "failed" | "timeout">;
+
   // Files changed by the agent per session (Edit/Write tool calls)
   changedFiles: Map<string, Set<string>>;
 
@@ -132,6 +135,7 @@ interface AppState {
   // Background agent actions
   addBackgroundAgent: (sessionId: string, agent: BackgroundAgentItem) => void;
   updateBackgroundAgent: (sessionId: string, toolUseId: string, updates: Partial<BackgroundAgentItem>) => void;
+  markSubagentSessionTerminal: (sessionId: string, status: "completed" | "failed" | "timeout") => void;
 
   // Changed files actions
   addChangedFile: (sessionId: string, filePath: string) => void;
@@ -283,6 +287,7 @@ export const useStore = create<AppState>((set) => ({
   previousPermissionMode: new Map(),
   sessionTasks: new Map(),
   sessionBackgroundAgents: new Map(),
+  completedSubagentSessions: new Map(),
   changedFiles: new Map(),
   sessionNames: getInitialSessionNames(),
   recentlyRenamed: new Set(),
@@ -407,6 +412,8 @@ export const useStore = create<AppState>((set) => ({
       sessionTasks.delete(sessionId);
       const sessionBackgroundAgents = new Map(s.sessionBackgroundAgents);
       sessionBackgroundAgents.delete(sessionId);
+      const completedSubagentSessions = new Map(s.completedSubagentSessions);
+      completedSubagentSessions.delete(sessionId);
       const changedFiles = new Map(s.changedFiles);
       changedFiles.delete(sessionId);
       const sessionNames = new Map(s.sessionNames);
@@ -450,6 +457,7 @@ export const useStore = create<AppState>((set) => ({
         pendingPermissions,
         sessionTasks,
         sessionBackgroundAgents,
+        completedSubagentSessions,
         changedFiles,
         sessionNames,
         recentlyRenamed,
@@ -468,7 +476,29 @@ export const useStore = create<AppState>((set) => ({
       };
     }),
 
-  setSdkSessions: (sessions) => set({ sdkSessions: sessions }),
+  setSdkSessions: (sessions) =>
+    set((s) => {
+      const exitedSessions = sessions.filter((session) => session.state === "exited");
+      const exitedIds = new Set(exitedSessions.map((session) => session.sessionId));
+      if (exitedIds.size === 0) return { sdkSessions: sessions };
+
+      const cliConnected = new Map(s.cliConnected);
+      const cliLaunching = new Map(s.cliLaunching);
+      const completedSubagentSessions = new Map(s.completedSubagentSessions);
+      for (const sessionId of exitedIds) {
+        cliConnected.set(sessionId, false);
+        cliLaunching.delete(sessionId);
+      }
+      for (const session of exitedSessions) {
+        if (session.orchestrationRole === "subagent" || session.parentSessionId) {
+          completedSubagentSessions.set(
+            session.sessionId,
+            completedSubagentSessions.get(session.sessionId) ?? "completed",
+          );
+        }
+      }
+      return { sdkSessions: sessions, cliConnected, cliLaunching, completedSubagentSessions };
+    }),
 
   appendMessage: (sessionId, msg) =>
     set((s) => {
@@ -615,6 +645,13 @@ export const useStore = create<AppState>((set) => ({
         );
       }
       return { sessionBackgroundAgents };
+    }),
+
+  markSubagentSessionTerminal: (sessionId, status) =>
+    set((s) => {
+      const completedSubagentSessions = new Map(s.completedSubagentSessions);
+      completedSubagentSessions.set(sessionId, status);
+      return { completedSubagentSessions };
     }),
 
   addChangedFile: (sessionId, filePath) =>
@@ -905,6 +942,7 @@ export const useStore = create<AppState>((set) => ({
       previousPermissionMode: new Map(),
       sessionTasks: new Map(),
       sessionBackgroundAgents: new Map(),
+      completedSubagentSessions: new Map(),
       changedFiles: new Map(),
       sessionNames: new Map(),
       recentlyRenamed: new Set(),

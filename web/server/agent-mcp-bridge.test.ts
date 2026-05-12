@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { AgentMcpBridge } from "./agent-mcp-bridge.js";
 
 describe("AgentMcpBridge", () => {
-  it("injects the Campfire agent MCP server into lead sessions only", () => {
-    // Prevents recursive tool injection into sub-agent sessions spawned by the bridge.
+  it("injects the Campfire agent MCP server into top-level sessions by default", () => {
+    // Normal top-level Claude/Codex sessions are the delegation entry point.
     const wsBridge = {
       getSession: vi.fn(() => ({ state: { cwd: "/repo" } })),
       setMcpServers: vi.fn(),
@@ -28,6 +28,48 @@ describe("AgentMcpBridge", () => {
         }),
       }),
     });
+  });
+
+  it("does not inject the Campfire agent MCP server into sub-agent sessions", () => {
+    // Prevents recursive tool injection into sessions spawned by the bridge.
+    const wsBridge = {
+      getSession: vi.fn(() => ({ state: { cwd: "/repo", parent_session_id: "parent-1", orchestration_role: "subagent" } })),
+      setMcpServers: vi.fn(),
+    };
+    const bridge = new AgentMcpBridge(wsBridge as any, {} as any, {
+      port: 4567,
+      packageRoot: "/app/web",
+      token: "token",
+      backends: ["codex"],
+    });
+
+    bridge.onSessionReady("child-1", "codex", "/repo");
+
+    expect(wsBridge.setMcpServers).not.toHaveBeenCalled();
+  });
+
+  it("can disable Campfire agent MCP injection with an environment flag", () => {
+    // Keeps an escape hatch for deployments that do not want delegation tools.
+    const previous = process.env.CAMPFIRE_ENABLE_AGENT_MCP;
+    process.env.CAMPFIRE_ENABLE_AGENT_MCP = "0";
+    const wsBridge = {
+      getSession: vi.fn(() => ({ state: { cwd: "/repo" } })),
+      setMcpServers: vi.fn(),
+    };
+    const bridge = new AgentMcpBridge(wsBridge as any, {} as any, {
+      port: 4567,
+      packageRoot: "/app/web",
+      token: "token",
+      backends: ["codex"],
+    });
+
+    try {
+      bridge.onSessionReady("normal-1", "codex", "/repo");
+      expect(wsBridge.setMcpServers).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.CAMPFIRE_ENABLE_AGENT_MCP;
+      else process.env.CAMPFIRE_ENABLE_AGENT_MCP = previous;
+    }
   });
 
   it("delegates ask tool calls to the sub-session manager", async () => {
@@ -62,5 +104,63 @@ describe("AgentMcpBridge", () => {
       "/repo",
       expect.objectContaining({ timeoutMs: 1000 }),
     );
+  });
+
+  it("auto-allows Campfire agent MCP permission requests from adapter backends", () => {
+    // Codex exposes MCP calls as mcp:<server>:<tool>; Campfire's own agent
+    // tools should bypass generic MCP approval and let SubSessionManager emit
+    // the sub_agent_update lifecycle.
+    const wsBridge = {
+      getSession: vi.fn(() => ({ state: { cwd: "/repo" } })),
+      setMcpServers: vi.fn(),
+    };
+    const bridge = new AgentMcpBridge(wsBridge as any, {} as any, {
+      port: 4567,
+      packageRoot: "/app/web",
+      token: "token",
+    });
+    const respond = vi.fn();
+
+    const handled = bridge.handleAdapterPermissionRequest("parent-1", {
+      request_id: "perm-1",
+      tool_name: "mcp:campfire_agents:ask_claude",
+      input: { prompt: "Review this change" },
+      tool_use_id: "tool-1",
+      timestamp: Date.now(),
+    }, respond);
+
+    expect(handled).toBe(true);
+    expect(respond).toHaveBeenCalledWith({
+      type: "permission_response",
+      request_id: "perm-1",
+      behavior: "allow",
+      updated_input: { prompt: "Review this change" },
+    });
+  });
+
+  it("does not auto-allow non-Campfire MCP permission requests", () => {
+    // Third-party MCP servers still need the normal user-visible permission
+    // path, even if their tool happens to be named like an ask tool.
+    const wsBridge = {
+      getSession: vi.fn(() => ({ state: { cwd: "/repo" } })),
+      setMcpServers: vi.fn(),
+    };
+    const bridge = new AgentMcpBridge(wsBridge as any, {} as any, {
+      port: 4567,
+      packageRoot: "/app/web",
+      token: "token",
+    });
+    const respond = vi.fn();
+
+    const handled = bridge.handleAdapterPermissionRequest("parent-1", {
+      request_id: "perm-1",
+      tool_name: "mcp:other_server:ask_claude",
+      input: { prompt: "Review this change" },
+      tool_use_id: "tool-1",
+      timestamp: Date.now(),
+    }, respond);
+
+    expect(handled).toBe(false);
+    expect(respond).not.toHaveBeenCalled();
   });
 });

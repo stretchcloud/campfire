@@ -257,6 +257,7 @@ export class CliLauncher {
     if (!data || !Array.isArray(data)) return 0;
 
     let recovered = 0;
+    let changed = false;
     for (const info of data) {
       if (this.sessions.has(info.sessionId)) continue;
 
@@ -268,15 +269,20 @@ export class CliLauncher {
             try { process.kill(info.pid, "SIGTERM"); } catch {}
             info.state = "exited";
             info.exitCode = -1;
+            info.pid = undefined;
+            changed = true;
           } else {
             info.state = "starting"; // WS not yet re-established, wait for CLI to reconnect
             recovered++;
+            changed = true;
           }
           this.sessions.set(info.sessionId, info);
         } catch {
           // Process is dead
           info.state = "exited";
           info.exitCode = -1;
+          info.pid = undefined;
+          changed = true;
           this.sessions.set(info.sessionId, info);
         }
       } else {
@@ -292,6 +298,7 @@ export class CliLauncher {
     // missing from launcher.json (e.g. after a crash before launcher.json
     // was written). This prevents data loss on VM crash or power loss.
     const storeRecovered = this.recoverFromStoreFiles();
+    if (changed || storeRecovered > 0) this.persistState();
 
     return recovered + storeRecovered;
   }
@@ -1497,6 +1504,22 @@ ${MARKER_END}`;
    */
   getSession(sessionId: string): SdkSessionInfo | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  /**
+   * Mark a session as exited without requiring a live child process.
+   * Used when an automatic relaunch is known to be impossible, such as when
+   * the persisted working directory was removed.
+   */
+  markSessionExited(sessionId: string, exitCode: number | null = 1): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    session.state = "exited";
+    session.exitCode = exitCode;
+    session.pid = undefined;
+    this.processes.delete(sessionId);
+    this.persistState();
+    return true;
   }
 
   /**

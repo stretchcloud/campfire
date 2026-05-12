@@ -195,6 +195,12 @@ function extractBackgroundAgentsFromBlocks(sessionId: string, blocks: ContentBlo
 
 function applySubAgentUpdate(sessionId: string, agent: import("./types.js").SubAgentUpdate) {
   const store = useStore.getState();
+  if (
+    agent.sessionId &&
+    (agent.status === "completed" || agent.status === "failed" || agent.status === "timeout")
+  ) {
+    store.markSubagentSessionTerminal(agent.sessionId, agent.status);
+  }
   const current = store.sessionBackgroundAgents.get(sessionId) || [];
   const existing = current.find((item) => item.toolUseId === agent.toolUseId);
   const item: BackgroundAgentItem = {
@@ -224,6 +230,19 @@ function sendBrowserNotification(title: string, body: string, tag: string) {
   if (typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;
   new Notification(title, { body, tag });
+}
+
+function isSdkSessionExited(sessionId: string): boolean {
+  return useStore.getState().sdkSessions.some((session) => session.sessionId === sessionId && session.state === "exited");
+}
+
+function isTerminalSubagentSession(sessionId: string): boolean {
+  const store = useStore.getState();
+  return store.completedSubagentSessions.has(sessionId) || store.sdkSessions.some((session) =>
+    session.sessionId === sessionId &&
+    session.state === "exited" &&
+    (session.orchestrationRole === "subagent" || !!session.parentSessionId)
+  );
 }
 
 let idCounter = 0;
@@ -369,7 +388,7 @@ function handleParsedMessage(
     case "session_init": {
       const existingSession = store.sessions.get(sessionId);
       store.addSession(data.session);
-      store.setCliConnected(sessionId, true);
+      store.setCliConnected(sessionId, !isSdkSessionExited(sessionId) && !isTerminalSubagentSession(sessionId));
       if (!existingSession) {
         store.setSessionStatus(sessionId, "idle");
       }
@@ -637,7 +656,11 @@ function handleParsedMessage(
     }
 
     case "cli_connected": {
-      store.setCliConnected(sessionId, true);
+      if (isSdkSessionExited(sessionId) || isTerminalSubagentSession(sessionId)) {
+        store.setCliConnected(sessionId, false);
+      } else {
+        store.setCliConnected(sessionId, true);
+      }
       break;
     }
 
@@ -784,7 +807,20 @@ function handleParsedMessage(
 }
 
 export function connectSession(sessionId: string) {
-  if (sockets.has(sessionId)) return;
+  const existing = sockets.get(sessionId);
+  if (existing) {
+    if (existing.readyState === WebSocket.CONNECTING || existing.readyState === WebSocket.OPEN) {
+      return;
+    }
+    existing.onclose = null;
+    existing.onerror = null;
+    sockets.delete(sessionId);
+    try {
+      existing.close();
+    } catch {
+      // ignore stale socket cleanup errors
+    }
+  }
 
   const store = useStore.getState();
   store.setConnectionStatus(sessionId, "connecting");
@@ -807,12 +843,14 @@ export function connectSession(sessionId: string) {
   ws.onmessage = (event) => handleMessage(sessionId, event);
 
   ws.onclose = () => {
+    if (sockets.get(sessionId) !== ws) return;
     sockets.delete(sessionId);
     useStore.getState().setConnectionStatus(sessionId, "disconnected");
     scheduleReconnect(sessionId);
   };
 
   ws.onerror = () => {
+    if (sockets.get(sessionId) !== ws) return;
     ws.close();
   };
 }
@@ -824,7 +862,7 @@ function scheduleReconnect(sessionId: string) {
     const store = useStore.getState();
     // Reconnect any active (non-archived) session
     const sdkSession = store.sdkSessions.find((s) => s.sessionId === sessionId);
-    if (sdkSession && !sdkSession.archived) {
+    if (sdkSession && !sdkSession.archived && sdkSession.state !== "exited") {
       connectSession(sessionId);
     }
   }, 2000);
@@ -842,8 +880,9 @@ export function disconnectSession(sessionId: string) {
     // Remove from map immediately so connectSession() can create a new socket
     // right away (ws.close() is async — onclose fires later).
     sockets.delete(sessionId);
+    ws.onclose = null;
+    ws.onerror = null;
     ws.close();
-    sockets.delete(sessionId);
   }
   processedToolUseIds.delete(sessionId);
   taskCounters.delete(sessionId);
@@ -862,7 +901,7 @@ export function connectAllSessions(sessions: SdkSessionInfo[]) {
   // The join flow will connect the right session with the invite token.
   if (inviteJoinInProgress) return;
   for (const s of sessions) {
-    if (!s.archived) {
+    if (!s.archived && s.state !== "exited") {
       connectSession(s.sessionId);
     }
   }

@@ -123,6 +123,11 @@ type GitSessionKey = "git_branch" | "is_worktree" | "repo_root" | "git_ahead" | 
 interface AgentMcpBridgeHook {
   onSessionReady(sessionId: string, backendType: BackendType, cwd: string): void;
   handlePermissionRequest?(sessionId: string, msg: CLIControlRequestMessage): boolean;
+  handleAdapterPermissionRequest?(
+    sessionId: string,
+    request: PermissionRequest,
+    respond: (msg: Extract<BrowserOutgoingMessage, { type: "permission_response" }>) => void,
+  ): boolean;
 }
 
 function makeDefaultState(sessionId: string, backendType: BackendType = "claude"): SessionState {
@@ -302,8 +307,8 @@ export class WsBridge {
   private protocolMonitor: import("./protocol-monitor.js").ProtocolMonitor | null = null;
   private webhookManager: import("./webhook-manager.js").WebhookManager | null = null;
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
-  private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
-  private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
+  private onCLIRelaunchNeeded: ((sessionId: string) => boolean | void) | null = null;
+  private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => boolean | void | Promise<boolean | void>) | null = null;
   private agentMcpBridge: AgentMcpBridgeHook | null = null;
   private readonly environmentMcpInjected = new Set<string>();
   private readonly autoNamingAttempted = new Set<string>();
@@ -323,12 +328,12 @@ export class WsBridge {
   }
 
   /** Register a callback for when a browser connects but CLI is dead. */
-  onCLIRelaunchNeededCallback(cb: (sessionId: string) => void): void {
+  onCLIRelaunchNeededCallback(cb: (sessionId: string) => boolean | void): void {
     this.onCLIRelaunchNeeded = cb;
   }
 
   /** Register a callback for when a session completes its first turn. */
-  onFirstTurnCompletedCallback(cb: (sessionId: string, firstUserMessage: string) => void): void {
+  onFirstTurnCompletedCallback(cb: (sessionId: string, firstUserMessage: string) => boolean | void | Promise<boolean | void>): void {
     this.onFirstTurnCompleted = cb;
   }
 
@@ -957,10 +962,17 @@ export class WsBridge {
     if (!this.onFirstTurnCompleted) return;
     if (this.autoNamingAttempted.has(session.id)) return;
 
-    this.autoNamingAttempted.add(session.id);
     const firstUserMsg = session.messageHistory.find((m) => m.type === "user_message");
     if (firstUserMsg?.type === "user_message") {
-      this.onFirstTurnCompleted(session.id, firstUserMsg.content);
+      this.autoNamingAttempted.add(session.id);
+      void Promise.resolve(this.onFirstTurnCompleted(session.id, firstUserMsg.content))
+        .then((completed) => {
+          if (completed === false) this.autoNamingAttempted.delete(session.id);
+        })
+        .catch((err) => {
+          console.warn(`[ws-bridge] Auto-naming callback failed for session ${session.id}:`, err);
+          this.autoNamingAttempted.delete(session.id);
+        });
     }
   }
 
@@ -1002,6 +1014,12 @@ export class WsBridge {
 
     // Handle permission requests
     if (msg.type === "permission_request") {
+      if (this.agentMcpBridge?.handleAdapterPermissionRequest?.(session.id, msg.request, (response) => {
+        session.adapter?.sendBrowserMessage(response);
+      })) {
+        return;
+      }
+
       session.pendingPermissions.set(msg.request.request_id, msg.request);
       this.persistSession(session);
       this.webhookManager?.emit("permission.requested", session.id, {
@@ -1143,10 +1161,15 @@ export class WsBridge {
 
     if (!backendConnected) {
       if (this.onCLIRelaunchNeeded) {
-        // Backend is dead but we're about to relaunch — tell browser we're starting
-        this.sendToBrowser(ws, { type: "cli_launching" });
-        console.log(`[ws-bridge] Browser connected but backend is dead for session ${sessionId}, requesting relaunch`);
-        this.onCLIRelaunchNeeded(sessionId);
+        const accepted = this.onCLIRelaunchNeeded(sessionId);
+        if (accepted !== false) {
+          // Backend is dead but we're about to relaunch — tell browser we're starting
+          this.sendToBrowser(ws, { type: "cli_launching" });
+          console.log(`[ws-bridge] Browser connected but backend is dead for session ${sessionId}, requesting relaunch`);
+        } else {
+          this.sendToBrowser(ws, { type: "cli_disconnected" });
+          console.log(`[ws-bridge] Browser connected but backend is dead for session ${sessionId}; relaunch declined`);
+        }
       } else {
         this.sendToBrowser(ws, { type: "cli_disconnected" });
       }
