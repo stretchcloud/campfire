@@ -29,14 +29,13 @@ import { AgentMcpBridge } from "./agent-mcp-bridge.js";
 import { SubSessionManager } from "./sub-session-manager.js";
 import { ProtocolMonitor } from "./protocol-monitor.js";
 import { ProactiveKeepalive } from "./proactive-keepalive.js";
-import { securityHeaders, rateLimiter } from "./security-middleware.js";
+import { securityHeaders, rateLimiter, tagRequestIp } from "./security-middleware.js";
 import { isAuthEnabled, verifyToken } from "./auth.js";
 import { WebhookManager } from "./webhook-manager.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { collectiveIntelligenceLayer } from "./collective-intelligence.js";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { isRunningAsService } from "./service.js";
-import { DmuxWatcher } from "./dmux-watcher.js";
 import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
 
@@ -71,7 +70,6 @@ process.once("SIGTERM", () => {
   _keepalive.destroy();
   process.exit(0);
 });
-const dmuxWatcher = new DmuxWatcher();
 
 // ── Restore persisted sessions from disk ────────────────────────────────────
 wsBridge.setStore(sessionStore);
@@ -261,12 +259,6 @@ function handleTerminalWs(req: Request, url: URL, server: WsServer, terminalId: 
   return upgradeOrFail(server, req, { kind: "terminal", terminalId });
 }
 
-function handleDmuxWs(req: Request, url: URL, server: WsServer): Response | undefined {
-  const authReject = checkWsAuth(req, url);
-  if (authReject) return authReject;
-  return upgradeOrFail(server, req, { kind: "dmux", cwd: url.searchParams.get("cwd") || "" });
-}
-
 function handleWsUpgrade(req: Request, url: URL, server: WsServer): Response | undefined {
   const cliMatch = CLI_RE.exec(url.pathname);
   if (cliMatch) return handleCliWs(req, url, server, cliMatch[1]);
@@ -277,8 +269,6 @@ function handleWsUpgrade(req: Request, url: URL, server: WsServer): Response | u
   const termMatch = TERMINAL_RE.exec(url.pathname);
   if (termMatch) return handleTerminalWs(req, url, server, termMatch[1]);
 
-  if (url.pathname === "/ws/dmux") return handleDmuxWs(req, url, server);
-
   return undefined;
 }
 
@@ -288,6 +278,10 @@ const server = Bun.serve<SocketData>({
     const url = new URL(req.url);
     const wsResult = handleWsUpgrade(req, url, server);
     if (wsResult) return wsResult;
+
+    // Tag the socket remote address so the rate limiter can bucket direct
+    // clients correctly (client-supplied headers alone are spoofable).
+    tagRequestIp(req, server.requestIP(req)?.address);
 
     // Hono handles the rest
     return app.fetch(req, server);
@@ -305,10 +299,6 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserOpen(ws, data.sessionId);
       } else if (data.kind === "terminal") {
         terminalManager.addBrowserSocket(ws);
-      } else if (data.kind === "dmux") {
-        const client = { cwd: data.cwd, send: (d: string) => ws.send(d) };
-        (ws as unknown as { _dmuxClient: typeof client })._dmuxClient = client;
-        dmuxWatcher.addClient(client);
       }
     },
     message(ws: ServerWebSocket<SocketData>, msg: string | Buffer) {
@@ -319,14 +309,6 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserMessage(ws, msg);
       } else if (data.kind === "terminal") {
         terminalManager.handleBrowserMessage(ws, msg);
-      } else if (data.kind === "dmux") {
-        try {
-          const parsed = JSON.parse(typeof msg === "string" ? msg : msg.toString());
-          const client = (ws as unknown as { _dmuxClient: import("./dmux-watcher.js").DmuxWatchClient })._dmuxClient;
-          if (client) dmuxWatcher.handleMessage(client, parsed);
-        } catch {
-          // Ignore malformed messages
-        }
       }
     },
     close(ws: ServerWebSocket<SocketData>) {
@@ -337,9 +319,6 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserClose(ws);
       } else if (data.kind === "terminal") {
         terminalManager.removeBrowserSocket(ws);
-      } else if (data.kind === "dmux") {
-        const client = (ws as unknown as { _dmuxClient: import("./dmux-watcher.js").DmuxWatchClient })._dmuxClient;
-        if (client) dmuxWatcher.removeClient(client);
       }
     },
   },

@@ -283,15 +283,20 @@ describe("Messages", () => {
     expect(useStore.getState().messages.get("s1")).toHaveLength(1);
   });
 
-  it("appendMessage: deduplicates by ID", () => {
+  it("appendMessage: deduplicates by ID, merging content instead of dropping", () => {
+    // Claude Code sends the same message ID in multiple parts (thinking,
+    // text, tool_use). appendMessage must keep a single ChatMessage per ID
+    // and merge the later part's content into it (text joined with a
+    // newline, contentBlocks concatenated) rather than appending a second
+    // message or discarding the new part.
     useStore.getState().addSession(makeSession("s1"));
     const msg = makeMessage({ id: "dup-1", content: "first" });
     useStore.getState().appendMessage("s1", msg);
-    useStore.getState().appendMessage("s1", { ...msg, content: "duplicate" });
+    useStore.getState().appendMessage("s1", { ...msg, content: "second part" });
 
     const messages = useStore.getState().messages.get("s1")!;
     expect(messages).toHaveLength(1);
-    expect(messages[0].content).toBe("first");
+    expect(messages[0].content).toBe("first\nsecond part");
   });
 
   it("appendMessage: allows messages without IDs (no dedup)", () => {

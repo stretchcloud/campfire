@@ -29,10 +29,16 @@ describe("settings-manager", () => {
       openrouterModel: DEFAULT_OPENROUTER_MODEL,
       moltbookApiKey: "",
       linearApiKey: "",
+      // Provider tokens default to empty strings
+      claudeOAuthToken: "",
+      openaiApiKey: "",
+      anthropicApiKey: "",
       embeddingProvider: "none",
       embeddingApiKey: "",
       embeddingModel: "",
       embeddingBaseUrl: "http://localhost:11434",
+      // Onboarding wizard has not been completed by default
+      onboardingCompleted: false,
       updatedAt: 0,
     });
   });
@@ -66,10 +72,15 @@ describe("settings-manager", () => {
       openrouterModel: "openai/gpt-4o-mini",
       moltbookApiKey: "",
       linearApiKey: "",
+      // Fields absent from the on-disk file are normalized to their defaults
+      claudeOAuthToken: "",
+      openaiApiKey: "",
+      anthropicApiKey: "",
       embeddingProvider: "none",
       embeddingApiKey: "",
       embeddingModel: "",
       embeddingBaseUrl: "http://localhost:11434",
+      onboardingCompleted: false,
       updatedAt: 123,
     });
   });
@@ -111,10 +122,15 @@ describe("settings-manager", () => {
       openrouterModel: DEFAULT_OPENROUTER_MODEL,
       moltbookApiKey: "",
       linearApiKey: "",
+      // Malformed values are normalized to defaults for all fields
+      claudeOAuthToken: "",
+      openaiApiKey: "",
+      anthropicApiKey: "",
       embeddingProvider: "none",
       embeddingApiKey: "",
       embeddingModel: "",
       embeddingBaseUrl: "http://localhost:11434",
+      onboardingCompleted: false,
       updatedAt: 0,
     });
   });

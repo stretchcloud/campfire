@@ -179,7 +179,6 @@ interface AppState {
   enqueueMessage: (sessionId: string, message: string) => void;
   dequeueMessage: (sessionId: string) => string | undefined;
   clearQueue: (sessionId: string) => void;
-  getQueue: (sessionId: string) => string[];
 
   // Plan mode actions
   setPreviousPermissionMode: (sessionId: string, mode: string) => void;
@@ -843,12 +842,6 @@ export const useStore = create<AppState>((set) => ({
     queue.delete(sessionId);
     return { messageQueue: queue };
   }),
-  getQueue: (_sessionId) => {
-    // Note: callers should use useStore.getState().messageQueue.get(sessionId) directly
-    // or subscribe via useStore((s) => s.messageQueue.get(sessionId))
-    return [];
-  },
-
   setReplaySpeed: (speed) => set({ replaySpeed: speed }),
   setReplayState: (state) => set({ replayState: state }),
   setReplaySessionId: (id) => set({ replaySessionId: id }),

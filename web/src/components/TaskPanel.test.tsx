@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 vi.mock("../api.js", () => ({
@@ -40,6 +40,13 @@ interface MockStoreState {
   taskPanelOpen: boolean;
   setTaskPanelOpen: ReturnType<typeof vi.fn>;
   prStatus: Map<string, { available: boolean; pr?: unknown } | null>;
+  // The following keys are read by TaskPanel and its child sections at render
+  // time, so the mock must provide them or renders throw.
+  sessionBackgroundAgents: Map<string, unknown[]>;
+  sessionNames: Map<string, string>;
+  sessionStatus: Map<string, string>;
+  mcpServers: Map<string, { name: string; status: string }[]>;
+  setCurrentSession: ReturnType<typeof vi.fn>;
 }
 
 let mockState: MockStoreState;
@@ -52,6 +59,11 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     taskPanelOpen: true,
     setTaskPanelOpen: vi.fn(),
     prStatus: new Map(),
+    sessionBackgroundAgents: new Map(),
+    sessionNames: new Map(),
+    sessionStatus: new Map(),
+    mcpServers: new Map(),
+    setCurrentSession: vi.fn(),
     ...overrides,
   };
 }
@@ -75,9 +87,17 @@ describe("TaskPanel", () => {
   });
 
   it("keeps a single scroll container for long MCP content even without tasks", () => {
-    // Regression coverage: Codex sessions do not render the Tasks list,
-    // so the panel itself must still provide vertical scrolling.
+    // Regression coverage: the panel content area must be the single vertical
+    // scroll container, even when the MCP section is expanded with content.
+    // The MCP section only renders when the session has MCP servers, and it is
+    // collapsed by default behind an "MCP Servers" toggle, so we seed a server
+    // and expand it before asserting.
+    resetStore({
+      mcpServers: new Map([["s1", [{ name: "test-server", status: "connected" }]]]),
+    });
     const { container } = render(<TaskPanel sessionId="s1" />);
+
+    fireEvent.click(screen.getByText("MCP Servers"));
 
     expect(screen.getByTestId("mcp-section")).toBeInTheDocument();
     expect(screen.getByTestId("task-panel-content")).toHaveClass("overflow-y-auto");
@@ -162,6 +182,8 @@ describe("CodexTokenDetailsSection", () => {
     });
     render(<CodexTokenDetailsSection sessionId="s1" />);
     expect(screen.getByText("Tokens")).toBeInTheDocument();
+    // The token rows are collapsed by default behind the "Tokens" toggle
+    fireEvent.click(screen.getByText("Tokens"));
     expect(screen.getByText("84.2k")).toBeInTheDocument();
     expect(screen.getByText("12.4k")).toBeInTheDocument();
   });
@@ -181,7 +203,9 @@ describe("CodexTokenDetailsSection", () => {
       }]]),
     });
     render(<CodexTokenDetailsSection sessionId="s1" />);
-    // Cached and reasoning should be visible
+    // Expand the collapsed "Tokens" toggle to reveal the row details
+    fireEvent.click(screen.getByText("Tokens"));
+    // Cached and reasoning should be visible since both are non-zero
     expect(screen.getByText("Cached")).toBeInTheDocument();
     expect(screen.getByText("41.2k")).toBeInTheDocument();
     expect(screen.getByText("Reasoning")).toBeInTheDocument();
@@ -203,6 +227,10 @@ describe("CodexTokenDetailsSection", () => {
       }]]),
     });
     render(<CodexTokenDetailsSection sessionId="s1" />);
+    // Expand the "Tokens" toggle so the absence assertions are meaningful
+    // (collapsed state would trivially hide every row)
+    fireEvent.click(screen.getByText("Tokens"));
+    expect(screen.getByText("Input")).toBeInTheDocument();
     expect(screen.queryByText("Cached")).not.toBeInTheDocument();
     expect(screen.queryByText("Reasoning")).not.toBeInTheDocument();
   });

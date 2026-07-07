@@ -45,15 +45,6 @@ const NAV_TOOLS: NavItem[] = [
     ),
   },
   {
-    label: "Dmux",
-    hash: "#/dmux",
-    icon: (
-      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-        <path d="M2 2h5.5v5.5H2V2zm.75.75v4h4v-4h-4zM8.5 2H14v5.5H8.5V2zm.75.75v4h4v-4h-4zM2 8.5h5.5V14H2V8.5zm.75.75v4h4v-4h-4zM8.5 8.5H14V14H8.5V8.5zm.75.75v4h4v-4h-4z" />
-      </svg>
-    ),
-  },
-  {
     label: "Orchestrator",
     hash: "#/orchestrator",
     icon: (

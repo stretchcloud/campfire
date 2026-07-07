@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+// Registers jest-dom matchers (toBeInTheDocument, etc.) with vitest's expect.
+// Without this import the assertions throw "Invalid Chai property".
+import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HomePage } from "./HomePage.js";
 import { useStore } from "../store.js";

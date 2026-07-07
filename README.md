@@ -34,7 +34,6 @@
   - [PWA & Mobile](#pwa--mobile)
   - [Auto-Naming](#auto-naming)
   - [Collective Intelligence](#collective-intelligence)
-  - [dmux Integration](#dmux-integration)
   - [Copy Output Button](#copy-output-button)
   - [Voice Input](#voice-input)
   - [Workspace File Tree](#workspace-file-tree)
@@ -1231,65 +1230,6 @@ Architecture details are documented in [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
-### dmux Integration
-
-Run multiple AI coding agents in parallel via [dmux](https://github.com/dimfeld/dmux), a tmux-based multiplexer that gives each agent its own pane and git worktree. Campfire provides a full dashboard for managing dmux sessions from the browser.
-
-**Prerequisites:** `dmux` and `tmux` must be installed and on your PATH.
-
-**Access:** Navigate to `#/dmux` in the sidebar.
-
-**Features:**
-
-| Feature | Description |
-|---------|-------------|
-| **Launch Form** | Select a project folder, pick agents, and launch dmux directly from the UI |
-| **Real-Time Status** | Live WebSocket-based status updates (no polling) showing each pane's agent, status, branch, and worktree |
-| **Pane Log Streaming** | Click "View Log" on any pane to stream its terminal output in real time via an embedded xterm.js viewer |
-| **Pane Focus & Keys** | Click a pane card to focus it in tmux, or send keystrokes directly from the browser |
-| **Config Editor** | Edit `.dmux/dmux.config.json` from the UI — session name, branch prefix, default prompt, auto-restart toggle. Supports both form and raw JSON editing |
-| **Pane Recording** | Record all pane output to JSONL files in `~/.campfire/dmux-recordings/` for later replay |
-| **Multi-Pane Replay** | Replay recordings with one xterm.js terminal per pane, playback controls (play/pause/restart), and speed options (1x/2x/4x/8x) |
-| **Embedded Terminal** | An integrated terminal runs alongside the status panel so you can interact with dmux directly |
-
-**How it works:**
-
-1. The browser connects to `/ws/dmux?cwd=<path>` — a dedicated WebSocket endpoint
-2. The server polls dmux status every 2 seconds and pushes diffs over WebSocket (only on change)
-3. Pane log streaming uses `tmux pipe-pane` to capture output to temp files, then `tail -f` to stream to subscribers
-4. Multiple browser tabs receive updates simultaneously
-
-**WebSocket protocol:**
-
-| Direction | Message | Purpose |
-|-----------|---------|---------|
-| server -> browser | `dmux_status` | Full status snapshot (panes, agents, branches) |
-| server -> browser | `dmux_pane_output` | Streamed pane terminal output |
-| browser -> server | `subscribe` | Watch a different cwd |
-| browser -> server | `focus_pane` | Focus a tmux pane |
-| browser -> server | `send_keys` | Send keystrokes to a pane |
-| browser -> server | `stream_pane` / `stop_stream_pane` | Start/stop pane output streaming |
-
-**REST API:**
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| `GET` | `/api/dmux/prereqs` | Check if dmux and tmux are installed |
-| `GET` | `/api/dmux/status?cwd=` | Get current session status |
-| `GET` | `/api/dmux/agents` | List available agents |
-| `POST` | `/api/dmux/pane/focus` | Focus a pane |
-| `POST` | `/api/dmux/pane/send` | Send keys to a pane |
-| `POST` | `/api/dmux/launch` | Build launch command |
-| `GET` | `/api/dmux/config?cwd=` | Read config |
-| `PATCH` | `/api/dmux/config?cwd=` | Update config (merge) |
-| `PUT` | `/api/dmux/config?cwd=` | Replace config |
-| `POST` | `/api/dmux/recording/start` | Start recording pane output |
-| `POST` | `/api/dmux/recording/stop` | Stop recording |
-| `GET` | `/api/dmux/recordings` | List recordings |
-| `GET` | `/api/dmux/recordings/:filename` | Load recording for replay |
-
-**Replay route:** `#/dmux/replay/:filename` opens the multi-pane replay viewer directly.
-
 ### Copy Output Button
 
 Hover over any user or assistant message to reveal a copy button. Copies the full text content to your clipboard with a checkmark confirmation animation. Uses the Clipboard API with a textarea fallback for insecure contexts (e.g. HTTP without TLS).
@@ -1764,7 +1704,6 @@ When authentication is enabled, all WebSocket upgrade endpoints are protected �
 | `/ws/cli/:sessionId` | Agent CLI connection | Allowed from localhost without token (CLI is spawned locally). Requires token from remote connections. |
 | `/ws/browser/:sessionId` | Browser session connection | Requires auth token. Valid invite tokens bypass auth (for collaboration). |
 | `/ws/terminal/:terminalId` | Embedded terminal PTY | Requires auth token. |
-| `/ws/dmux` | Dmux status streaming | Requires auth token. |
 
 **How tokens are passed:**
 - Query parameter: `?auth_token=<session_token>` (auto-appended by the frontend)
