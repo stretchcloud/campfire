@@ -120,7 +120,20 @@ Open [http://localhost:4567](http://localhost:4567). That's it.
 
 ### Option 3: Docker
 
-Build and run with Docker Compose (no Bun installation needed):
+Pull the pre-built image from the GitHub Container Registry (no clone, no build):
+
+```bash
+docker run -d \
+  --name campfire \
+  -p 4567:4567 \
+  -v campfire-data:/home/campfire/.campfire \
+  --restart unless-stopped \
+  ghcr.io/stretchcloud/campfire:latest
+```
+
+Open [http://localhost:4567](http://localhost:4567). Pin a specific version by tag instead of `latest`, e.g. `ghcr.io/stretchcloud/campfire:0.2.1`.
+
+Or build and run from source with Docker Compose (no Bun installation needed):
 
 ```bash
 # 1. Clone the repo
