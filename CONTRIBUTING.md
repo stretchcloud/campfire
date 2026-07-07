@@ -60,16 +60,16 @@ bun run typecheck    # Must pass with zero errors
 bun run test         # Tests must pass
 ```
 
-We use [SonarQube](https://sonarcloud.io) for code analysis. When possible, run `run_advanced_code_analysis` via the SonarQube MCP tool to catch issues before they ship.
+CI runs the same gate on every pull request and push to `main` (see `.github/workflows/ci.yml`): typecheck, the full test suite, and a production build. All three must pass before a PR can merge. A husky pre-commit hook runs typecheck + tests locally so failures surface before you push.
 
-### Key rules we follow
+### Key style rules we follow
 
-- **No nested ternaries** (S3358) — extract helper functions
-- **Readonly props** (S6759) — use `Readonly<>` on component props
-- **No `String(e)`** (S6551) — use `"Unknown error"` for catch blocks
-- **`globalThis` over `window`** (S7764)
-- **Labels associated with controls** (S6853) — use `htmlFor` + `id`
-- **Cognitive complexity under 15** (S3776) — extract logic into helpers
+- **No nested ternaries** — extract helper functions
+- **Readonly props** — use `Readonly<>` on component props
+- **No `String(e)`** — use `"Unknown error"` for catch blocks
+- **`globalThis` over `window`**
+- **Labels associated with controls** — use `htmlFor` + `id`
+- **Keep cognitive complexity low** — extract logic into helpers
 
 ## Project Structure
 
