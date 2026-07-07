@@ -16,6 +16,9 @@ interface StartRaceOptions {
   modelByBackend?: Partial<Record<BackendType, string>>;
   envSlug?: string;
   env?: Record<string, string>;
+  // Cost cascade mode: run backends sequentially in listed order (cheapest
+  // first by convention) and stop at the first successful non-empty patch.
+  cascade?: boolean;
 }
 
 const POLL_MS = 1000;
@@ -100,6 +103,16 @@ function resolveEnvVars(options: StartRaceOptions, backend: BackendType): Record
   return envVars;
 }
 
+// MetaHarness-style success check for cascade mode: an entry only wins the
+// cascade when it completed AND produced a non-empty change set. A run that
+// completed with zero changed files is an "empty patch" and escalates to the
+// next (more expensive) backend, same as a failure or timeout.
+function isCascadeSuccess(entry: RaceEntry): boolean {
+  if (entry.status !== "completed") return false;
+  const filesChanged = entry.filesChanged?.length ?? entry.metrics?.filesChanged ?? 0;
+  return filesChanged > 0;
+}
+
 export function collectChangedFiles(worktreePath: string): string[] {
   const changed = gitSafe(["diff", "--name-only"], worktreePath).split(/\r?\n/).filter(Boolean);
   const staged = gitSafe(["diff", "--name-only", "--cached"], worktreePath).split(/\r?\n/).filter(Boolean);
@@ -130,6 +143,7 @@ export class RaceController {
       status: "running",
       createdAt: Date.now(),
       entries: [],
+      cascade: options.cascade || undefined,
     };
     saveRace(race);
     void this.runRace(raceId, options);
@@ -182,10 +196,17 @@ export class RaceController {
       const entries = options.backends.map((backendType) => this.createEntry(race, backendType, options));
       race.entries = entries;
       saveRace(race);
-      await Promise.all(entries.map((entry) => this.runEntry(raceId, entry, options.prompt, control)));
+      if (options.cascade) {
+        await this.runCascade(raceId, entries, options.prompt, control);
+      } else {
+        await Promise.all(entries.map((entry) => this.runEntry(raceId, entry, options.prompt, control)));
+      }
       const latest = getRace(raceId);
       if (latest && latest.status === "running") {
-        latest.status = latest.entries.some((entry) => entry.status === "failed" || entry.status === "timeout") ? "failed" : "completed";
+        // A cascade that found a winner is a success even when cheaper entries
+        // before it failed — those failures are expected escalation steps.
+        const cascadeWon = Boolean(options.cascade) && latest.entries.some((entry) => isCascadeSuccess(entry));
+        latest.status = !cascadeWon && latest.entries.some((entry) => entry.status === "failed" || entry.status === "timeout") ? "failed" : "completed";
         latest.completedAt = Date.now();
         saveRace(latest);
       }
@@ -197,6 +218,34 @@ export class RaceController {
       saveRace(latest);
     } finally {
       this.active.delete(raceId);
+    }
+  }
+
+  // Cost cascade: run entries one at a time in the order the user listed them
+  // (cheapest first by convention). The prompt is only sent to a backend once
+  // every entry before it failed, timed out, or produced an empty patch, so
+  // skipped backends never incur model cost. Sessions and worktrees are still
+  // created upfront so cancelRace and pickWinner behave exactly like parallel
+  // races — an idle CLI that never receives a prompt costs nothing.
+  private async runCascade(raceId: string, entries: RaceEntry[], prompt: string, control: { cancelled: boolean }): Promise<void> {
+    let winnerIndex = -1;
+    for (let index = 0; index < entries.length; index++) {
+      if (control.cancelled) return; // cancelRace already finalized entry states
+      await this.runEntry(raceId, entries[index], prompt, control);
+      if (control.cancelled) return;
+      if (isCascadeSuccess(entries[index])) {
+        winnerIndex = index;
+        break;
+      }
+    }
+    if (winnerIndex === -1) return; // cascade exhausted without a success
+    for (const remaining of entries.slice(winnerIndex + 1)) {
+      // Never prompted, so no cost was incurred. Kill the idle session and
+      // mark the entry skipped so the UI can tell it apart from a pending one.
+      await this.launcher.kill(remaining.sessionId).catch(() => false);
+      remaining.status = "skipped";
+      remaining.completedAt = Date.now();
+      this.updateEntry(raceId, remaining);
     }
   }
 
