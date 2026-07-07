@@ -43,7 +43,6 @@
   - [Message Queue](#message-queue)
   - [Kanban Task Board](#kanban-task-board)
   - [Authentication](#authentication)
-  - [Adopt Running Sessions](#adopt-running-sessions)
   - [Thinking Effort (Codex)](#thinking-effort-codex)
   - [Skills & Plugins Management](#skills--plugins-management)
   - [Drag & Drop Upload](#drag--drop-upload)
@@ -195,8 +194,8 @@ Run parallel sessions across seven agent backends from a single browser tab. Eac
 |---------|----------|-----------------|
 | Claude Code | NDJSON over WebSocket | Spawned with `--sdk-url` flag |
 | Codex | JSON-RPC over stdio | Spawned as `codex app-server` |
-| Goose | JSON-RPC 2.0 (ACP) over stdio | Spawned as `goose acp` |
-| Aider | stdout parsing over stdio | Spawned as `aider --no-pretty --yes` |
+| Goose | JSON-RPC 2.0 (ACP) over stdio | Spawned as `goose acp --with-builtin developer --with-builtin memory` |
+| Aider | stdout parsing over stdio | Spawned as `aider --no-pretty --yes --no-auto-commits` |
 | OpenHands | JSON-RPC 2.0 (ACP) over stdio | Spawned as `openhands acp` |
 | OpenClaw | JSON-RPC 2.0 (ACP) over stdio | Spawned as `openclaw acp`; requires `OPENCLAW_GATEWAY_TOKEN` + `OPENCLAW_GATEWAY_URL` |
 | OpenCode | JSON-RPC 2.0 (ACP) over stdio | Spawned as `opencode acp`; model set via `OPENCODE_MODEL` |
@@ -258,7 +257,7 @@ Share any session with teammates using invite links. Multiple people can watch a
    - **Spectator** — watch-only (cannot send messages or vote)
 4. Copy the generated link and share it
 
-The invite link looks like `http://localhost:4567/#/join/<token>`. When someone opens it, they join the session with the assigned role.
+The invite link looks like `http://localhost:4567/#/join/<token>`. When someone opens it, they join the session with the assigned role. **Invite links expire after 24 hours** — they are bearer credentials that bypass password auth, so generate a fresh one when you need to re-share.
 
 **Presence indicators:**
 
@@ -456,6 +455,18 @@ The gallery supports filtering and sorting:
 
 Each entry captures a snapshot of the session at publish time: backend type, model, total cost, duration, lines added/removed, and number of turns. Click **View Replay** on any card to watch the session.
 
+**Public share links:**
+
+Generate a tokenized public replay link for any gallery entry (`POST /api/gallery/:id/public-link`). Anyone with the link can watch the session replay at `#/public-replay/<token>` — no login required, no app chrome, read-only.
+
+**ClawHub export:**
+
+Gallery entries can be exported as ClawHub-compatible skills (`SKILL.md` with stats and a replay link) and published via the `clawhub` CLI. Browse and install shared skills from the **ClawHub** page (`#/clawhub`) in the sidebar.
+
+**Moltbook posting:**
+
+Entries can also be posted as "molts" to [Moltbook](https://moltbook.com), a social network for AI agents (`POST /api/gallery/:id/post-moltbook`; configure the agent account in Settings).
+
 ```bash
 # List gallery entries with filters
 curl "http://localhost:4567/api/gallery?backend=claude&sortBy=votes&featured=true"
@@ -618,6 +629,8 @@ Linear API responses are cached with a 60-second TTL to reduce API calls. Concur
 ### Webhooks
 
 Receive HTTP POST notifications when events happen in your sessions. Configure webhooks with event filters, HMAC-SHA256 signing, and automatic retries.
+
+**Inbound (OpenClaw):** Campfire also accepts inbound calls — `POST /api/webhooks/openclaw` (token-guarded) spawns an OpenClaw session from an external trigger, and `POST /api/openclaw/inbound` delivers agent messages from the OpenClaw channel plugin into an existing session.
 
 **How to set up a webhook:**
 
@@ -1228,7 +1241,7 @@ curl -X POST http://localhost:4567/api/sessions/route-task \
 | Capabilities | `POST /sessions/route-task`, `GET /capabilities`, `GET /capabilities/history`, `POST /capabilities/feedback` |
 | Shared Context | `GET /sessions/:id/context/stream`, `GET /sessions/:id/context/consensus`, `GET /sessions/:id/context/thread/:fragmentId` |
 
-Architecture details are documented in [`CLAUDE.md`](CLAUDE.md).
+Architecture details are documented in [`CLAUDE.md`](CLAUDE.md). A design study for the next iteration of the memory layer lives at [`docs/design/semantic-memory-v2.md`](docs/design/semantic-memory-v2.md).
 
 ---
 
@@ -1320,17 +1333,21 @@ Open **Agent Races** at `#/races` from the sidebar to run the same prompt across
 4. The comparison view shows status, wall-clock time, cost, changed file count, line changes, output summary, and a loadable diff for each entry.
 5. Click **Merge** on the winning entry to merge its race branch into the repository root and clean up the other race worktrees.
 
+**Cost cascade mode:** check **"Cost cascade — run backends in order, stop at first success"** to run the selected backends *sequentially* in the order you listed them (put the cheapest first) instead of in parallel. The race stops at the first entry that completes with a non-empty change set; failures, timeouts, and empty patches escalate to the next backend, and never-started entries are marked `skipped`. Pass `cascade: true` in the REST payload for the same behavior.
+
 Race results are saved to `~/.campfire/races/` so completed comparisons remain available after a server restart.
 
 **Environment detection:**
 
 Every launched session scans its working directory for project signals such as Supabase, Stripe, Vercel/Next.js, Prisma, Docker, Fly.io, GitHub Actions, and database configuration. Detected rules appear in the TaskPanel environment card with required environment variables marked as configured or missing. For Claude and Codex sessions, detected MCP servers are injected automatically unless `CAMPFIRE_AUTO_INJECT_ENV_MCP=0` is set.
 
+**MCP injection policy:** auto-injected servers are governed by a default-deny policy (`web/server/mcp-policy.ts`) — only servers that exactly match Campfire's curated environment-rules catalog and pass a static scan (shell metacharacters, inline-eval flags, plaintext `http://` URLs to non-local hosts) are admitted; everything else is blocked and logged. Servers you add explicitly through the MCP panel are never blocked, but the same scan runs in warn-only mode for visibility. Set `CAMPFIRE_MCP_AUTO_INJECT_POLICY=permissive` to restore scan-free auto-injection (findings are still logged).
+
 **REST API:**
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| `POST` | `/api/races` | Start a race with `{ prompt, repoRoot, backends, baseBranch?, modelByBackend? }` |
+| `POST` | `/api/races` | Start a race with `{ prompt, repoRoot, backends, baseBranch?, modelByBackend?, cascade? }` |
 | `GET` | `/api/races` | List saved races |
 | `GET` | `/api/races/:id` | Get race status and entries |
 | `GET` | `/api/races/:id/entries/:entryId/diff` | Load a race entry's git diff |
@@ -1345,7 +1362,7 @@ When the agent is busy processing a request (status "running"), new messages are
 - **Queue indicator** — a badge shows the number of queued messages with a clear button
 - **Auto-send** — queued messages are sent one at a time when the agent becomes idle
 - **System notification** — a "Queued: ..." message appears in the chat timeline so you know the message was captured
-- Works seamlessly with all backends (Claude Code, Codex, Goose, Aider, OpenHands)
+- Works seamlessly with all backends (Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, OpenCode)
 
 ### Kanban Task Board
 
@@ -1381,7 +1398,7 @@ CAMPFIRE_PASSWORD=your-secret bunx the-campfire
 ```
 
 **Features:**
-- Password-based login with SHA256 hashing
+- Password-based login with salted scrypt hashing (legacy unsalted SHA-256 hashes are migrated automatically on the next successful login)
 - 7-day rotating session tokens stored in `~/.campfire/auth.json`
 - Auth middleware protects all `/api/*` routes
 - WebSocket connections validated on upgrade
@@ -1393,22 +1410,6 @@ CAMPFIRE_PASSWORD=your-secret bunx the-campfire
 - `POST /api/auth/logout` — Invalidate session token
 - `POST /api/auth/setup` — Initial password setup
 - `POST /api/auth/disable` — Remove authentication
-
----
-
-### Adopt Running Sessions
-
-Detect and adopt Claude Code CLI processes that are already running outside of Campfire. Useful when you started a session in the terminal and want to bring it into the web UI.
-
-**How it works:**
-1. Go to the Home page and expand the **"Adopt Running Sessions"** section at the bottom
-2. Campfire scans `ps aux` for running `claude --sdk-url` processes
-3. Each detected process shows its PID, model, working directory, and command line
-4. Click **"Adopt"** to bring the session into Campfire — the old process is killed and relaunched with `--resume` to preserve conversation history
-
-**API endpoints:**
-- `GET /api/sessions/detect` — Scan for running Claude Code processes
-- `POST /api/sessions/adopt` — Adopt a detected process by PID
 
 ---
 
@@ -1720,7 +1721,7 @@ When authentication is enabled, all WebSocket upgrade endpoints are protected �
 CAMPFIRE_PASSWORD=mypassword bunx the-campfire
 
 # Option 2: Set password via API
-curl -X POST http://localhost:4567/api/auth/set-password \
+curl -X POST http://localhost:4567/api/auth/setup \
   -H 'Content-Type: application/json' \
   -d '{"password": "mypassword"}'
 ```
@@ -1737,7 +1738,7 @@ curl -X POST http://localhost:4567/api/auth/login \
 
 The frontend stores this token in `localStorage` and automatically includes it in all API requests (via `Authorization` header) and WebSocket connections (via `?auth_token=` query parameter).
 
-**Collaboration:** Invite tokens (generated via the Share menu) still work when auth is enabled. A valid invite token grants the specified role (collaborator/spectator) without requiring a session auth token.
+**Collaboration:** Invite tokens (generated via the Share menu) still work when auth is enabled. A valid invite token grants the specified role (collaborator/spectator) without requiring a session auth token. Invite tokens expire 24 hours after creation.
 
 ---
 
@@ -1858,7 +1859,7 @@ services:
 
 volumes:
   campfire-data:
-  campfire-sessions:
+  campfire-data:
 ```
 
 ### Environment Variables
@@ -1896,7 +1897,10 @@ services:
       - /usr/local/bin/claude:/usr/local/bin/claude:ro
       - /usr/local/bin/codex:/usr/local/bin/codex:ro
       # Mount authentication
-      - ~/.claude:/home/campfire/.claude:ro
+      # Writable — Claude Code updates its own config at runtime. Prefer
+      # copying a snapshot (docker cp) if you don't want the container
+      # touching your host ~/.claude.
+      - ~/.claude:/home/campfire/.claude
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
 ```
@@ -2024,8 +2028,22 @@ All endpoints are under `/api`.
 | `POST` | `/api/sessions/:id/invite` | Create a shareable invite link |
 | `GET` | `/api/sessions/join/:token` | Resolve an invite token |
 | `POST` | `/api/sessions/create-with-progress` | Create a container session with SSE progress (returns `text/event-stream`) |
-| `GET` | `/api/sessions/detect` | Detect running Claude Code CLI processes |
-| `POST` | `/api/sessions/adopt` | Adopt a detected process into Campfire |
+
+### Agents (autonomous profiles)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/agents` | List agent profiles |
+| `GET` | `/api/agents/:id` | Get a profile |
+| `POST` | `/api/agents` | Create a profile |
+| `PUT` | `/api/agents/:id` | Update a profile |
+| `DELETE` | `/api/agents/:id` | Delete a profile |
+| `POST` | `/api/agents/:id/toggle` | Enable/disable a profile |
+| `POST` | `/api/agents/:id/run` | Trigger a manual run |
+| `POST` | `/api/agents/:id/webhook` | Trigger via webhook (requires webhook trigger enabled) |
+| `GET` | `/api/agents/:id/executions` | Execution history |
+| `GET` | `/api/agents/:id/export` | Export a portable profile |
+| `POST` | `/api/agents/import` | Import a profile (created disabled) |
 
 ### Agent Races
 
@@ -2092,6 +2110,15 @@ All endpoints are under `/api`.
 | `DELETE` | `/api/gallery/:id` | Delete an entry |
 | `POST` | `/api/gallery/:id/vote` | Vote on an entry (`{"direction": 1}` or `{"direction": -1}`) |
 | `POST` | `/api/gallery/:id/feature` | Toggle featured status |
+| `POST` | `/api/gallery/:id/public-link` | Create a tokenized public replay link |
+| `GET` | `/api/public-replay/:token` | Resolve a public replay (unauthenticated) |
+| `GET` | `/api/gallery/:id/skill-preview` | Preview the ClawHub SKILL.md export |
+| `POST` | `/api/gallery/:id/export-clawhub` | Publish the entry to ClawHub |
+| `GET` | `/api/clawhub/search` | Search ClawHub skills |
+| `GET` | `/api/clawhub/status` | Check clawhub CLI availability |
+| `POST` | `/api/clawhub/install` | Install a ClawHub skill |
+| `GET` | `/api/moltbook/status` | Check Moltbook agent registration |
+| `POST` | `/api/gallery/:id/post-moltbook` | Post the entry to Moltbook |
 
 ### Webhooks
 
@@ -2104,6 +2131,8 @@ All endpoints are under `/api`.
 | `DELETE` | `/api/webhooks/:id` | Delete a webhook |
 | `POST` | `/api/webhooks/:id/toggle` | Enable/disable a webhook |
 | `POST` | `/api/webhooks/:id/test` | Send a test event |
+| `POST` | `/api/webhooks/openclaw` | Inbound: spawn an OpenClaw session (token-guarded) |
+| `POST` | `/api/openclaw/inbound` | Inbound: deliver an OpenClaw channel message to a session |
 
 ### Adapters
 
@@ -2325,6 +2354,10 @@ Protocol details are documented in [`CLAUDE.md`](CLAUDE.md).
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, dev mode, project structure, testing, and how to write adapters.
 
 ---
+
+## Security
+
+Found a vulnerability? Please report it privately — see [SECURITY.md](SECURITY.md). The same document covers hardening notes for self-hosters (auth, invite-link semantics, MCP injection policy).
 
 ## License
 

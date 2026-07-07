@@ -1,8 +1,8 @@
 {
   "name": "the-campfire-workspace",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Workspace root for Campfire — the collaborative web platform for AI coding agents. The published package lives in web/.",
+  "description": "Workspace root for Campfire \u2014 the collaborative web platform for AI coding agents. The published package lives in web/.",
   "scripts": {
     "dev": "cd web && bun run dev",
     "build": "cd web && bun run build",
