@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 
+// Register jest-dom matchers (toBeInTheDocument, etc.) for this file's run.
+// The shared test-setup.ts does not register them, so each component test
+// file imports @testing-library/jest-dom directly (same as TopBar/Sidebar).
+import "@testing-library/jest-dom";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../store.js";

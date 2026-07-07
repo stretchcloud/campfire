@@ -546,7 +546,7 @@ describe("launch", () => {
     const tmpBinDir = mkdtempSync(join(tmpdir(), "codex-test-"));
     const fakeCodex = join(tmpBinDir, "codex");
     const fakeNode = join(tmpBinDir, "node");
-    const { writeFileSync: realWriteFileSync, chmodSync: realChmodSync } = require("node:fs");
+    const { writeFileSync: realWriteFileSync, chmodSync: realChmodSync, realpathSync: realRealpathSync } = require("node:fs");
     realWriteFileSync(fakeCodex, "#!/usr/bin/env node\n");
     realWriteFileSync(fakeNode, "#!/bin/sh\n");
     realChmodSync(fakeCodex, 0o755);
@@ -563,8 +563,13 @@ describe("launch", () => {
 
     await vi.dynamicImportSettled();
 
-    // Sibling node exists, so it should use explicit node invocation
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining(`${fakeNode} ${fakeCodex} app-server`));
+    // Sibling node exists, so it should use explicit node invocation.
+    // The launcher resolves the codex script via realpathSync (to follow
+    // npm/nvm symlinks to the real JS entry point), so the expected script
+    // path must be realpath-resolved too — on macOS tmpdir() itself lives
+    // behind a symlink (/var -> /private/var).
+    const realCodexScript = realRealpathSync(fakeCodex);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining(`${fakeNode} ${realCodexScript} app-server`));
     logSpy.mockRestore();
 
     // Cleanup

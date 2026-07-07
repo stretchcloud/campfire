@@ -4,12 +4,13 @@ This file provides guidance to Claude Code & Codex when working with code in thi
 
 ## Code verification
 
-After generating or modifying code, verify it by calling `run_advanced_code_analysis` before committing.
+After generating or modifying code, verify it by calling `run_advanced_code_analysis` (if that tool is available in your environment) before committing. Always run `bun run typecheck` and `bun run test` regardless.
 
 ## What This Is
 
-Campfire — a web UI for Claude Code & Codex. 
-It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Claude Code CLI to provide a browser-based interface for running multiple Claude Code sessions with streaming, tool call visibility, and permission control.
+Campfire — a collaborative web platform for AI coding agents (Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, OpenCode). It provides a browser-based interface for running multiple agent sessions with streaming, tool call visibility, and permission control.
+
+Claude Code runs over a long-lived **stdio stream-json transport** by default (`claude -p --input-format stream-json --output-format stream-json --permission-prompt-tool stdio`), wrapped in `claude-stdio-adapter.ts`. The legacy reverse-engineered `--sdk-url` WebSocket transport is still available behind `CAMPFIRE_CLAUDE_TRANSPORT=sdk-url`. All other backends run through stdio adapters (JSON-RPC or stdout parsing).
 
 ## Development Commands
 
@@ -57,15 +58,16 @@ All UI components used in the message/chat flow **must** be represented in the P
 ### Data Flow
 
 ```
-Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJSON) ←→ Claude Code CLI
-     :4567              /ws/browser/:id        :4567        /ws/cli/:id         (--sdk-url)
+Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ AgentAdapter (stdio) ←→ Agent CLI
+     :4567          /ws/browser/:id       :4567      NDJSON / JSON-RPC     (claude, codex, goose, …)
 ```
 
 1. Browser sends a "create session" REST call to the server
-2. Server spawns `claude --sdk-url ws://localhost:4567/ws/cli/SESSION_ID` as a subprocess
-3. CLI connects back to the server over WebSocket using NDJSON protocol
-4. Server bridges messages between CLI WebSocket and browser WebSocket
+2. Server spawns the backend CLI as a subprocess (Claude Code: `claude -p --input-format stream-json --output-format stream-json --permission-prompt-tool stdio`)
+3. An `AgentAdapter` translates the backend's stdio protocol into normalized browser messages
+4. Server bridges messages between the adapter and browser WebSockets (`ws-bridge.ts`)
 5. Tool calls arrive as `control_request` (subtype `can_use_tool`) — browser renders approval UI, server relays `control_response` back
+6. Legacy path: with `CAMPFIRE_CLAUDE_TRANSPORT=sdk-url`, Claude instead connects back over `/ws/cli/:id` (`--sdk-url` WebSocket, NDJSON)
 
 ### All code lives under `web/`
 
@@ -75,7 +77,7 @@ Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJS
   - `cli-launcher.ts` — Spawns/kills/relaunches Claude Code CLI processes. Handles `--resume` for session recovery. Persists session state across server restarts.
   - `session-store.ts` — JSON file persistence to `~/.campfire/sessions/`. Debounced writes.
   - `session-types.ts` — All TypeScript types for CLI messages (NDJSON), browser messages, session state, permissions.
-  - `routes.ts` — REST API: session CRUD, filesystem browsing, environment management.
+  - `routes.ts` — backwards-compat shim; the REST API lives in `routes/*.ts` (session CRUD, filesystem browsing, environments, git, cron, gallery, webhooks, agents, races, orchestrator, …).
   - `env-manager.ts` — CRUD for environment profiles stored in `~/.campfire/envs/`.
 
 - **`web/src/`** — React 19 frontend
@@ -90,9 +92,9 @@ Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJS
 
 ### WebSocket Protocol
 
-The CLI uses NDJSON (newline-delimited JSON). Key message types from CLI: `system` (init/status), `assistant`, `result`, `stream_event`, `control_request`, `tool_progress`, `tool_use_summary`, `keep_alive`. Messages to CLI: `user`, `control_response`, `control_request` (for interrupt/set_model/set_permission_mode).
+The Claude CLI uses NDJSON (newline-delimited JSON) over stdio (or the legacy `--sdk-url` WebSocket). Key message types from CLI: `system` (init/status), `assistant`, `result`, `stream_event`, `control_request`, `tool_progress`, `tool_use_summary`, `keep_alive`. Messages to CLI: `user`, `control_response`, `control_request` (for interrupt/set_model/set_permission_mode).
 
-Full protocol documentation is in `WEBSOCKET_PROTOCOL_REVERSED.md`.
+Protocol references: pinned upstream schema snapshots live in `web/server/protocol/{claude,codex}-upstream/` (guarded by the `*-protocol-contract.test.ts` and `*-protocol-drift.test.ts` suites), Codex message mapping is documented in `web/CODEX_MAPPING.md`, and raw wire recordings in `~/.campfire/recordings/` capture real traffic.
 
 ### Session Lifecycle
 
@@ -214,7 +216,7 @@ Browser (React 19) ←→ WebSocket ←→ Hono Server (Bun) ←→ Agent Backen
 - Enriches PATH for binary resolution (handles version managers like nvm, volta, fnm)
 - Instantiates all managers: `CliLauncher`, `WsBridge`, `SessionStore`, `TerminalManager`, `PRPoller`, `RecorderManager`, `CronScheduler`, `WorktreeTracker`, `WebhookManager`, `AdapterRegistry`
 - WebSocket routing: `/ws/cli/:id` (agent backends), `/ws/browser/:id` (browsers), `/ws/terminal/:id` (PTY)
-- Mounts REST API under `/api` from `routes.ts`
+- Mounts REST API under `/api` from `routes/index.ts` (via the `routes.ts` compat shim)
 - Serves static files from `dist/` in production
 
 **`ws-bridge.ts`** - The Heart of the System
@@ -321,7 +323,7 @@ Each adapter:
 - **`update-checker.ts` + `service.ts`**: Check npm for updates, track service mode (launchd/systemd)
 - **`usage-limits.ts`**: Track account usage limits per backend
 
-**REST API (`routes.ts`):**
+**REST API (`routes/*.ts`, mounted via `routes/index.ts`):**
 - Session CRUD: create (with backend, model, permission mode, env, worktree, container options), list, get, rename, delete, archive, kill, relaunch, fork, invite links
 - Git: repo info, branches, worktrees, fetch, pull, PR status
 - Recordings: list, status, start/stop per session
@@ -442,7 +444,7 @@ Active tab toggles between "chat" and "diff" views
 9. **Adapter Registry**: Install community adapters from npm (packages with `campfireAdapter` field)
 10. **Embedded Terminal**: Full PTY terminal via `/ws/terminal/:id` with ANSI colors and resize support
 11. **Git Integration**: Branch tracking, worktrees, ahead/behind counts, PR status polling via `gh` CLI
-12. **Docker Containers**: Optional sandboxing with mounted `~/.claude` and working directory
+12. **Docker Containers**: Optional sandboxing with the working directory mounted at `/workspace`; provider auth (`~/.claude`, `~/.codex`) is seeded into the container as a writable copy via `docker cp`
 13. **PWA**: Installable on mobile with push notifications for permission requests
 14. **Auto-Naming**: Session titles generated via OpenRouter after first turn
 
@@ -474,7 +476,7 @@ All state is file-based (no database):
 - **Protocol contract tests**: `claude-protocol-contract.test.ts`, `codex-protocol-contract.test.ts`
 - **Protocol drift tests**: `claude-protocol-drift.test.ts`, `codex-protocol-drift.test.ts`
 - **Environments**: Node for server tests, jsdom for frontend/React tests
-- **Current status**: 257 pass, 166 fail (some jsdom/vitest compatibility issues with React 19)
+- **Current status**: all tests pass — keep it that way (the pre-commit hook runs `bun run typecheck && bun run test`)
 - **Husky pre-commit hook**: Runs `bun run typecheck && bun run test` automatically
 
 ---
@@ -538,7 +540,6 @@ campfire/
 ├── scripts/                  # Utility scripts (landing-start.sh)
 ├── CLAUDE.md                 # This file (project instructions)
 ├── README.md                 # User documentation
-├── WEBSOCKET_PROTOCOL_REVERSED.md # Protocol documentation
 └── TODO.md                   # Roadmap
 
 **Landing Page**

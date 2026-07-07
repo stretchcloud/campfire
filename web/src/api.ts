@@ -567,59 +567,6 @@ export interface WebhookInfo {
   lastDeliverySuccess?: boolean;
 }
 
-export interface DmuxPaneInfo {
-  id: string;
-  slug: string;
-  paneId: string;
-  tmuxTarget: string;
-  agent: string;
-  agentStatus: "idle" | "analyzing" | "waiting" | "working";
-  branchName: string;
-  worktreePath: string;
-  projectRoot: string;
-  isActive: boolean;
-}
-
-export interface DmuxSessionStatus {
-  running: boolean;
-  sessionName: string | null;
-  projectRoot: string | null;
-  panes: DmuxPaneInfo[];
-  totalPanes: number;
-}
-
-export interface DmuxAgentInfo {
-  id: string;
-  slug: string;
-  name: string;
-  available: boolean;
-}
-
-export interface DmuxLaunchConfig {
-  cwd: string;
-  agents?: string[];
-  prompt?: string;
-  branchPrefix?: string;
-}
-
-export interface DmuxConfigFile {
-  session_name?: string;
-  project_root?: string;
-  panes?: Array<{
-    id?: string;
-    slug?: string;
-    agent?: string;
-    pane_id?: string;
-    tmux_target?: string;
-    branch?: string;
-    worktree?: string;
-    status?: string;
-  }>;
-  default_prompt?: string;
-  branch_prefix?: string;
-  auto_restart?: boolean;
-}
-
 // Orchestrator types
 export interface OrchestratorStageInput {
   name: string;
@@ -696,30 +643,6 @@ export interface RaceInfo {
   entries: RaceEntryInfo[];
   winnerId?: string;
   error?: string;
-}
-
-export interface DmuxRecordingMeta {
-  filename: string;
-  cwd: string;
-  sessionName: string;
-  startedAt: number;
-  panes: string[];
-}
-
-export interface DmuxRecordingData {
-  header: {
-    _header: true;
-    version: 1;
-    cwd: string;
-    sessionName: string;
-    startedAt: number;
-    panes: string[];
-  };
-  entries: Array<{
-    ts: number;
-    tmuxTarget: string;
-    data: string;
-  }>;
 }
 
 export interface InstalledAdapterInfo {
@@ -959,37 +882,6 @@ export const api = {
   getSessionUsageLimits: (sessionId: string) =>
     get<UsageLimits>(`/sessions/${encodeURIComponent(sessionId)}/usage-limits`),
 
-  // dmux
-  checkDmuxPrereqs: () =>
-    get<{ dmux: { available: boolean; path: string | null }; tmux: { available: boolean; path: string | null } }>(
-      "/dmux/prereqs",
-    ),
-  getDmuxStatus: (cwd: string) =>
-    get<DmuxSessionStatus>(`/dmux/status?cwd=${encodeURIComponent(cwd)}`),
-  getDmuxAgents: () =>
-    get<DmuxAgentInfo[]>("/dmux/agents"),
-  focusDmuxPane: (tmuxTarget: string) =>
-    post<{ ok: boolean }>("/dmux/pane/focus", { tmuxTarget }),
-  sendToDmuxPane: (tmuxTarget: string, keys: string, enter?: boolean) =>
-    post<{ ok: boolean }>("/dmux/pane/send", { tmuxTarget, keys, enter }),
-  launchDmux: (config: DmuxLaunchConfig) =>
-    post<{ command: string }>("/dmux/launch", config),
-  stopDmux: (cwd: string) =>
-    post<{ ok: boolean }>("/dmux/stop", { cwd }),
-  getDmuxConfig: (cwd: string) =>
-    get<DmuxConfigFile>(`/dmux/config?cwd=${encodeURIComponent(cwd)}`),
-  updateDmuxConfig: (cwd: string, updates: Partial<DmuxConfigFile>) =>
-    patch<DmuxConfigFile>(`/dmux/config?cwd=${encodeURIComponent(cwd)}`, updates),
-  replaceDmuxConfig: (cwd: string, config: DmuxConfigFile) =>
-    put<{ ok: boolean }>(`/dmux/config?cwd=${encodeURIComponent(cwd)}`, config),
-  startDmuxRecording: (cwd: string) =>
-    post<{ ok: boolean }>("/dmux/recording/start", { cwd }),
-  stopDmuxRecording: () =>
-    post<{ filename: string | null }>("/dmux/recording/stop"),
-  listDmuxRecordings: () =>
-    get<DmuxRecordingMeta[]>("/dmux/recordings"),
-  getDmuxRecording: (filename: string) =>
-    get<DmuxRecordingData>(`/dmux/recordings/${encodeURIComponent(filename)}`),
 
   // Terminal
   spawnTerminal: (cwd: string, cols?: number, rows?: number) =>

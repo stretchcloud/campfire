@@ -104,7 +104,9 @@ describe("listSessions", () => {
     expect(mockFetch).toHaveBeenCalledOnce();
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe("/api/sessions");
-    expect(opts).toBeUndefined();
+    // GET requests always pass an auth headers object; with no auth token
+    // stored in localStorage it must be empty (no Authorization header).
+    expect(opts).toEqual({ headers: {} });
     expect(result).toEqual(sessions);
   });
 });
