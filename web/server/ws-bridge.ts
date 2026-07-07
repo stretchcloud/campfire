@@ -35,6 +35,7 @@ import type { CodexAdapter } from "./codex-adapter.js";
 import type { AgentAdapter } from "./adapter-types.js";
 import type { RecorderManager } from "./recorder.js";
 import type { CollectiveIntelligenceLayer } from "./collective-intelligence.js";
+import { evaluateAutoInjection, scanMcpServers } from "./mcp-policy.js";
 
 // ─── WebSocket data tags ──────────────────────────────────────────────────────
 
@@ -392,8 +393,18 @@ export class WsBridge {
     const servers = session.state.detected_environment?.mcpServers;
     if (!servers || Object.keys(servers).length === 0) return;
     if (process.env.CAMPFIRE_AUTO_INJECT_ENV_MCP === "0") return;
+
+    // Default-deny: detected_environment is persisted state and reachable
+    // from session-create payloads, so only curated, scan-clean servers may
+    // auto-inject (see mcp-policy.ts).
+    const verdict = evaluateAutoInjection(servers);
+    for (const finding of verdict.blocked) {
+      console.warn(`[ws-bridge] MCP auto-injection ${finding.severity} for session ${session.id}: ${finding.server} — ${finding.reason}`);
+    }
+    if (Object.keys(verdict.allowed).length === 0) return;
+
     this.environmentMcpInjected.add(session.id);
-    this.routeBrowserMessage(session, { type: "mcp_set_servers", servers });
+    this.routeBrowserMessage(session, { type: "mcp_set_servers", servers: verdict.allowed });
   }
 
   // ── Invite tokens ────────────────────────────────────────────────────
@@ -1775,6 +1786,15 @@ export class WsBridge {
     }
 
     if (this.interceptCIMessage(session, msg)) return;
+
+    // Visibility-only scan for explicit server sets (user, agent bridge,
+    // queued flushes). Never blocks — the user's own action wins — but
+    // suspicious configs are logged for the audit trail.
+    if (msg.type === "mcp_set_servers") {
+      for (const finding of scanMcpServers(msg.servers)) {
+        console.warn(`[ws-bridge] MCP scan ${finding.severity} for session ${session.id}: ${finding.server} — ${finding.reason}`);
+      }
+    }
 
     // RBAC enforcement: spectators can only subscribe/ack and read MCP status
     if (ws) {
