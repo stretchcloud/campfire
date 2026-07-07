@@ -2,6 +2,20 @@
 
 > Campfire began as a fork of [the-companion](https://github.com/The-Vibe-Company/companion) and diverged into a separate product. Pre-fork history (versions up to 0.42.0) lives in the upstream repository; Campfire's own releases start at 0.1.0.
 
+## 0.3.0 (2026-07-07)
+
+### Features
+
+* **memory:** semantic memory v2 — the full rebuild. Namespace-scoped storage (global / repo / session / agent), automatic v1→v2 schema migration, lazy decay with access-based reinforcement, composite scored retrieval (similarity × decay × confidence) with a no-embedding fallback, pinning, and eviction
+* **memory:** prompt enrichment now actually works — user messages are enriched with recalled memories under a 250 ms budget with per-session ordering guarantees; the UI shows a collapsible "recalled context" chip listing exactly what was injected
+* **memory:** LLM-backed consolidation (JUDGE→DISTILL→CONSOLIDATE) via OpenRouter with strict JSON validation and graceful concat fallback; triggers on turn boundaries, idle, session end, and manual
+* **memory:** MemoryPanel namespace overview with decayed-weight bars and pin/unpin; Settings → Memory section for decay half-lives, reinforce multipliers, and recall depths
+
+### Fixes
+
+* memory extraction no longer keyword-gated; thinking-block content is scrubbed before storage or promotion
+* global memory endpoint returned nothing structurally; consolidation duplicated rows on every run; zero-vectors no longer pollute vector search
+
 ## 0.2.1 (2026-07-07)
 
 ### Fixes
