@@ -28,6 +28,7 @@ let quitting = false;
 
 // ── Single instance ──────────────────────────────────────────────────────────
 if (!app.requestSingleInstanceLock()) {
+  console.log("[desktop] Another Campfire instance is already running — focusing it instead.");
   app.exit(0);
 }
 app.on("second-instance", () => {
@@ -109,10 +110,21 @@ async function bootAndLoad(win) {
     win.once("ready-to-show", () => win.show());
   }
 
+  // First launches can sit in Gatekeeper verification for a while — tell the
+  // user the wait is expected instead of looking hung.
+  const slowBootNote = setTimeout(() => {
+    win.webContents
+      .executeJavaScript(
+        `document.getElementById("s").textContent = "Still starting — the first launch can take a minute while macOS verifies the app…"`,
+      )
+      .catch(() => { /* window may have navigated */ });
+  }, 15000);
+
   let result;
   try {
     result = await serverManager.ensure();
   } catch (err) {
+    clearTimeout(slowBootNote);
     if (SMOKE) {
       console.error(`SMOKE_FAIL: ${err.message}`);
       app.exit(1);
@@ -128,6 +140,7 @@ async function bootAndLoad(win) {
     return;
   }
 
+  clearTimeout(slowBootNote);
   const origin = serverManager.origin();
   console.log(
     result.external

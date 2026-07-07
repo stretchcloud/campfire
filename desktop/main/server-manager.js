@@ -109,14 +109,30 @@ class ServerManager {
       if (!wasStopping && this.onUnexpectedExit) this.onUnexpectedExit(code);
     });
 
-    const ready = await waitForCampfire(this.port, 30000, () => this.child !== null);
+    // Generous deadline: on the very first launch Gatekeeper verifies the
+    // whole bundle (~400 MB) before and while the sidecar starts, which can
+    // take well over 30s on slower machines.
+    const ready = await waitForCampfire(this.port, 90000, () => this.child !== null);
     if (!ready) {
       this.stop();
       throw new Error(
-        "The Campfire server did not start.\nSee ~/.campfire/logs/desktop-server.log for details.",
+        "The Campfire server did not start.\n\n" +
+        `Recent server log (~/.campfire/logs/desktop-server.log):\n${this.logTail()}`,
       );
     }
     return { port: this.port, external: false };
+  }
+
+  /** Last few lines of the sidecar log, for error dialogs. */
+  logTail(lines = 12) {
+    try {
+      const { readFileSync } = require("node:fs");
+      const logPath = join(os.homedir(), ".campfire", "logs", "desktop-server.log");
+      const content = readFileSync(logPath, "utf8");
+      return content.split("\n").filter(Boolean).slice(-lines).join("\n");
+    } catch {
+      return "(log unavailable)";
+    }
   }
 
   /** Stop the sidecar (no-op when attached to an external server). */

@@ -2,6 +2,12 @@
 
 > Campfire began as a fork of [the-companion](https://github.com/The-Vibe-Company/companion) and diverged into a separate product. Pre-fork history (versions up to 0.42.0) lives in the upstream repository; Campfire's own releases start at 0.1.0.
 
+## 0.4.1 (2026-07-07)
+
+### Fixes
+
+* **desktop:** first-launch resilience — the server boot deadline is now 90 s (Gatekeeper verifies the whole ~400 MB bundle on first launch, which can exceed the old 30 s limit on slower machines), the splash explains the wait after 15 s instead of looking hung, the startup-failure dialog includes the recent server log tail, and launching a second instance logs that it is focusing the existing one
+
 ## 0.4.0 (2026-07-07)
 
 ### Features
