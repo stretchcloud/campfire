@@ -71,6 +71,17 @@ vi.mock("../api.js", () => ({
     disableAuth: (...args: unknown[]) => mockApi.disableAuth(...args),
   },
   setAuthToken: (...args: unknown[]) => mockApi.setAuthToken(...args),
+  // Mirrors the real constant exported by api.ts — the Memory tab seeds its
+  // draft from it when loaded settings carry no `memory` section.
+  DEFAULT_MEMORY_SETTINGS: {
+    decay: {
+      global: { halfLifeHours: 2160, reinforceMultiplier: 1.5 },
+      repo: { halfLifeHours: 720, reinforceMultiplier: 1.5 },
+      session: { halfLifeHours: 168, reinforceMultiplier: 1.2 },
+      agent: { halfLifeHours: 1440, reinforceMultiplier: 1.2 },
+    },
+    recallDepth: { session: 4, repo: 6, agent: 2, global: 3 },
+  },
 }));
 
 vi.mock("../analytics.js", () => ({
@@ -462,5 +473,108 @@ describe("SettingsPage", () => {
     expect(mockApi.login).toHaveBeenCalledWith("valid-password");
     expect(mockApi.setAuthToken).toHaveBeenCalledWith("new-session-token");
     expect(await screen.findByText("Saved")).toBeInTheDocument();
+  });
+});
+
+describe("SettingsPage - Memory tab", () => {
+  it("shows default memory settings (days) when the server has no memory section", async () => {
+    // Validates: with no `memory` in GET /settings, the Memory tab seeds from
+    // DEFAULT_MEMORY_SETTINGS — half-lives shown in days (90/30/7/60) and the
+    // default recall depths.
+    render(<SettingsPage />);
+    await waitForSettingsLoad();
+
+    openTab("Memory");
+
+    expect(document.getElementById("memory-halflife-global")).toHaveValue(90);
+    expect(document.getElementById("memory-halflife-repo")).toHaveValue(30);
+    expect(document.getElementById("memory-halflife-session")).toHaveValue(7);
+    expect(document.getElementById("memory-halflife-agent")).toHaveValue(60);
+    expect(document.getElementById("memory-depth-repo")).toHaveValue(6);
+    expect(document.getElementById("memory-depth-session")).toHaveValue(4);
+  });
+
+  it("saves memory settings converting days to hours and empty half-life to null", async () => {
+    // Validates: PUT /settings receives { memory } with halfLifeHours derived
+    // from the days inputs, and an empty half-life persists as null (never
+    // decays), matching the §3.1 settings contract.
+    mockApi.updateSettings.mockResolvedValueOnce({});
+    render(<SettingsPage />);
+    await waitForSettingsLoad();
+
+    openTab("Memory");
+    fireEvent.change(document.getElementById("memory-halflife-repo")!, {
+      target: { value: "14" },
+    });
+    fireEvent.change(document.getElementById("memory-halflife-global")!, {
+      target: { value: "" },
+    });
+    fireEvent.change(document.getElementById("memory-depth-agent")!, {
+      target: { value: "5" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Memory Settings" }));
+
+    await waitFor(() => {
+      expect(mockApi.updateSettings).toHaveBeenCalledWith({
+        memory: {
+          decay: {
+            global: { halfLifeHours: null, reinforceMultiplier: 1.5 },
+            repo: { halfLifeHours: 336, reinforceMultiplier: 1.5 },
+            session: { halfLifeHours: 168, reinforceMultiplier: 1.2 },
+            agent: { halfLifeHours: 1440, reinforceMultiplier: 1.2 },
+          },
+          recallDepth: { session: 4, repo: 6, agent: 5, global: 3 },
+        },
+      });
+    });
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+  });
+
+  it("rejects an invalid reinforce multiplier without calling the API", async () => {
+    // Validates: client-side validation blocks multipliers < 1 and surfaces
+    // an inline error instead of persisting bad settings.
+    render(<SettingsPage />);
+    await waitForSettingsLoad();
+
+    openTab("Memory");
+    fireEvent.change(document.getElementById("memory-reinforce-repo")!, {
+      target: { value: "0.5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Memory Settings" }));
+
+    expect(await screen.findByText(/reinforce multiplier must be/)).toBeInTheDocument();
+    expect(mockApi.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("loads server-provided memory settings into the form", async () => {
+    // Validates: when GET /settings includes a memory section, the form shows
+    // those values instead of defaults.
+    mockApi.getSettings.mockResolvedValueOnce({
+      openrouterApiKeyConfigured: false,
+      openrouterModel: "openrouter/free",
+      moltbookApiKeyConfigured: false,
+      memory: {
+        decay: {
+          global: { halfLifeHours: null, reinforceMultiplier: 2 },
+          repo: { halfLifeHours: 48, reinforceMultiplier: 1.5 },
+          session: { halfLifeHours: 168, reinforceMultiplier: 1.2 },
+          agent: { halfLifeHours: 1440, reinforceMultiplier: 1.2 },
+        },
+        recallDepth: { session: 1, repo: 2, agent: 3, global: 4 },
+      },
+    });
+
+    render(<SettingsPage />);
+    await waitForSettingsLoad();
+    openTab("Memory");
+
+    await waitFor(() => {
+      expect(document.getElementById("memory-halflife-repo")).toHaveValue(2);
+    });
+    // null half-life renders as an empty input (placeholder "never")
+    expect(document.getElementById("memory-halflife-global")).toHaveValue(null);
+    expect(document.getElementById("memory-reinforce-global")).toHaveValue(2);
+    expect(document.getElementById("memory-depth-global")).toHaveValue(4);
   });
 });

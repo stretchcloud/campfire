@@ -14,9 +14,23 @@ import type {
   DetectedEnvironment,
   DetectedEnvironmentRule,
   SubAgentUpdate,
+  MemoryEnrichmentItem,
 } from "../server/session-types.js";
 
-export type { SessionState, PermissionRequest, ContentBlock, BrowserIncomingMessage, BrowserOutgoingMessage, BackendType, SessionRole, PresenceViewer, VotingPolicy, PermissionVote, McpServerDetail, McpServerConfig, DetectedEnvironment, DetectedEnvironmentRule, SubAgentUpdate };
+export type { SessionState, PermissionRequest, ContentBlock, BrowserIncomingMessage, BrowserOutgoingMessage, BackendType, SessionRole, PresenceViewer, VotingPolicy, PermissionVote, McpServerDetail, McpServerConfig, DetectedEnvironment, DetectedEnvironmentRule, SubAgentUpdate, MemoryEnrichmentItem };
+
+/**
+ * Client-side record of a `memory_enriched` broadcast: the recalled memories
+ * that were injected into a user message. Stored per session keyed by the
+ * user message id (or the literal "latest" when no user message could be
+ * resolved), so the chat feed can render a "recalled context" chip next to
+ * the corresponding user message.
+ */
+export interface MemoryEnrichment {
+  items: MemoryEnrichmentItem[];
+  truncated?: boolean;
+  timestamp: number;
+}
 
 export interface ChatMessage {
   id: string;

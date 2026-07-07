@@ -6,6 +6,25 @@ vi.mock("node:child_process", () => ({
 }));
 vi.mock("node:crypto", () => ({ randomUUID: () => "test-uuid" }));
 
+// ws-bridge imports memory-consolidation for the §3.4 consolidation triggers.
+// Mock it for the whole file: (a) these tests assert the *wiring* (when the
+// triggers fire), not the pipeline itself; (b) the real implementation pulls
+// in semantic-memory → node:crypto createHash, which the fixed randomUUID
+// mock above would break.
+const mockConsolidation = vi.hoisted(() => ({
+  consolidate: vi.fn(async (ctx: { reason: string }) => ({
+    status: "ran" as const,
+    synthesisMethod: "none" as const,
+    knowledgeUpserted: 0,
+    fragmentsConsolidated: 0,
+    reason: ctx.reason,
+  })),
+  shouldConsolidateOnTurn: vi.fn(async () => false),
+  noteSessionActivity: vi.fn(),
+  stopIdleWatcher: vi.fn(),
+}));
+vi.mock("./memory-consolidation.js", () => mockConsolidation);
+
 import { WsBridge, type SocketData } from "./ws-bridge.js";
 import { SessionStore } from "./session-store.js";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -3467,5 +3486,345 @@ describe("invite token expiry", () => {
     vi.setSystemTime(new Date("2026-07-02T01:00:00Z"));
     expect(bridge.resolveInviteToken(token)).toBeNull();
     expect(bridge.resolveInviteTokenRole(token)).toBeNull();
+  });
+});
+
+// ─── Memory enrichment + consolidation triggers (semantic-memory v2 §3.4/§3.6) ─
+
+describe("Memory enrichment (user_message hook)", () => {
+  let cli: ReturnType<typeof makeCliSocket>;
+  let browser: ReturnType<typeof makeBrowserSocket>;
+
+  /** Fake collective-intelligence layer with a scriptable enrichUserMessage. */
+  function makeFakeCi(enrich: (...args: unknown[]) => unknown) {
+    return {
+      setBroadcast: vi.fn(),
+      processAgentMessage: vi.fn(),
+      processBrowserMessage: vi.fn(async () => null),
+      onSessionEnd: vi.fn(async () => {}),
+      enrichUserMessage: vi.fn(enrich as any),
+    };
+  }
+
+  beforeEach(() => {
+    mockConsolidation.consolidate.mockClear();
+    mockConsolidation.shouldConsolidateOnTurn.mockClear();
+    mockConsolidation.noteSessionActivity.mockClear();
+    cli = makeCliSocket("s1");
+    browser = makeBrowserSocket("s1");
+    bridge.handleCLIOpen(cli, "s1");
+    bridge.handleBrowserOpen(browser, "s1");
+    cli.send.mockClear();
+    browser.send.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("user_message: backend receives enriched content, history stores the original, memory_enriched carries the history id", async () => {
+    // Validates §3.6.1-3.6.4 end-to-end on the Claude CLI path: the block is
+    // prepended for the backend, messageHistory keeps what the user typed
+    // (replay must show the real prompt), and the memory_enriched broadcast
+    // references the history entry id so the UI can attach the recall chip.
+    const items = [
+      { id: "k1", kind: "knowledge", namespace: "global", summary: "Use bun for scripts", tag: "tooling", weight: 1 },
+    ];
+    const block = "--- Campfire memory (auto-recalled; may be stale) ---\nKnowledge:\n- [tooling] Use bun for scripts\n--- end memory ---";
+    const ci = makeFakeCi(async () => ({ items, block }));
+    bridge.setCollectiveIntelligence(ci as any);
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "What runtime do we use?",
+    }));
+
+    await vi.waitFor(() => expect(cli.send).toHaveBeenCalledTimes(1));
+
+    // Backend receives block + "\n\n" + original prompt
+    const sent = JSON.parse((cli.send.mock.calls[0][0] as string).trim());
+    expect(sent.type).toBe("user");
+    expect(sent.message.content).toBe(`${block}\n\nWhat runtime do we use?`);
+
+    // History stores the ORIGINAL user text with a stable id
+    const session = bridge.getSession("s1")!;
+    const userEntry = session.messageHistory.find((m) => m.type === "user_message") as
+      { type: "user_message"; content: string; id?: string };
+    expect(userEntry.content).toBe("What runtime do we use?");
+    expect(userEntry.id).toMatch(/^user-\d+-\d+$/);
+
+    // memory_enriched broadcast carries the history entry id + the items
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const enriched = calls.find((c: any) => c.type === "memory_enriched");
+    expect(enriched).toBeDefined();
+    expect(enriched.user_message_id).toBe(userEntry.id);
+    expect(enriched.items).toEqual(items);
+
+    // The CI hook received the session context (repoRoot plumbing, §3.6 item 5)
+    expect(ci.enrichUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "s1", backendType: "claude" }),
+      "What runtime do we use?",
+    );
+  });
+
+  it("user_message: slow enrichment (over the 250ms budget) passes the original through", async () => {
+    // Validates the Promise.race timeout (§3.6.1): chat must never block on
+    // memory. A never-resolving enrichment is abandoned at the deadline and
+    // the untouched prompt is dispatched; no memory_enriched is broadcast.
+    vi.useFakeTimers();
+    const ci = makeFakeCi(() => new Promise(() => {})); // hangs forever
+    bridge.setCollectiveIntelligence(ci as any);
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "hello there, agent",
+    }));
+
+    // Still awaiting the race — nothing dispatched yet
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cli.send).not.toHaveBeenCalled();
+
+    // Cross the enrichment deadline
+    await vi.advanceTimersByTimeAsync(251);
+    expect(cli.send).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse((cli.send.mock.calls[0][0] as string).trim());
+    expect(sent.message.content).toBe("hello there, agent");
+
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    expect(calls.some((c: any) => c.type === "memory_enriched")).toBe(false);
+  });
+
+  it("user_message: enrichment error passes the original through", async () => {
+    // Validates the try/catch pass-through (§3.6.1): a throwing memory layer
+    // must never break or mutate the chat flow.
+    const ci = makeFakeCi(async () => {
+      throw new Error("lancedb exploded");
+    });
+    bridge.setCollectiveIntelligence(ci as any);
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "carry on regardless",
+    }));
+
+    await vi.waitFor(() => expect(cli.send).toHaveBeenCalledTimes(1));
+    const sent = JSON.parse((cli.send.mock.calls[0][0] as string).trim());
+    expect(sent.message.content).toBe("carry on regardless");
+
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    expect(calls.some((c: any) => c.type === "memory_enriched")).toBe(false);
+  });
+
+  it("user_message: memory_enriched broadcast is skipped when block is null", async () => {
+    // Validates §3.6.4: nothing recalled → no broadcast, prompt unchanged.
+    const ci = makeFakeCi(async () => ({ items: [], block: null }));
+    bridge.setCollectiveIntelligence(ci as any);
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "nothing recalled",
+    }));
+
+    await vi.waitFor(() => expect(cli.send).toHaveBeenCalledTimes(1));
+    const sent = JSON.parse((cli.send.mock.calls[0][0] as string).trim());
+    expect(sent.message.content).toBe("nothing recalled");
+
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    expect(calls.some((c: any) => c.type === "memory_enriched")).toBe(false);
+  });
+
+  it("user_message: successive messages dispatch in order even when the first enrichment is slower", async () => {
+    // Validates the async-ripple decision: per-session user messages are
+    // serialized through a promise chain, so a slow enrichment on msg1 cannot
+    // let msg2 overtake it on the way to the backend.
+    vi.useFakeTimers();
+    let call = 0;
+    const ci = makeFakeCi(() => {
+      call++;
+      if (call === 1) {
+        return new Promise((resolve) => setTimeout(() => resolve({ items: [], block: null }), 100));
+      }
+      return Promise.resolve({ items: [], block: null });
+    });
+    bridge.setCollectiveIntelligence(ci as any);
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({ type: "user_message", content: "first" }));
+    bridge.handleBrowserMessage(browser, JSON.stringify({ type: "user_message", content: "second" }));
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(cli.send).toHaveBeenCalledTimes(2);
+    const first = JSON.parse((cli.send.mock.calls[0][0] as string).trim());
+    const second = JSON.parse((cli.send.mock.calls[1][0] as string).trim());
+    expect(first.message.content).toBe("first");
+    expect(second.message.content).toBe("second");
+  });
+
+  it("user_message (adapter path): adapter receives enriched content while history stores the original", async () => {
+    // Validates §3.6.1 for adapter-based backends (Codex/Goose/...): the
+    // enrichment block goes to the adapter, replay history stays clean.
+    const adapter = {
+      sendBrowserMessage: vi.fn(() => true),
+      onBrowserMessage: vi.fn(),
+      onSessionMeta: vi.fn(),
+      onDisconnect: vi.fn(),
+      onInitError: vi.fn(),
+      isConnected: vi.fn(() => true),
+      disconnect: vi.fn(async () => {}),
+      getBackendSessionId: vi.fn(() => null),
+    };
+    bridge.attachAdapter("s1", adapter as any, "codex");
+    adapter.sendBrowserMessage.mockClear();
+    browser.send.mockClear();
+
+    const block = "--- Campfire memory (auto-recalled; may be stale) ---\nNotes:\n- [decision] use codex profiles\n--- end memory ---";
+    const items = [{ id: "f1", kind: "fragment", namespace: "repo:abc", summary: "use codex profiles", weight: 0.9 }];
+    const ci = makeFakeCi(async () => ({ items, block }));
+    bridge.setCollectiveIntelligence(ci as any);
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "adapter question",
+    }));
+
+    await vi.waitFor(() => expect(adapter.sendBrowserMessage).toHaveBeenCalledTimes(1));
+    expect(adapter.sendBrowserMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "user_message",
+      content: `${block}\n\nadapter question`,
+    }));
+
+    const session = bridge.getSession("s1")!;
+    const userEntry = session.messageHistory.find((m) => m.type === "user_message") as
+      { type: "user_message"; content: string; id?: string };
+    expect(userEntry.content).toBe("adapter question");
+
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const enriched = calls.find((c: any) => c.type === "memory_enriched");
+    expect(enriched).toBeDefined();
+    expect(enriched.user_message_id).toBe(userEntry.id);
+  });
+
+  it("user_message: stays fully synchronous and notes session activity when no CI layer is attached", () => {
+    // Validates the compatibility posture: without a collective-intelligence
+    // layer the v1 synchronous dispatch is preserved (no await anywhere), and
+    // the §3.4 idle trigger still records user activity.
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "ping",
+    }));
+
+    // Dispatched synchronously — no microtask needed
+    expect(cli.send).toHaveBeenCalledTimes(1);
+    expect(mockConsolidation.noteSessionActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "s1", backendType: "claude" }),
+    );
+  });
+});
+
+describe("Consolidation triggers (turn boundary)", () => {
+  let cli: ReturnType<typeof makeCliSocket>;
+  let browser: ReturnType<typeof makeBrowserSocket>;
+
+  const resultMsg = (overrides: Record<string, unknown> = {}) => JSON.stringify({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    result: "Done!",
+    duration_ms: 1000,
+    duration_api_ms: 800,
+    num_turns: 1,
+    total_cost_usd: 0.01,
+    stop_reason: "end_turn",
+    usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+    uuid: "uuid-consolidation",
+    session_id: "s1",
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    mockConsolidation.consolidate.mockClear();
+    mockConsolidation.shouldConsolidateOnTurn.mockClear();
+    mockConsolidation.noteSessionActivity.mockClear();
+    cli = makeCliSocket("s1");
+    browser = makeBrowserSocket("s1");
+    bridge.handleCLIOpen(cli, "s1");
+    bridge.handleBrowserOpen(browser, "s1");
+    cli.send.mockClear();
+    browser.send.mockClear();
+  });
+
+  it("result (CLI path): notes activity and consolidates when the turn threshold is met", async () => {
+    // Validates §3.4 trigger 1 wiring in handleResultMessage: every result
+    // resets the idle clock, and when shouldConsolidateOnTurn says the
+    // un-consolidated fragment threshold is met, consolidate() runs
+    // fire-and-forget with reason "turn_boundary".
+    mockConsolidation.shouldConsolidateOnTurn.mockResolvedValueOnce(true);
+
+    bridge.handleCLIMessage(cli, resultMsg());
+
+    expect(mockConsolidation.noteSessionActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "s1", backendType: "claude" }),
+    );
+    await vi.waitFor(() => {
+      expect(mockConsolidation.consolidate).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: "s1", reason: "turn_boundary" }),
+      );
+    });
+  });
+
+  it("result (CLI path): does not consolidate when below the threshold", async () => {
+    // Validates that the trigger is gated on shouldConsolidateOnTurn — a
+    // result on its own must not run the (expensive, LLM-backed) pipeline.
+    mockConsolidation.shouldConsolidateOnTurn.mockResolvedValueOnce(false);
+
+    bridge.handleCLIMessage(cli, resultMsg());
+
+    // Drain the fire-and-forget promise
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockConsolidation.shouldConsolidateOnTurn).toHaveBeenCalledWith("s1");
+    expect(mockConsolidation.consolidate).not.toHaveBeenCalled();
+  });
+
+  it("result (adapter path): fires the turn-boundary trigger for adapter-based backends", async () => {
+    // Validates the second wiring point (§3.4): results from Codex/Goose/etc.
+    // arrive via handleAdapterBrowserMessage, which must trigger consolidation
+    // identically to the Claude CLI path (backend parity per repo rules).
+    let emitFromAdapter: ((msg: any) => void) | undefined;
+    const adapter = {
+      sendBrowserMessage: vi.fn(() => true),
+      onBrowserMessage: vi.fn((cb: (msg: any) => void) => { emitFromAdapter = cb; }),
+      onSessionMeta: vi.fn(),
+      onDisconnect: vi.fn(),
+      onInitError: vi.fn(),
+      isConnected: vi.fn(() => true),
+      disconnect: vi.fn(async () => {}),
+      getBackendSessionId: vi.fn(() => null),
+    };
+    bridge.attachAdapter("s2", adapter as any, "codex");
+    mockConsolidation.consolidate.mockClear();
+    mockConsolidation.shouldConsolidateOnTurn.mockClear();
+    mockConsolidation.shouldConsolidateOnTurn.mockResolvedValueOnce(true);
+
+    emitFromAdapter!({
+      type: "result",
+      data: {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        duration_ms: 500,
+        duration_api_ms: 400,
+        num_turns: 1,
+        total_cost_usd: 0.02,
+        usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        session_id: "s2",
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(mockConsolidation.consolidate).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: "s2", reason: "turn_boundary", backendType: "codex" }),
+      );
+    });
   });
 });

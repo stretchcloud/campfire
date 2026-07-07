@@ -319,6 +319,57 @@ export interface UsageLimits {
   } | null;
 }
 
+// ─── Semantic Memory v2 ─────────────────────────────────────────────────────
+
+/** Namespace classes used for decay policy configuration (§3.1 of the memory design). */
+export type MemoryNamespaceClass = "global" | "repo" | "session" | "agent";
+
+export interface MemoryDecayPolicy {
+  /** Base half-life in hours; null = never decays. */
+  halfLifeHours: number | null;
+  /** Multiplier applied to half-life per reinforcement (capped server-side). */
+  reinforceMultiplier: number;
+}
+
+export interface MemorySettings {
+  decay: Record<MemoryNamespaceClass, MemoryDecayPolicy>;
+  /** Per-namespace recall depth (how many items each namespace contributes). */
+  recallDepth: { session: number; repo: number; agent: number; global: number };
+}
+
+/** Defaults per design doc §3.1: 90d/30d/7d/60d half-lives, ×1.5/×1.5/×1.2/×1.2, depths 4/6/2/3. */
+export const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
+  decay: {
+    global: { halfLifeHours: 2160, reinforceMultiplier: 1.5 },
+    repo: { halfLifeHours: 720, reinforceMultiplier: 1.5 },
+    session: { halfLifeHours: 168, reinforceMultiplier: 1.2 },
+    agent: { halfLifeHours: 1440, reinforceMultiplier: 1.2 },
+  },
+  recallDepth: { session: 4, repo: 6, agent: 2, global: 3 },
+};
+
+export interface MemoryNamespaceOverview {
+  namespace: string;
+  count: number;
+  /** Average decayed weight (0..1) across fragments in this namespace. */
+  avgWeight: number;
+  pinnedCount: number;
+}
+
+export interface MemoryKnowledgeOverview {
+  id: string;
+  tag: string;
+  summary: string;
+  confidence: number;
+  namespace: string;
+  synthesisMethod?: "llm" | "concat";
+}
+
+export interface MemoryOverviewResponse {
+  namespaces: MemoryNamespaceOverview[];
+  knowledge: MemoryKnowledgeOverview[];
+}
+
 export interface AppSettings {
   openrouterApiKeyConfigured: boolean;
   openrouterModel: string;
@@ -328,6 +379,7 @@ export interface AppSettings {
   openaiApiKeyConfigured: boolean;
   anthropicApiKeyConfigured: boolean;
   onboardingCompleted: boolean;
+  memory?: MemorySettings;
 }
 
 export interface AuthStatus {
@@ -769,7 +821,7 @@ export const api = {
 
   // Settings
   getSettings: () => get<AppSettings>("/settings"),
-  updateSettings: (data: Record<string, string | boolean>) =>
+  updateSettings: (data: Record<string, string | boolean | MemorySettings>) =>
     put<AppSettings>("/settings", data),
   getProviderAuthStatus: () => get<AuthStatus>("/settings/auth-status"),
 
@@ -1087,6 +1139,12 @@ export const api = {
     get<{ knowledge: import("./types.js").ConsolidatedKnowledge[] }>(
       `/memory/global${tag ? `?tag=${encodeURIComponent(tag)}` : ""}`,
     ),
+  getMemoryOverview: (sessionId: string) =>
+    get<MemoryOverviewResponse>(
+      `/sessions/${encodeURIComponent(sessionId)}/memory/overview`,
+    ),
+  pinMemory: (id: string, pinned: boolean) =>
+    post<{ ok: boolean }>("/memory/pin", { id, pinned }),
 
   // Collective Intelligence - Layer 2: Deliberation
   getDeliberations: (sessionId: string) =>

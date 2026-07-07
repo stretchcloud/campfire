@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { api, setAuthToken } from "../api.js";
+import { api, setAuthToken, DEFAULT_MEMORY_SETTINGS } from "../api.js";
+import type { MemorySettings, MemoryNamespaceClass } from "../api.js";
 import { useStore } from "../store.js";
 import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "../analytics.js";
 
 /* ─── Tab Types ─────────────────────────────────────────────────── */
 
-type SettingsTab = "general" | "providers" | "api-keys" | "security" | "notifications" | "appearance" | "updates";
+type SettingsTab = "general" | "providers" | "api-keys" | "memory" | "security" | "notifications" | "appearance" | "updates";
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: "general", label: "General" },
   { id: "providers", label: "Providers" },
   { id: "api-keys", label: "API Keys" },
+  { id: "memory", label: "Memory" },
   { id: "security", label: "Security" },
   { id: "notifications", label: "Notifications" },
   { id: "appearance", label: "Appearance" },
@@ -367,6 +369,198 @@ function ApiKeysTab({ openrouterApiKey, setOpenrouterApiKey, openrouterModel, se
   );
 }
 
+/* ─── Memory Tab ────────────────────────────────────────────────── */
+
+const MEMORY_NAMESPACES: { key: MemoryNamespaceClass; label: string; description: string }[] = [
+  { key: "global", label: "Global", description: "Cross-repo conventions, user preferences, tool quirks" },
+  { key: "repo", label: "Repository", description: "Architecture, conventions, distilled patterns per repo" },
+  { key: "session", label: "Session", description: "Episodic fragments of one session (pre-consolidation)" },
+  { key: "agent", label: "Agent", description: "Backend-specific behavior notes" },
+];
+
+/** String-typed draft so inputs can be empty while editing (empty half-life = never decays). */
+interface MemoryDraft {
+  decay: Record<MemoryNamespaceClass, { halfLifeDays: string; reinforceMultiplier: string }>;
+  recallDepth: Record<MemoryNamespaceClass, string>;
+}
+
+function memorySettingsToDraft(s: MemorySettings): MemoryDraft {
+  const decay = {} as MemoryDraft["decay"];
+  const recallDepth = {} as MemoryDraft["recallDepth"];
+  for (const { key } of MEMORY_NAMESPACES) {
+    const policy = s.decay[key] ?? DEFAULT_MEMORY_SETTINGS.decay[key];
+    decay[key] = {
+      halfLifeDays: policy.halfLifeHours == null ? "" : String(policy.halfLifeHours / 24),
+      reinforceMultiplier: String(policy.reinforceMultiplier),
+    };
+    recallDepth[key] = String(s.recallDepth?.[key] ?? DEFAULT_MEMORY_SETTINGS.recallDepth[key]);
+  }
+  return { decay, recallDepth };
+}
+
+/** Convert the draft back to MemorySettings. Returns an error string on invalid input. */
+function draftToMemorySettings(draft: MemoryDraft): { settings?: MemorySettings; error?: string } {
+  const decay = {} as MemorySettings["decay"];
+  const recallDepth = {} as MemorySettings["recallDepth"];
+  for (const { key, label } of MEMORY_NAMESPACES) {
+    const days = draft.decay[key].halfLifeDays.trim();
+    let halfLifeHours: number | null = null;
+    if (days !== "") {
+      const n = Number(days);
+      if (!Number.isFinite(n) || n <= 0) {
+        return { error: `${label}: half-life must be a positive number of days (leave empty to never decay)` };
+      }
+      halfLifeHours = Math.round(n * 24);
+    }
+    const mult = Number(draft.decay[key].reinforceMultiplier);
+    if (!Number.isFinite(mult) || mult < 1) {
+      return { error: `${label}: reinforce multiplier must be a number ≥ 1` };
+    }
+    const depth = Number(draft.recallDepth[key]);
+    if (!Number.isInteger(depth) || depth < 0) {
+      return { error: `${label}: recall depth must be a whole number ≥ 0` };
+    }
+    decay[key] = { halfLifeHours, reinforceMultiplier: mult };
+    recallDepth[key] = depth;
+  }
+  return { settings: { decay, recallDepth } };
+}
+
+function MemoryTab({ initial }: Readonly<{ initial: MemorySettings }>) {
+  const [draft, setDraft] = useState<MemoryDraft>(() => memorySettingsToDraft(initial));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  // Re-sync the draft when settings finish loading from the server
+  useEffect(() => {
+    setDraft(memorySettingsToDraft(initial));
+  }, [initial]);
+
+  function setDecayField(key: MemoryNamespaceClass, field: "halfLifeDays" | "reinforceMultiplier", value: string) {
+    setDraft((d) => ({ ...d, decay: { ...d.decay, [key]: { ...d.decay[key], [field]: value } } }));
+  }
+
+  function setDepthField(key: MemoryNamespaceClass, value: string) {
+    setDraft((d) => ({ ...d, recallDepth: { ...d.recallDepth, [key]: value } }));
+  }
+
+  async function onSave() {
+    setError("");
+    setSaved(false);
+    const { settings, error: validationError } = draftToMemorySettings(draft);
+    if (!settings) {
+      setError(validationError || "Invalid memory settings");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.updateSettings({ memory: settings });
+      if (res.memory) setDraft(memorySettingsToDraft(res.memory));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <SettingsCard
+        title="Memory Decay"
+        description="Per-namespace half-life for recalled memories. Leave half-life empty to never decay. Reinforcement extends the half-life each time a memory is actually used."
+      >
+        <div className="space-y-4">
+          {MEMORY_NAMESPACES.map(({ key, label, description }) => (
+            <div key={key} className="flex flex-wrap items-end gap-3 py-1 border-b border-cc-border/20 last:border-0 pb-3 last:pb-0">
+              <div className="min-w-[160px] flex-1">
+                <span className="text-[13px] font-medium text-cc-fg">{label}</span>
+                <p className="text-[11px] text-cc-fg/55 mt-0.5">{description}</p>
+              </div>
+              <div>
+                <label htmlFor={`memory-halflife-${key}`} className="block text-[11px] text-cc-fg/60 mb-1">
+                  Half-life (days)
+                </label>
+                <input
+                  id={`memory-halflife-${key}`}
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={draft.decay[key].halfLifeDays}
+                  onChange={(e) => setDecayField(key, "halfLifeDays", e.target.value)}
+                  placeholder="never"
+                  className="w-24 h-9 px-3 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-fg font-mono-code"
+                />
+              </div>
+              <div>
+                <label htmlFor={`memory-reinforce-${key}`} className="block text-[11px] text-cc-fg/60 mb-1">
+                  Reinforce ×
+                </label>
+                <input
+                  id={`memory-reinforce-${key}`}
+                  type="number"
+                  min="1"
+                  step="0.1"
+                  value={draft.decay[key].reinforceMultiplier}
+                  onChange={(e) => setDecayField(key, "reinforceMultiplier", e.target.value)}
+                  className="w-20 h-9 px-3 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-fg font-mono-code"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Recall Depth"
+        description="How many memories each namespace contributes when enriching a prompt with recalled context."
+      >
+        <div className="flex flex-wrap gap-4">
+          {MEMORY_NAMESPACES.map(({ key, label }) => (
+            <div key={key}>
+              <label htmlFor={`memory-depth-${key}`} className="block text-[11px] text-cc-fg/60 mb-1">
+                {label}
+              </label>
+              <input
+                id={`memory-depth-${key}`}
+                type="number"
+                min="0"
+                step="1"
+                value={draft.recallDepth[key]}
+                onChange={(e) => setDepthField(key, e.target.value)}
+                className="w-20 h-9 px-3 rounded-lg border border-cc-border bg-cc-input-bg text-[12px] text-cc-fg font-mono-code"
+              />
+            </div>
+          ))}
+        </div>
+      </SettingsCard>
+
+      {/* Save bar */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="px-4 py-1.5 rounded-lg bg-cc-primary text-white text-[12px] font-medium hover:bg-cc-primary-hover transition-colors cursor-pointer disabled:opacity-40"
+        >
+          {saving ? "Saving..." : "Save Memory Settings"}
+        </button>
+        {saved && <span className="text-[11px] text-cc-success">Saved</span>}
+        {error && <span className="text-[11px] text-cc-error">{error}</span>}
+      </div>
+
+      <div className="rounded-lg border border-cc-border/40 bg-cc-hover/30 px-4 py-3">
+        <p className="text-[11px] text-cc-muted leading-relaxed">
+          Pinned memories never decay regardless of half-life. Defaults: Global 90d, Repository 30d,
+          Session 7d, Agent 60d. Settings are stored in <code className="font-mono-code text-[10px] bg-cc-hover px-1 rounded">~/.campfire/settings.json</code>.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function SecurityTab({ authEnabled, setAuthEnabled, authPassword, setAuthPassword, authSaving, setAuthSaving, authSaved, setAuthSaved, authError, setAuthError, authSessions }: Readonly<{
   authEnabled: boolean; setAuthEnabled: (v: boolean) => void;
   authPassword: string; setAuthPassword: (v: string) => void;
@@ -614,6 +808,7 @@ export function SettingsPage({ embedded = false }: Readonly<SettingsPageProps>) 
   const [authSaved, setAuthSaved] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authSessions, setAuthSessions] = useState(0);
+  const [memorySettings, setMemorySettings] = useState<MemorySettings>(DEFAULT_MEMORY_SETTINGS);
   const darkMode = useStore((s) => s.darkMode);
   const toggleDarkMode = useStore((s) => s.toggleDarkMode);
   const notificationSound = useStore((s) => s.notificationSound);
@@ -640,6 +835,7 @@ export function SettingsPage({ embedded = false }: Readonly<SettingsPageProps>) 
         setClaudeConfigured(s.claudeOAuthTokenConfigured ?? false);
         setOpenaiConfigured(s.openaiApiKeyConfigured ?? false);
         setAnthropicConfigured(s.anthropicApiKeyConfigured ?? false);
+        setMemorySettings(s.memory ?? DEFAULT_MEMORY_SETTINGS);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unknown error"))
       .finally(() => setLoading(false));
@@ -786,6 +982,9 @@ export function SettingsPage({ embedded = false }: Readonly<SettingsPageProps>) 
               loading={loading} saving={saving} error={error} saved={saved}
               onSave={onSave}
             />
+          )}
+          {activeTab === "memory" && (
+            <MemoryTab initial={memorySettings} />
           )}
           {activeTab === "security" && (
             <SecurityTab

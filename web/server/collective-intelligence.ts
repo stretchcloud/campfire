@@ -24,8 +24,9 @@
  */
 
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, BackendType } from "./session-types.js";
-import { storeFragment, queryFragments, consolidateSession, getConsolidatedKnowledge } from "./semantic-memory.js";
-import type { MemoryFragment, ConsolidatedKnowledge, GitContext } from "./semantic-memory.js";
+import { storeFragment, queryFragments, queryForEnrichment } from "./semantic-memory.js";
+import type { GitContext, MemoryType, EnrichmentResult } from "./semantic-memory.js";
+import { consolidate } from "./memory-consolidation.js";
 import { deliberationEngine } from "./deliberation-engine.js";
 import type { DeliberationProposal, DeliberationResolution } from "./deliberation-engine.js";
 import { capabilityDiscovery } from "./capability-discovery.js";
@@ -37,6 +38,71 @@ import type { ContextFragment, ConsensusState } from "./shared-context.js";
 
 /** Called by WsBridge to send CI-generated messages to all browsers in a session */
 type BroadcastFn = (sessionId: string, msg: BrowserIncomingMessage) => void;
+
+// ─── Session context (enrichment / consolidation plumbing) ───────────────────
+
+/** Minimal session context the CI layer needs for namespace-scoped memory ops. */
+export interface CISessionContext {
+  sessionId: string;
+  repoRoot: string;
+  backendType: BackendType;
+}
+
+// ─── Thinking-block scrubbing (§3.6.5) ────────────────────────────────────────
+
+/**
+ * Strip reasoning/thinking-block content from text before it is persisted to
+ * semantic memory (ADR-006's scrubReasoningBlocks idea, design doc §3.6.5).
+ * Removes <thinking>…</thinking> / <think>…</think> blocks (including an
+ * unterminated trailing block) and collapses the leftover whitespace.
+ * Raw thinking text must never reach storeFragment or shared-context
+ * promotion — it is verbose, session-specific, and often speculative.
+ */
+export function scrubThinkingText(text: string): string {
+  return text
+    .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, " ")
+    .replace(/<think(?:ing)?>[\s\S]*$/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ─── Recall-biased extraction classification (§3.6.5) ─────────────────────────
+
+/** Structural cues signalling a decision was made ("decided/instead/because"). */
+const DECISION_CUE_RE =
+  /\b(decided|decision|instead(?: of)?|because|chose|opted (?:for|to)|going with|settled on|we(?:'ll| will) use)\b/i;
+/** Error-side cue of an error+fix pair. */
+const ERROR_CUE_RE = /\b(error|exception|failed|failing|failure|crash(?:ed)?|broken|bug|traceback)\b/i;
+/** Fix-side cue of an error+fix pair. */
+const FIX_CUE_RE = /\b(fix(?:ed|es)?|resolved|solution|workaround|root cause|caused by|turned out)\b/i;
+
+interface ExtractionClassification {
+  type: MemoryType;
+  extraTags: string[];
+  confidence: number;
+}
+
+/**
+ * Classify assistant text by structural cues (design doc §3.6.5). The old
+ * ten-keyword *gate* is gone — extraction is deliberately recall-biased and
+ * only classifies; precision comes from the consolidation JUDGE stage, and
+ * decay + eviction clean up the noise.
+ *
+ * - decision cues → type "decision"
+ * - error+fix pair → type "pattern" tagged "failure" (MemoryType has no
+ *   "failure" variant; the tag lets consolidation distill it into a
+ *   KnowledgeType "failure" row)
+ * - everything else → plain "observation"
+ */
+export function classifyExtraction(content: string): ExtractionClassification {
+  if (ERROR_CUE_RE.test(content) && FIX_CUE_RE.test(content)) {
+    return { type: "pattern", extraTags: ["failure"], confidence: 0.7 };
+  }
+  if (DECISION_CUE_RE.test(content)) {
+    return { type: "decision", extraTags: [], confidence: 0.7 };
+  }
+  return { type: "observation", extraTags: [], confidence: 0.6 };
+}
 
 // ─── CollectiveIntelligenceLayer ──────────────────────────────────────────────
 
@@ -175,10 +241,10 @@ export class CollectiveIntelligenceLayer {
     msg: BrowserOutgoingMessage,
   ): Promise<BrowserOutgoingMessage | null> {
     try {
-      // Layer 1: Enrich user prompts with semantic memory context
-      if (msg.type === "user_message") {
-        return await this.enrichWithMemory(sessionId, msg);
-      }
+      // NOTE (§3.6.1): user_message enrichment does NOT happen here. This
+      // method is fire-and-forget for consumed CI message types; enrichment
+      // *transforms* the message, so WsBridge awaits enrichUserMessage()
+      // explicitly (with a timeout) in its user_message routing path.
 
       // Layer 2: Handle human deliberation responses
       if (msg.type === "deliberation_respond") {
@@ -267,28 +333,60 @@ export class CollectiveIntelligenceLayer {
     return msg; // pass through unchanged
   }
 
+  // ─── Prompt enrichment (§3.6.1–3.6.3) ─────────────────────────────────────
+
+  /**
+   * Enrich a user prompt with recalled memory (the fixed successor of the old
+   * dead-code enrichWithMemory, §1.4). Queries namespaces
+   * [repo:<hash>, agent:<backend>, global] — NOT session:<id>, since
+   * same-session context is already in the agent's own conversation.
+   *
+   * Returns the injectable block + the item list for the UI chip.
+   * Reinforcement of included rows happens INSIDE queryForEnrichment (§3.2) —
+   * callers must not reinforce again. WsBridge is responsible for the timeout
+   * / pass-through posture; this method just queries.
+   */
+  async enrichUserMessage(ctx: CISessionContext, content: string): Promise<EnrichmentResult> {
+    return queryForEnrichment({
+      sessionId: ctx.sessionId,
+      repoRoot: ctx.repoRoot,
+      backendType: ctx.backendType,
+      queryText: content,
+    });
+  }
+
   // ─── Session lifecycle ────────────────────────────────────────────────────
 
   /**
-   * Called when a session ends. Consolidates memory and promotes significant
-   * shared context fragments to semantic memory.
+   * Called when a session ends. Routes consolidation through the JUDGE →
+   * DISTILL → CONSOLIDATE pipeline (§3.4 trigger 3, reason "session_end")
+   * and promotes significant shared context fragments to semantic memory —
+   * the same semantics as before, with the concat-only consolidateSession
+   * call replaced by the pipeline entry point.
    */
   async onSessionEnd(sessionId: string, backendType: BackendType, repoRoot: string): Promise<void> {
     try {
-      // Consolidate episodic → semantic memory
-      await consolidateSession(sessionId, repoRoot);
+      // Consolidate episodic → semantic memory via the v2 pipeline
+      await consolidate({ sessionId, repoRoot, backendType, reason: "session_end" });
 
       // Promote significant shared context fragments to semantic memory
       const stream = sharedContextManager.get(sessionId);
       if (stream) {
         const significant = stream.getSignificantFragments();
         for (const f of significant) {
+          // §3.6.5: never persist raw thinking-block content. Agent "thought"
+          // fragments are the verbatim thinking blocks ingested from
+          // stream_events (processAgentMessageAsync) — exclude them from
+          // promotion entirely; scrub inline <thinking> markup from the rest.
+          if (f.type === "thought" && !f.isHuman) continue;
+          const content = scrubThinkingText(f.content);
+          if (!content) continue;
           await storeFragment({
             sessionId,
             agentId: f.agentId,
             backendType,
             type: "observation",
-            content: f.content,
+            content,
             gitContext: { branch: "unknown", files: [], repoRoot },
             tags: [f.type, "shared-context"],
             confidence: f.consensusScore,
@@ -303,54 +401,38 @@ export class CollectiveIntelligenceLayer {
 
   // ─── Internal helpers ────────────────────────────────────────────────────
 
-  private async enrichWithMemory(
-    sessionId: string,
-    msg: BrowserOutgoingMessage & { type: "user_message" },
-  ): Promise<BrowserOutgoingMessage> {
-    const memories = await queryFragments(msg.content, { sessionId, limit: 5 });
-    if (memories.length === 0) return msg;
-
-    const context = this.formatMemoryContext(memories);
-    return { ...msg, content: `${context}\n\n${msg.content}` };
-  }
-
-  private formatMemoryContext(memories: MemoryFragment[]): string {
-    const lines = memories
-      .slice(0, 5)
-      .map((m) => `[Memory/${m.type}] ${m.content}${m.gitContext.files.length > 0 ? ` (${m.gitContext.files.slice(0, 2).join(", ")})` : ""}`)
-      .join("\n");
-    return `--- Relevant Context from Previous Sessions ---\n${lines}\n---`;
-  }
-
   private async extractMemory(
     sessionId: string,
     backendType: BackendType,
     message: unknown,
     gitContext?: Partial<GitContext>,
   ): Promise<void> {
-    // Extract meaningful observations from assistant messages.
-    // We look for tool results (Read/Write/Edit/Bash) which are rich in codebase knowledge.
-    const content = this.extractTextContent(message);
-    if (!content || content.length < 50) return; // too short to be meaningful
+    // Recall-biased extraction (§3.6.5): the old ten-keyword gate dropped
+    // anything not phrased with those exact words. Extraction now stores any
+    // substantial assistant text, typed by structural cues; precision comes
+    // from the consolidation JUDGE, and decay + eviction clean up the noise.
+    const raw = this.extractTextContent(message);
+    if (!raw) return;
 
-    // Heuristic: only store if content looks like codebase knowledge
-    const keywords = ["function", "class", "interface", "module", "import", "export", "config", "pattern", "architecture", "convention"];
-    const hasKeyword = keywords.some((k) => content.toLowerCase().includes(k));
-    if (!hasKeyword) return;
+    // Scrub thinking-block content BEFORE any length check or store — raw
+    // reasoning must never be persisted (§3.6.5 / ADR-006 scrubReasoningBlocks).
+    const content = scrubThinkingText(raw);
+    if (content.length < 50) return; // too short to be meaningful
 
+    const classification = classifyExtraction(content);
     await storeFragment({
       sessionId,
       agentId: sessionId,
       backendType,
-      type: "observation",
+      type: classification.type,
       content: content.slice(0, 500), // cap fragment length
       gitContext: {
         branch: gitContext?.branch ?? "unknown",
         files: gitContext?.files ?? [],
         repoRoot: gitContext?.repoRoot ?? "",
       },
-      tags: this.extractTags(content),
-      confidence: 0.6,
+      tags: [...classification.extraTags, ...this.extractTags(content)].slice(0, 5),
+      confidence: classification.confidence,
     });
   }
 

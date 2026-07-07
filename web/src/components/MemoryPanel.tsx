@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
-import { api } from "../api.js";
+import { api, type MemoryOverviewResponse } from "../api.js";
 import { useStore } from "../store.js";
 import type { MemoryFragment, ConsolidatedKnowledge } from "../types.js";
 
+/** v2 servers report pinned state on fragments; older servers omit it. */
+type PinnableFragment = MemoryFragment & { pinned?: boolean };
+
 export function MemoryPanel() {
   const currentSessionId = useStore((s) => s.currentSessionId);
-  const [fragments, setFragments] = useState<MemoryFragment[]>([]);
+  const [fragments, setFragments] = useState<PinnableFragment[]>([]);
   const [consolidated, setConsolidated] = useState<ConsolidatedKnowledge[]>([]);
+  const [overview, setOverview] = useState<MemoryOverviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"fragments" | "consolidated">("fragments");
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,6 +32,27 @@ export function MemoryPanel() {
       console.error("[MemoryPanel] Failed to load memory:", err);
     } finally {
       setLoading(false);
+    }
+    // Overview loads independently so a missing/failing endpoint never
+    // breaks the fragments/consolidated lists.
+    try {
+      const ov = await api.getMemoryOverview(currentSessionId);
+      setOverview(ov);
+    } catch (err) {
+      console.error("[MemoryPanel] Failed to load memory overview:", err);
+      setOverview(null);
+    }
+  }
+
+  /** Optimistic pin/unpin: flip locally, revert if the API call fails. */
+  async function handleTogglePin(frag: PinnableFragment) {
+    const next = !frag.pinned;
+    setFragments((prev) => prev.map((f) => (f.id === frag.id ? { ...f, pinned: next } : f)));
+    try {
+      await api.pinMemory(frag.id, next);
+    } catch (err) {
+      console.error("[MemoryPanel] Failed to toggle pin:", err);
+      setFragments((prev) => prev.map((f) => (f.id === frag.id ? { ...f, pinned: !next } : f)));
     }
   }
 
@@ -138,6 +163,45 @@ export function MemoryPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
+        {/* Per-namespace overview: counts, decayed-weight bars, pinned counts */}
+        {overview && overview.namespaces.length > 0 && (
+          <div className="px-4 pt-4">
+            <h3 className="text-[10px] uppercase tracking-[0.15em] text-cc-muted/60 font-mono mb-2">
+              Namespaces
+            </h3>
+            <div className="space-y-2">
+              {overview.namespaces.map((ns) => {
+                const pct = Math.round(Math.max(0, Math.min(1, ns.avgWeight)) * 100);
+                return (
+                  <div key={ns.namespace} className="p-2.5 bg-cc-card border border-cc-border rounded-lg">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-[11px] font-mono text-cc-fg truncate" title={ns.namespace}>
+                        {ns.namespace}
+                      </span>
+                      <span className="text-[10px] text-cc-muted font-mono shrink-0">
+                        {ns.count} {ns.count === 1 ? "item" : "items"}
+                        {ns.pinnedCount > 0 && ` · ${ns.pinnedCount} pinned`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full bg-cc-hover overflow-hidden">
+                        <div
+                          data-testid={`ns-weight-${ns.namespace}`}
+                          className="h-full rounded-full bg-cc-primary/50"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-cc-muted/60 font-mono tabular-nums shrink-0">
+                        {pct}% avg weight
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {tab === "fragments" && (
           <div className="p-4 space-y-3">
             {/* Tag filter */}
@@ -190,9 +254,25 @@ export function MemoryPanel() {
                         {new Date(frag.timestamp).toLocaleString()}
                       </span>
                     </div>
-                    <span className="text-xs text-cc-muted font-mono">
-                      {(frag.confidence * 100).toFixed(0)}%
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-cc-muted font-mono">
+                        {(frag.confidence * 100).toFixed(0)}%
+                      </span>
+                      <button
+                        onClick={() => handleTogglePin(frag)}
+                        aria-label={frag.pinned ? "Unpin memory" : "Pin memory"}
+                        title={frag.pinned ? "Unpin — resume decay" : "Pin — never decays"}
+                        className={`w-5 h-5 flex items-center justify-center rounded cursor-pointer transition-colors ${
+                          frag.pinned
+                            ? "text-cc-primary bg-cc-primary/10 hover:bg-cc-primary/20"
+                            : "text-cc-muted/40 hover:text-cc-fg hover:bg-cc-hover"
+                        }`}
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                          <path d="M9.5 1.5l5 5-1.5 1.5-.75-.25L9.5 10.5l.25 2.75L8.5 14.5 5.75 11.75 2.5 15l-1-1 3.25-3.25L2 8l1.25-1.25L6 7l2.75-2.75-.25-.75L9.5 1.5z" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                   <p className="text-sm text-cc-fg mb-2">{frag.content}</p>
                   {frag.tags.length > 0 && (
@@ -223,12 +303,24 @@ export function MemoryPanel() {
                 {loading ? "Loading..." : "No consolidated knowledge yet"}
               </div>
             ) : (
-              consolidated.map((know) => (
+              consolidated.map((know) => {
+                const synthesisMethod = overview?.knowledge.find((k) => k.id === know.id)?.synthesisMethod;
+                return (
                 <div key={know.id} className="p-3 bg-cc-card border border-cc-border rounded-lg">
                   <div className="flex items-start justify-between mb-2">
-                    <span className="px-2 py-1 text-xs font-semibold bg-cc-primary/20 text-cc-primary rounded">
-                      #{know.tag}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-1 text-xs font-semibold bg-cc-primary/20 text-cc-primary rounded">
+                        #{know.tag}
+                      </span>
+                      {synthesisMethod === "concat" && (
+                        <span
+                          className="px-1.5 py-0.5 text-[10px] bg-cc-hover text-cc-muted rounded font-mono"
+                          title="Concatenated without LLM distillation (no OpenRouter key configured)"
+                        >
+                          concat
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs text-cc-muted">
                       Updated {new Date(know.lastUpdated).toLocaleDateString()}
                     </span>
@@ -240,7 +332,8 @@ export function MemoryPanel() {
                     Confidence: {(know.confidence * 100).toFixed(0)}%
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

@@ -5,15 +5,26 @@ import type { BackendType } from "../session-types.js";
 export function registerCiRoutes(api: Hono, deps: RouteDeps): void {
   const { wsBridge } = deps;
 
+  /** repoRoot for a session — the namespace anchor for repo-scoped memory. */
+  const sessionRepoRoot = (sessionId: string): string => {
+    const session = wsBridge.getSession(sessionId);
+    return session?.state.repo_root || session?.state.cwd || "";
+  };
+
   // ─── Collective Intelligence: Semantic Memory ──────────────────────────────
   api.get("/sessions/:id/memory", async (c) => {
-    const { queryFragments, getConsolidatedKnowledge, getSessionFragments } = await import("../semantic-memory.js");
+    const { getConsolidatedKnowledge, getSessionFragments } = await import("../semantic-memory.js");
     const sessionId = c.req.param("id");
-    const [fragments, consolidated] = await Promise.all([
+    // §1.8 fix: consolidated knowledge lives in namespaces now. "" resolves to
+    // the `global` namespace; repo-scoped rows come from repo:<hash of the
+    // session cwd> — the old getConsolidatedKnowledge("") matched nothing.
+    const repoRoot = sessionRepoRoot(sessionId);
+    const [fragments, globalKnowledge, repoKnowledge] = await Promise.all([
       getSessionFragments(sessionId),
-      getConsolidatedKnowledge(""), // cross-session consolidated
+      getConsolidatedKnowledge(""), // global namespace
+      repoRoot ? getConsolidatedKnowledge(repoRoot) : Promise.resolve([]),
     ]);
-    return c.json({ fragments, consolidated });
+    return c.json({ fragments, consolidated: [...repoKnowledge, ...globalKnowledge] });
   });
 
   api.post("/sessions/:id/memory", async (c) => {
@@ -43,19 +54,66 @@ export function registerCiRoutes(api: Hono, deps: RouteDeps): void {
   });
 
   api.post("/sessions/:id/memory/consolidate", async (c) => {
-    const { consolidateSession } = await import("../semantic-memory.js");
+    // §3.4 trigger 4: manual consolidation routes through the JUDGE → DISTILL
+    // → CONSOLIDATE pipeline and returns its ConsolidationResult.
+    const { consolidate } = await import("../memory-consolidation.js");
     const sessionId = c.req.param("id");
     const session = wsBridge.getSession(sessionId);
-    const repoRoot = session?.state.cwd ?? "";
-    const consolidated = await consolidateSession(sessionId, repoRoot);
-    return c.json({ consolidated, count: consolidated.length });
+    const result = await consolidate({
+      sessionId,
+      repoRoot: sessionRepoRoot(sessionId),
+      backendType: session?.backendType ?? session?.state.backend_type ?? "claude",
+      reason: "manual",
+    });
+    return c.json(result);
   });
 
   api.get("/memory/global", async (c) => {
-    const { getConsolidatedKnowledge } = await import("../semantic-memory.js");
+    // §1.8 fix: query the `global` namespace explicitly (v2 semantics) —
+    // the old getConsolidatedKnowledge("") matched only literally-empty
+    // repoRoot rows, i.e. nothing.
+    const { getKnowledgeByNamespace } = await import("../semantic-memory.js");
     const tag = c.req.query("tag");
-    const knowledge = await getConsolidatedKnowledge("", tag);
+    const knowledge = await getKnowledgeByNamespace("global", tag);
     return c.json({ knowledge });
+  });
+
+  // Per-namespace fragment stats + active consolidated knowledge for the
+  // memory panel. Shape is the frontend contract (api.ts MemoryOverviewResponse):
+  // { namespaces: [{namespace, count, avgWeight, pinnedCount}],
+  //   knowledge: [{id, tag, summary, confidence, namespace, synthesisMethod?}] }
+  api.get("/sessions/:id/memory/overview", async (c) => {
+    const { getNamespaceOverview, getKnowledgeByNamespace, repoNamespace } = await import("../semantic-memory.js");
+    const sessionId = c.req.param("id");
+    const session = wsBridge.getSession(sessionId);
+    const repoRoot = sessionRepoRoot(sessionId);
+    const backendType = session?.backendType ?? session?.state.backend_type ?? "claude";
+
+    const namespaces = await getNamespaceOverview({ sessionId, repoRoot, backendType });
+    const knowledgeRows = [
+      ...(repoRoot ? await getKnowledgeByNamespace(repoNamespace(repoRoot)) : []),
+      ...(await getKnowledgeByNamespace("global")),
+    ];
+    const knowledge = knowledgeRows.map((k) => ({
+      id: k.id,
+      tag: k.tag,
+      summary: k.summary,
+      confidence: k.confidence,
+      namespace: k.namespace ?? "",
+      synthesisMethod: k.synthesisMethod,
+    }));
+    return c.json({ namespaces, knowledge });
+  });
+
+  // Pin/unpin a memory fragment (§3.2: pinned rows never decay or get evicted).
+  api.post("/memory/pin", async (c) => {
+    const { setFragmentPinned } = await import("../semantic-memory.js");
+    const body = await c.req.json() as { id?: string; pinned?: boolean };
+    if (!body.id || typeof body.pinned !== "boolean") {
+      return c.json({ error: "id and pinned are required" }, 400);
+    }
+    const ok = await setFragmentPinned(body.id, body.pinned);
+    return c.json({ ok });
   });
 
   // ─── Collective Intelligence: Deliberation ─────────────────────────────────

@@ -35,6 +35,7 @@ import type { CodexAdapter } from "./codex-adapter.js";
 import type { AgentAdapter } from "./adapter-types.js";
 import type { RecorderManager } from "./recorder.js";
 import type { CollectiveIntelligenceLayer } from "./collective-intelligence.js";
+import { consolidate, noteSessionActivity, shouldConsolidateOnTurn } from "./memory-consolidation.js";
 import { evaluateAutoInjection, scanMcpServers } from "./mcp-policy.js";
 
 // ─── WebSocket data tags ──────────────────────────────────────────────────────
@@ -294,6 +295,8 @@ export class WsBridge {
   ]);
   private static readonly VOTE_DEADLINE_MS = 30_000; // 30 seconds to vote
   private static readonly INVITE_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+  /** Memory-enrichment budget (§3.6.1): past this, the original prompt is sent unenriched. */
+  private static readonly ENRICHMENT_TIMEOUT_MS = 250;
   private readonly sessions = new Map<string, Session>();
   private readonly inviteTokens = new Map<string, { sessionId: string; role: SessionRole; expiresAt: number }>();
   private viewerCounter = 0;
@@ -309,6 +312,8 @@ export class WsBridge {
   private readonly environmentMcpInjected = new Set<string>();
   private readonly autoNamingAttempted = new Set<string>();
   private userMsgCounter = 0;
+  /** Per-session promise chain serializing enriched user_message dispatch (§3.6.1). */
+  private readonly userMessageChains = new Map<string, Promise<void>>();
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private static readonly GIT_SESSION_KEYS: GitSessionKey[] = [
     "git_branch",
@@ -1054,6 +1059,8 @@ export class WsBridge {
       }
       session.messageHistory.push(msg);
       this.persistSession(session);
+      // §3.4 trigger 1 (adapter result path): consolidate on turn boundary
+      this.maybeConsolidateOnTurn(session);
     }
 
     // Handle permission requests
@@ -1582,6 +1589,9 @@ export class WsBridge {
 
     this.emitResultWebhooks(session, msg);
 
+    // §3.4 trigger 1: consolidate on turn boundary (fire-and-forget)
+    this.maybeConsolidateOnTurn(session);
+
     // Trigger auto-naming after the first successful result
     this.tryAutoNaming(session, browserMsg);
   }
@@ -1690,21 +1700,31 @@ export class WsBridge {
     return true;
   }
 
-  /** Route a browser message to an adapter-based backend (Codex, Goose, etc.). */
+  /** Append a user message to session history with a stable id for reconnect dedup. */
+  private pushUserHistoryEntry(session: Session, content: string): string {
+    const ts = Date.now();
+    const id = `user-${ts}-${this.userMsgCounter++}`;
+    session.messageHistory.push({ type: "user_message", content, timestamp: ts, id });
+    return id;
+  }
+
+  /**
+   * Route a browser message to an adapter-based backend (Codex, Goose, etc.).
+   * For user_message, `userHistoryContent` (when set) is what goes into
+   * messageHistory — the original user text — while `msg.content` (possibly
+   * memory-enriched, §3.6.1) is what the adapter receives. Returns the
+   * history entry id for user messages.
+   */
   private routeToAdapter(
     session: Session,
     msg: BrowserOutgoingMessage,
     ws?: ServerWebSocket<SocketData>,
-  ): void {
+    userHistoryContent?: string,
+  ): string | null {
+    let userHistoryId: string | null = null;
     // Store user messages in history for replay with stable ID for dedup on reconnect
     if (msg.type === "user_message") {
-      const ts = Date.now();
-      session.messageHistory.push({
-        type: "user_message",
-        content: msg.content,
-        timestamp: ts,
-        id: `user-${ts}-${this.userMsgCounter++}`,
-      });
+      userHistoryId = this.pushUserHistoryEntry(session, userHistoryContent ?? msg.content);
       this.persistSession(session);
     }
 
@@ -1714,7 +1734,7 @@ export class WsBridge {
       const eligibleVoters = this.countEligibleVoters(session);
       if (eligibleVoters > 1) {
         this.recordVote(session, msg.request_id, ws, msg.behavior, msg);
-        return;
+        return null;
       }
       const pending = session.pendingPermissions.get(msg.request_id);
       if (session.backendType === "claude" && msg.behavior === "allow" && !msg.updated_input && pending) {
@@ -1731,18 +1751,24 @@ export class WsBridge {
       console.log(`[ws-bridge] ${session.backendType} adapter not yet attached for session ${session.id}, queuing ${msg.type}`);
       session.pendingMessages.push(JSON.stringify(outboundMsg));
     }
+    return userHistoryId;
   }
 
-  /** Route a browser message to the Claude Code CLI backend. */
+  /**
+   * Route a browser message to the Claude Code CLI backend.
+   * `userHistoryContent` behaves as in routeToAdapter (§3.6.1): history text
+   * override for user messages. Returns the history entry id for user
+   * messages, null otherwise.
+   */
   private routeToClaude(
     session: Session,
     msg: BrowserOutgoingMessage,
     ws?: ServerWebSocket<SocketData>,
-  ): void {
+    userHistoryContent?: string,
+  ): string | null {
     switch (msg.type) {
       case "user_message":
-        this.handleUserMessage(session, msg);
-        break;
+        return this.handleUserMessage(session, msg, userHistoryContent);
       case "permission_response":
         this.handlePermissionResponse(session, msg, ws);
         break;
@@ -1768,6 +1794,7 @@ export class WsBridge {
         this.handleMcpSetServers(session, msg.servers);
         break;
     }
+    return null;
   }
 
   private routeBrowserMessage(
@@ -1819,13 +1846,165 @@ export class WsBridge {
       this.rememberClientMessage(session, msg.client_msg_id);
     }
 
-    if (session.adapter) {
-      this.routeToAdapter(session, msg, ws);
-    } else if (session.backendType === "claude") {
-      this.routeToClaude(session, msg, ws);
-    } else {
-      this.routeToAdapter(session, msg, ws);
+    // §3.6.1: user messages take the (possibly async) memory-enrichment path
+    // after all RBAC / idempotency gates above. Everything else dispatches
+    // synchronously exactly as before.
+    if (msg.type === "user_message") {
+      this.handleUserMessageWithEnrichment(session, msg, ws);
+      return;
     }
+
+    this.dispatchBrowserMessage(session, msg, ws);
+  }
+
+  /**
+   * Final backend dispatch (adapter vs Claude CLI), extracted from
+   * routeBrowserMessage so the enrichment path can reuse it.
+   *
+   * For user_message, `userHistoryContent` overrides the text stored in
+   * messageHistory (history shows what the user typed; `msg.content` — which
+   * may carry the enrichment block — goes to the backend). Returns the
+   * history entry id for user messages, null otherwise.
+   */
+  private dispatchBrowserMessage(
+    session: Session,
+    msg: BrowserOutgoingMessage,
+    ws?: ServerWebSocket<SocketData>,
+    userHistoryContent?: string,
+  ): string | null {
+    if (session.adapter) {
+      return this.routeToAdapter(session, msg, ws, userHistoryContent);
+    } else if (session.backendType === "claude") {
+      return this.routeToClaude(session, msg, ws, userHistoryContent);
+    } else {
+      return this.routeToAdapter(session, msg, ws, userHistoryContent);
+    }
+  }
+
+  /**
+   * user_message routing with the memory-enrichment hook (§3.6.1–3.6.4).
+   *
+   * ASYNC-RIPPLE DECISION: routeBrowserMessage stays synchronous. Enrichment
+   * is an async pre-step performed only for user_message and only when a
+   * collective-intelligence layer is attached — so all existing synchronous
+   * callers (handleBrowserMessage, injectUserMessage, setMcpServers,
+   * injectDetectedEnvironmentMcp) keep their contracts, and sessions without
+   * CI keep the fully synchronous v1 path. Because each enrichment awaits
+   * independently, two rapid user messages could otherwise dispatch out of
+   * order (a slow enrichment on msg1 racing a fast one on msg2); to preserve
+   * per-session ordering we serialize user-message dispatch through a
+   * per-session promise chain. The chain can back up at most
+   * ENRICHMENT_TIMEOUT_MS per message, so chat never blocks on memory.
+   */
+  private handleUserMessageWithEnrichment(
+    session: Session,
+    msg: BrowserOutgoingMessage & { type: "user_message" },
+    ws?: ServerWebSocket<SocketData>,
+  ): void {
+    // §3.4 idle trigger: any user activity resets the idle clock.
+    try {
+      noteSessionActivity(this.consolidationContext(session));
+    } catch (err) {
+      console.warn(`[ws-bridge] noteSessionActivity failed for ${session.id}:`, err);
+    }
+
+    const ci = this.collectiveIntelligence;
+    if (!ci || typeof ci.enrichUserMessage !== "function") {
+      // No CI layer attached — keep the fully synchronous dispatch path.
+      this.dispatchBrowserMessage(session, msg, ws);
+      return;
+    }
+
+    const prior = this.userMessageChains.get(session.id) ?? Promise.resolve();
+    const next = prior.then(() =>
+      this.enrichAndDispatchUserMessage(session, msg, ws).catch((err) => {
+        console.warn(`[ws-bridge] user_message dispatch failed for ${session.id}:`, err);
+      }),
+    );
+    this.userMessageChains.set(session.id, next);
+    // Drop the chain entry once fully drained so the map doesn't grow forever.
+    void next.finally(() => {
+      if (this.userMessageChains.get(session.id) === next) {
+        this.userMessageChains.delete(session.id);
+      }
+    });
+  }
+
+  /**
+   * Enrich a user message with recalled memory, dispatch it, and surface the
+   * recall to browsers (§3.6.1–3.6.4):
+   *  - enrichment is raced against ENRICHMENT_TIMEOUT_MS and try/caught —
+   *    on timeout or error the ORIGINAL content is sent unchanged;
+   *  - the backend receives `<block>\n\n<original>`, while messageHistory
+   *    stores the original user text;
+   *  - after the history entry exists, a memory_enriched message carrying its
+   *    id + the recalled items is broadcast (skipped when block is null).
+   */
+  private async enrichAndDispatchUserMessage(
+    session: Session,
+    msg: BrowserOutgoingMessage & { type: "user_message" },
+    ws?: ServerWebSocket<SocketData>,
+  ): Promise<void> {
+    let enrichment: import("./semantic-memory.js").EnrichmentResult | null = null;
+    try {
+      const timeout = new Promise<null>((resolveRace) => {
+        const timer = setTimeout(() => resolveRace(null), WsBridge.ENRICHMENT_TIMEOUT_MS);
+        timer.unref?.();
+      });
+      enrichment = await Promise.race([
+        this.collectiveIntelligence!.enrichUserMessage(this.consolidationContext(session), msg.content),
+        timeout,
+      ]);
+    } catch (err) {
+      console.warn(`[ws-bridge] memory enrichment failed for ${session.id} (sending original):`, err);
+      enrichment = null;
+    }
+
+    const block = enrichment?.block ?? null;
+    const outbound = block ? { ...msg, content: `${block}\n\n${msg.content}` } : msg;
+    const historyId = this.dispatchBrowserMessage(session, outbound, ws, msg.content);
+
+    if (block && enrichment && enrichment.items.length > 0) {
+      this.broadcastToBrowsers(session, {
+        type: "memory_enriched",
+        user_message_id: historyId ?? undefined,
+        items: enrichment.items,
+      });
+    }
+  }
+
+  /** Session context for memory consolidation / enrichment (§3.6 item 5). */
+  private consolidationContext(session: Session): {
+    sessionId: string;
+    repoRoot: string;
+    backendType: BackendType;
+  } {
+    return {
+      sessionId: session.id,
+      repoRoot: session.state.repo_root || session.state.cwd || "",
+      backendType: session.backendType,
+    };
+  }
+
+  /**
+   * §3.4 turn-boundary trigger: on every result message, record activity for
+   * the idle watcher and — fire-and-forget, off the hot path — consolidate
+   * when the un-consolidated fragment threshold is met.
+   */
+  private maybeConsolidateOnTurn(session: Session): void {
+    const ctx = this.consolidationContext(session);
+    try {
+      noteSessionActivity(ctx);
+    } catch (err) {
+      console.warn(`[ws-bridge] noteSessionActivity failed for ${session.id}:`, err);
+    }
+    void (async () => {
+      if (await shouldConsolidateOnTurn(session.id)) {
+        await consolidate({ ...ctx, reason: "turn_boundary" });
+      }
+    })().catch((err) => {
+      console.warn(`[ws-bridge] turn-boundary consolidation failed for ${session.id}:`, err);
+    });
   }
 
   private isDuplicateClientMessage(session: Session, clientMsgId: string): boolean {
@@ -1902,18 +2081,19 @@ export class WsBridge {
     }
   }
 
+  /**
+   * Send a user message to the Claude CLI. `historyContent` (when set) is the
+   * text stored in messageHistory — the original user prompt — while
+   * `msg.content` (possibly memory-enriched, §3.6.1) goes to the CLI.
+   * Returns the history entry id.
+   */
   private handleUserMessage(
     session: Session,
-    msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[] }
-  ) {
+    msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[] },
+    historyContent?: string,
+  ): string {
     // Store user message in history for replay with stable ID for dedup on reconnect
-    const ts = Date.now();
-    session.messageHistory.push({
-      type: "user_message",
-      content: msg.content,
-      timestamp: ts,
-      id: `user-${ts}-${this.userMsgCounter++}`,
-    });
+    const historyId = this.pushUserHistoryEntry(session, historyContent ?? msg.content);
 
     // Build content: if images are present, use content block array; otherwise plain string
     let content: string | unknown[];
@@ -1939,6 +2119,7 @@ export class WsBridge {
     });
     this.sendToCLI(session, ndjson);
     this.persistSession(session);
+    return historyId;
   }
 
   private handlePermissionResponse(

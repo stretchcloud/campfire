@@ -34,6 +34,9 @@ vi.mock("../store.js", () => ({
       // the mock must provide them or every render throws.
       sessions: mockStoreValues.sessions ?? new Map(),
       replaySessionId: mockStoreValues.replaySessionId ?? null,
+      // Recalled-memory enrichments (memory_enriched broadcasts) rendered as
+      // collapsible chips under the corresponding user messages.
+      memoryEnrichments: mockStoreValues.memoryEnrichments ?? new Map(),
     };
     return selector(state);
   },
@@ -88,6 +91,13 @@ function resetStore() {
   mockStoreValues.sessionStatus = new Map();
   mockStoreValues.sessions = new Map();
   mockStoreValues.replaySessionId = null;
+  mockStoreValues.memoryEnrichments = new Map();
+}
+
+function setStoreMemoryEnrichments(sessionId: string, enrichments: Map<string, unknown>) {
+  const map = new Map();
+  map.set(sessionId, enrichments);
+  mockStoreValues.memoryEnrichments = map;
 }
 
 beforeEach(() => {
@@ -409,5 +419,61 @@ describe("MessageFeed - subagent grouping", () => {
     expect(screen.getAllByText("Research the problem").length).toBeGreaterThanOrEqual(1);
     // The agent type badge should be shown
     expect(screen.getByText("researcher")).toBeTruthy();
+  });
+});
+
+// ─── Recalled-context chips (memory_enriched) ────────────────────────────────
+
+describe("MessageFeed - recalled-context chips", () => {
+  const ENRICHMENT = {
+    items: [
+      { id: "mem-1", kind: "knowledge" as const, namespace: "repo:abc", tag: "auth", summary: "Auth uses JWT", weight: 0.8 },
+    ],
+    timestamp: Date.now(),
+  };
+
+  it("renders the chip under the user message matching the enrichment key", () => {
+    // Validates: an enrichment keyed by a user message id renders a collapsed
+    // "Recalled N memories" chip with that message, not with other messages.
+    const sid = "test-enrichment-keyed";
+    setStoreMessages(sid, [
+      makeMessage({ id: "u1", role: "user", content: "First question" }),
+      makeMessage({ id: "a1", role: "assistant", content: "Answer" }),
+      makeMessage({ id: "u2", role: "user", content: "Second question" }),
+    ]);
+    setStoreMemoryEnrichments(sid, new Map([["u1", ENRICHMENT]]));
+
+    render(<MessageFeed sessionId={sid} />);
+
+    const chip = screen.getByText("Recalled 1 memory");
+    expect(chip).toBeTruthy();
+    // The chip lives in the same feed-entry wrapper as the u1 bubble
+    const entry = chip.closest("div.mt-6, div.mt-2, div:not([class])");
+    expect(screen.getByText("First question")).toBeTruthy();
+    expect(entry).toBeTruthy();
+  });
+
+  it("attaches a 'latest'-keyed enrichment to the most recent user message", () => {
+    // Validates: enrichments the ws layer couldn't resolve to a message id
+    // (stored under "latest") fall back to the last user message in the feed.
+    const sid = "test-enrichment-latest";
+    setStoreMessages(sid, [
+      makeMessage({ id: "u1", role: "user", content: "Old question" }),
+      makeMessage({ id: "u2", role: "user", content: "New question" }),
+    ]);
+    setStoreMemoryEnrichments(sid, new Map([["latest", ENRICHMENT]]));
+
+    render(<MessageFeed sessionId={sid} />);
+
+    expect(screen.getByText("Recalled 1 memory")).toBeTruthy();
+  });
+
+  it("renders no chip when there are no enrichments", () => {
+    const sid = "test-enrichment-none";
+    setStoreMessages(sid, [makeMessage({ id: "u1", role: "user", content: "Question" })]);
+
+    render(<MessageFeed sessionId={sid} />);
+
+    expect(screen.queryByText(/Recalled \d+ memor/)).toBeNull();
   });
 });

@@ -9,10 +9,15 @@
  * Provider is configured in ~/.campfire/settings.json via embeddingProvider field.
  */
 
-import { getSettings } from "./settings-manager.js";
+import { getSettings, type EmbeddingProvider } from "./settings-manager.js";
 
 export const OPENAI_DIM = 1536;
 export const OLLAMA_DIM = 768;
+
+/** Name of the currently configured embedding provider. */
+export function getEmbeddingProviderName(): EmbeddingProvider {
+  return getSettings().embeddingProvider;
+}
 
 /**
  * Generate an embedding vector for the given text using the configured provider.
@@ -35,12 +40,16 @@ export async function embed(text: string): Promise<number[] | null> {
 /**
  * Return the embedding dimension for the currently configured provider.
  * Used when creating LanceDB tables so the vector column has the correct width.
+ *
+ * v2 (design §3.5.2): returns null when provider is "none" — the old fake
+ * 1536 default caused dimension lock-in. With provider "none", no vector is
+ * populated and fragments are stored with embeddingStatus = "none".
  */
-export function getEmbeddingDim(): number {
+export function getEmbeddingDim(): number | null {
   const settings = getSettings();
   if (settings.embeddingProvider === "openai") return OPENAI_DIM;
   if (settings.embeddingProvider === "ollama") return OLLAMA_DIM;
-  return OPENAI_DIM; // default dimension when "none" (stored as zeros)
+  return null;
 }
 
 async function embedWithOpenAI(text: string, apiKey: string, model: string): Promise<number[] | null> {

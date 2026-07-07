@@ -690,6 +690,32 @@ function handleParsedMessage(
       break;
     }
 
+    case "memory_enriched": {
+      // Recalled-memory enrichment for a user message. Key by the server's
+      // user_message_id when it matches a message we have; otherwise attach
+      // to the most recent user message (the one that was just enriched —
+      // the local echo uses a client-generated id the server doesn't know).
+      // Fall back to the literal "latest" key when no user message exists yet.
+      const sessionMessages = store.messages.get(sessionId) || [];
+      let key: string | undefined;
+      if (data.user_message_id && sessionMessages.some((m) => m.id === data.user_message_id)) {
+        key = data.user_message_id;
+      } else {
+        for (let i = sessionMessages.length - 1; i >= 0; i--) {
+          if (sessionMessages[i].role === "user") {
+            key = sessionMessages[i].id;
+            break;
+          }
+        }
+      }
+      store.setMemoryEnrichment(sessionId, key ?? "latest", {
+        items: data.items,
+        truncated: data.truncated,
+        timestamp: Date.now(),
+      });
+      break;
+    }
+
     case "presence_update": {
       store.setSessionViewers(sessionId, data.viewers);
       break;
@@ -888,6 +914,7 @@ export function disconnectSession(sessionId: string) {
   taskCounters.delete(sessionId);
   processedAgentIds.delete(sessionId);
   pendingBackgroundAgents.delete(sessionId);
+  useStore.getState().clearMemoryEnrichments(sessionId);
 }
 
 export function disconnectAll() {

@@ -611,3 +611,58 @@ describe("MCP Servers", () => {
     expect(useStore.getState().mcpServers.has("s1")).toBe(false);
   });
 });
+
+// ─── Memory enrichments (semantic memory v2 recalled-context chips) ─────────
+
+describe("Memory enrichments", () => {
+  const MOCK_ENRICHMENT = {
+    items: [
+      { id: "mem-1", kind: "knowledge" as const, namespace: "repo:abc", tag: "auth", summary: "Auth uses JWT", weight: 0.9 },
+    ],
+    timestamp: 123,
+  };
+
+  it("setMemoryEnrichment: stores per session keyed by user message id", () => {
+    useStore.getState().setMemoryEnrichment("s1", "u1", MOCK_ENRICHMENT);
+    useStore.getState().setMemoryEnrichment("s1", "u2", { ...MOCK_ENRICHMENT, truncated: true });
+
+    const sessionEnrichments = useStore.getState().memoryEnrichments.get("s1");
+    expect(sessionEnrichments?.get("u1")).toEqual(MOCK_ENRICHMENT);
+    expect(sessionEnrichments?.get("u2")?.truncated).toBe(true);
+  });
+
+  it("setMemoryEnrichment: overwrites an existing key (latest fallback re-broadcast)", () => {
+    useStore.getState().setMemoryEnrichment("s1", "latest", MOCK_ENRICHMENT);
+    const newer = { ...MOCK_ENRICHMENT, timestamp: 456 };
+    useStore.getState().setMemoryEnrichment("s1", "latest", newer);
+
+    expect(useStore.getState().memoryEnrichments.get("s1")?.get("latest")).toEqual(newer);
+  });
+
+  it("clearMemoryEnrichments: removes only the given session's enrichments", () => {
+    useStore.getState().setMemoryEnrichment("s1", "u1", MOCK_ENRICHMENT);
+    useStore.getState().setMemoryEnrichment("s2", "u9", MOCK_ENRICHMENT);
+
+    useStore.getState().clearMemoryEnrichments("s1");
+
+    expect(useStore.getState().memoryEnrichments.has("s1")).toBe(false);
+    expect(useStore.getState().memoryEnrichments.has("s2")).toBe(true);
+  });
+
+  it("removeSession: clears memoryEnrichments like every other per-session map", () => {
+    // Validates: the enrichment map participates in the removeSession cleanup
+    // sweep so deleted sessions don't leak recalled-context state.
+    useStore.getState().addSession(makeSession("s1"));
+    useStore.getState().setMemoryEnrichment("s1", "u1", MOCK_ENRICHMENT);
+
+    useStore.getState().removeSession("s1");
+
+    expect(useStore.getState().memoryEnrichments.has("s1")).toBe(false);
+  });
+
+  it("reset: clears all memory enrichments", () => {
+    useStore.getState().setMemoryEnrichment("s1", "u1", MOCK_ENRICHMENT);
+    useStore.getState().reset();
+    expect(useStore.getState().memoryEnrichments.size).toBe(0);
+  });
+});

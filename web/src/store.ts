@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, BackgroundAgentItem, McpServerDetail, SessionRole, PresenceViewer, PermissionVote, VotingPolicy } from "./types.js";
+import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, BackgroundAgentItem, McpServerDetail, SessionRole, PresenceViewer, PermissionVote, VotingPolicy, MemoryEnrichment } from "./types.js";
 import type { UpdateInfo, PRStatusResponse } from "./api.js";
 
 interface AppState {
@@ -57,6 +57,10 @@ interface AppState {
 
   // Tool progress (session → tool_use_id → progress info)
   toolProgress: Map<string, Map<string, { toolName: string; elapsedSeconds: number }>>;
+
+  // Recalled-memory enrichments per session (outer key = sessionId,
+  // inner key = user message id or "latest" when unresolvable)
+  memoryEnrichments: Map<string, Map<string, MemoryEnrichment>>;
 
   // Sidebar project grouping
   collapsedProjects: Set<string>;
@@ -156,6 +160,10 @@ interface AppState {
   // Tool progress actions
   setToolProgress: (sessionId: string, toolUseId: string, data: { toolName: string; elapsedSeconds: number }) => void;
   clearToolProgress: (sessionId: string, toolUseId?: string) => void;
+
+  // Memory enrichment actions
+  setMemoryEnrichment: (sessionId: string, key: string, enrichment: MemoryEnrichment) => void;
+  clearMemoryEnrichments: (sessionId: string) => void;
 
   // Sidebar project grouping actions
   toggleProjectCollapse: (projectKey: string) => void;
@@ -293,6 +301,7 @@ export const useStore = create<AppState>((set) => ({
   prStatus: new Map(),
   mcpServers: new Map(),
   toolProgress: new Map(),
+  memoryEnrichments: new Map(),
   collapsedProjects: getInitialCollapsedProjects(),
   sessionStartTimes: new Map(),
   sessionViewers: new Map(),
@@ -425,6 +434,8 @@ export const useStore = create<AppState>((set) => ({
       mcpServers.delete(sessionId);
       const toolProgress = new Map(s.toolProgress);
       toolProgress.delete(sessionId);
+      const memoryEnrichments = new Map(s.memoryEnrichments);
+      memoryEnrichments.delete(sessionId);
       const prStatus = new Map(s.prStatus);
       prStatus.delete(sessionId);
       const sessionStartTimes = new Map(s.sessionStartTimes);
@@ -463,6 +474,7 @@ export const useStore = create<AppState>((set) => ({
         diffPanelSelectedFile,
         mcpServers,
         toolProgress,
+        memoryEnrichments,
         prStatus,
         sessionStartTimes,
         sessionViewers,
@@ -743,6 +755,23 @@ export const useStore = create<AppState>((set) => ({
       return { toolProgress };
     }),
 
+  setMemoryEnrichment: (sessionId, key, enrichment) =>
+    set((s) => {
+      const memoryEnrichments = new Map(s.memoryEnrichments);
+      const sessionEnrichments = new Map(memoryEnrichments.get(sessionId) || []);
+      sessionEnrichments.set(key, enrichment);
+      memoryEnrichments.set(sessionId, sessionEnrichments);
+      return { memoryEnrichments };
+    }),
+
+  clearMemoryEnrichments: (sessionId) =>
+    set((s) => {
+      if (!s.memoryEnrichments.has(sessionId)) return s;
+      const memoryEnrichments = new Map(s.memoryEnrichments);
+      memoryEnrichments.delete(sessionId);
+      return { memoryEnrichments };
+    }),
+
   toggleProjectCollapse: (projectKey) =>
     set((s) => {
       const collapsedProjects = new Set(s.collapsedProjects);
@@ -941,6 +970,7 @@ export const useStore = create<AppState>((set) => ({
       recentlyRenamed: new Set(),
       mcpServers: new Map(),
       toolProgress: new Map(),
+      memoryEnrichments: new Map(),
       prStatus: new Map(),
       activeTab: "chat" as const,
       diffPanelSelectedFile: new Map(),
