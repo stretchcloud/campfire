@@ -2,6 +2,13 @@
 
 > Campfire began as a fork of [the-companion](https://github.com/The-Vibe-Company/companion) and diverged into a separate product. Pre-fork history (versions up to 0.42.0) lives in the upstream repository; Campfire's own releases start at 0.1.0.
 
+## 0.2.1 (2026-07-07)
+
+### Fixes
+
+* **npm:** include the project README and LICENSE in the published tarball so the npm package page renders documentation (previously the package root had neither)
+* **ci:** publish the Docker image to GitHub Container Registry (`ghcr.io/stretchcloud/campfire`) using the workflow's built-in token — the Docker Hub path required credentials that were never configured, so no image had ever been published
+
 ## 0.2.0 (2026-07-07)
 
 ### Features
