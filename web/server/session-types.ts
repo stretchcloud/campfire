@@ -223,6 +223,10 @@ export type BrowserIncomingMessageBase =
   | { type: "memory_stored"; fragment: import("./semantic-memory.js").MemoryFragment }
   | { type: "memory_query_result"; query: string; results: import("./semantic-memory.js").MemoryFragment[] }
   | { type: "memory_consolidated"; tag: string; knowledge: import("./semantic-memory.js").ConsolidatedKnowledge }
+  // Emitted when a user_message was enriched with recalled memories, so the
+  // UI can render a collapsible "recalled context" chip instead of the
+  // injected text being invisible. `items` lists exactly what was included.
+  | { type: "memory_enriched"; user_message_id?: string; items: MemoryEnrichmentItem[]; truncated?: boolean }
   // Layer 2: Deliberation
   | { type: "deliberation_proposal"; proposal: import("./deliberation-engine.js").DeliberationProposal }
   | { type: "deliberation_response"; response: import("./deliberation-engine.js").DeliberationResponse }
@@ -236,6 +240,17 @@ export type BrowserIncomingMessageBase =
   | { type: "shared_thought"; fragment: import("./shared-context.js").ContextFragment }
   | { type: "semantic_link_added"; sourceId: string; targetId: string; relation: string }
   | { type: "consensus_update"; state: import("./shared-context.js").ConsensusState };
+
+/** One recalled memory included in an enriched prompt (for the UI chip). */
+export interface MemoryEnrichmentItem {
+  id: string;
+  kind: "knowledge" | "fragment";
+  namespace: string;
+  summary: string;
+  tag?: string;
+  /** Decayed weight at recall time (0..1). */
+  weight: number;
+}
 
 export type BrowserIncomingMessage = BrowserIncomingMessageBase & { seq?: number };
 

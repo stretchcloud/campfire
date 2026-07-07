@@ -15,6 +15,8 @@ function settingsResponse(s: CampfireSettings) {
     openaiApiKeyConfigured: !!s.openaiApiKey?.trim(),
     anthropicApiKeyConfigured: !!s.anthropicApiKey?.trim(),
     onboardingCompleted: s.onboardingCompleted,
+    // Semantic memory v2: decay policies + recall depths (not secret — full values)
+    memory: s.memory,
   };
 }
 
@@ -57,13 +59,19 @@ export function registerSettingsRoutes(api: Hono, _deps: RouteDeps): void {
     }
 
     const hasOnboarding = typeof body.onboardingCompleted === "boolean";
-    const hasAnyField = STRING_FIELDS.some((f) => body[f] !== undefined) || hasOnboarding;
+    const hasMemory = body.memory !== undefined;
+    if (hasMemory && (typeof body.memory !== "object" || body.memory === null || Array.isArray(body.memory))) {
+      return c.json({ error: "memory must be an object" }, 400);
+    }
+    const hasAnyField = STRING_FIELDS.some((f) => body[f] !== undefined) || hasOnboarding || hasMemory;
     if (!hasAnyField) {
       return c.json({ error: "At least one settings field is required" }, 400);
     }
 
-    const patch: Record<string, string | boolean> = {};
+    const patch: Record<string, string | boolean | object> = {};
     if (hasOnboarding) patch.onboardingCompleted = body.onboardingCompleted;
+    // Partial memory patch — deep-merged + normalized by the settings manager
+    if (hasMemory) patch.memory = body.memory;
     for (const field of STRING_FIELDS) {
       if (typeof body[field] === "string") {
         patch[field] = field === "openrouterModel"

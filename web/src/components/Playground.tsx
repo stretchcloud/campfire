@@ -8,8 +8,9 @@ import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { ChatView } from "./ChatView.js";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
-import type { PermissionRequest, ChatMessage, ContentBlock, SessionState, McpServerDetail, PresenceViewer, PermissionVote } from "../types.js";
+import type { PermissionRequest, ChatMessage, ContentBlock, SessionState, McpServerDetail, PresenceViewer, PermissionVote, MemoryEnrichmentItem } from "../types.js";
 import type { TaskItem } from "../types.js";
+import { RecalledContextChip } from "./RecalledContextChip.js";
 import type { UpdateInfo, GitHubPRInfo } from "../api.js";
 import { GitHubPRDisplay, CodexRateLimitsSection, CodexTokenDetailsSection, ClaudeTokenDetailsSection } from "./TaskPanel.js";
 import { CostCard } from "./CostCard.js";
@@ -20,6 +21,40 @@ import type { GalleryEntryInfo } from "../api.js";
 // ─── Mock Data ──────────────────────────────────────────────────────────────
 
 const MOCK_SESSION_ID = "playground-session";
+
+/** Recalled-memory items for the RecalledContextChip mocks (memory_enriched payload). */
+const MOCK_MEMORY_ITEMS: MemoryEnrichmentItem[] = [
+  {
+    id: "mem-1",
+    kind: "knowledge",
+    namespace: "repo:a1b2c3d4",
+    tag: "rate-limiting",
+    summary: "API routes use the Hono middleware stack; rate limiting belongs in web/server/routes.ts before auth checks.",
+    weight: 0.92,
+  },
+  {
+    id: "mem-2",
+    kind: "knowledge",
+    namespace: "global",
+    tag: "testing",
+    summary: "All new backend code must include colocated Vitest tests (routes.test.ts next to routes.ts).",
+    weight: 0.78,
+  },
+  {
+    id: "mem-3",
+    kind: "fragment",
+    namespace: "repo:a1b2c3d4",
+    summary: "Decided to use token-bucket over sliding-window because the session store already tracks per-session timestamps.",
+    weight: 0.55,
+  },
+  {
+    id: "mem-4",
+    kind: "fragment",
+    namespace: "agent:claude",
+    summary: "Claude Code sessions reconnect with --resume; middleware must tolerate duplicate session init.",
+    weight: 0.31,
+  },
+];
 
 function mockPermission(overrides: Partial<PermissionRequest> & { tool_name: string; input: Record<string, unknown> }): PermissionRequest {
   return {
@@ -1616,6 +1651,25 @@ export function Playground() {
                 agentType="Explore"
                 items={MOCK_SUBAGENT_TOOL_ITEMS}
               />
+            </Card>
+          </div>
+        </Section>
+
+        {/* ─── Recalled Memory Context ──────────────────────────────── */}
+        <Section title="Recalled Memory Context" description="Collapsible chip shown with a user message when semantic memory enriched the prompt (memory_enriched broadcast)">
+          <div className="space-y-4 max-w-3xl">
+            <Card label="Collapsed (default) — one-line summary under the user message">
+              <MessageBubble message={{ id: "mem-user-1", role: "user", content: "Add rate limiting to the API endpoints", timestamp: Date.now() }} />
+              <RecalledContextChip items={MOCK_MEMORY_ITEMS} />
+            </Card>
+            <Card label="Expanded — namespace badges, tags, decayed-weight bars, staleness hint">
+              <RecalledContextChip items={MOCK_MEMORY_ITEMS} defaultOpen />
+            </Card>
+            <Card label="Truncated — context budget hit, some recalled items omitted">
+              <RecalledContextChip items={MOCK_MEMORY_ITEMS.slice(0, 2)} truncated defaultOpen />
+            </Card>
+            <Card label="Single memory recalled">
+              <RecalledContextChip items={MOCK_MEMORY_ITEMS.slice(0, 1)} />
             </Card>
           </div>
         </Section>

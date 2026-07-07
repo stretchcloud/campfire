@@ -2,8 +2,9 @@ import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { MessageBubble } from "./MessageBubble.js";
+import { RecalledContextChip } from "./RecalledContextChip.js";
 import { getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
-import type { ChatMessage, ContentBlock } from "../types.js";
+import type { ChatMessage, ContentBlock, MemoryEnrichment } from "../types.js";
 
 const FEED_PAGE_SIZE = 100;
 
@@ -276,7 +277,7 @@ function ToolMessageGroup({ group }: { group: ToolMsgGroup }) {
   );
 }
 
-function FeedEntries({ entries, onForkAt }: { entries: FeedEntry[]; onForkAt?: (msgId: string) => void }) {
+function FeedEntries({ entries, onForkAt, enrichments }: { entries: FeedEntry[]; onForkAt?: (msgId: string) => void; enrichments?: Map<string, MemoryEnrichment> | null }) {
   return (
     <>
       {entries.map((entry, i) => {
@@ -300,12 +301,16 @@ function FeedEntries({ entries, onForkAt }: { entries: FeedEntry[]; onForkAt?: (
             </div>
           );
         }
+        const enrichment = entry.msg.role === "user" ? enrichments?.get(entry.msg.id) : undefined;
         return (
           <div key={entry.msg.id} className={spacingClass}>
             <MessageBubble
               message={entry.msg}
               onFork={onForkAt ? () => onForkAt(entry.msg.id) : undefined}
             />
+            {enrichment && (
+              <RecalledContextChip items={enrichment.items} truncated={enrichment.truncated} />
+            )}
           </div>
         );
       })}
@@ -382,6 +387,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const streamingOutputTokens = useStore((s) => s.streamingOutputTokens.get(sessionId));
   const sessionStatus = useStore((s) => s.sessionStatus.get(sessionId));
   const toolProgress = useStore((s) => s.toolProgress.get(sessionId));
+  const memoryEnrichments = useStore((s) => s.memoryEnrichments?.get(sessionId));
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottom = useRef(true);
@@ -412,6 +418,26 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   }, [sessionId, messages, isReplay, cwd]);
 
   const grouped = useMemo(() => groupMessages(messages), [messages]);
+
+  // Resolve memory enrichments to user message ids. Entries keyed "latest"
+  // (server couldn't name the message) attach to the most recent user message.
+  const enrichmentByMsgId = useMemo(() => {
+    if (!memoryEnrichments || memoryEnrichments.size === 0) return null;
+    const map = new Map<string, MemoryEnrichment>();
+    for (const [key, enrichment] of memoryEnrichments) {
+      if (key !== "latest") map.set(key, enrichment);
+    }
+    const latest = memoryEnrichments.get("latest");
+    if (latest) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user") {
+          if (!map.has(messages[i].id)) map.set(messages[i].id, latest);
+          break;
+        }
+      }
+    }
+    return map;
+  }, [memoryEnrichments, messages]);
 
   // Reset visible count when switching sessions
   useEffect(() => {
@@ -493,7 +519,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
               </button>
             </div>
           )}
-          <FeedEntries entries={visibleEntries} onForkAt={!isReplay && cwd ? handleForkAt : undefined} />
+          <FeedEntries entries={visibleEntries} onForkAt={!isReplay && cwd ? handleForkAt : undefined} enrichments={enrichmentByMsgId} />
 
           {/* Tool progress indicator */}
           {toolProgress && toolProgress.size > 0 && !streamingText && (

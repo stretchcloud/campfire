@@ -1399,3 +1399,85 @@ describe("handleMessage: assistant clears only completed tool progress", () => {
     expect(progress?.get("tu-b")).toEqual({ toolName: "Glob", elapsedSeconds: 2 });
   });
 });
+
+// ===========================================================================
+// memory_enriched: recalled-context enrichment storage
+// ===========================================================================
+describe("handleMessage: memory_enriched", () => {
+  const MOCK_ITEMS = [
+    { id: "mem-1", kind: "knowledge" as const, namespace: "repo:abc", tag: "auth", summary: "Auth uses JWT", weight: 0.9 },
+    { id: "mem-2", kind: "fragment" as const, namespace: "global", summary: "Prefer bun over npm", weight: 0.4 },
+  ];
+
+  it("stores enrichment keyed by user_message_id when it matches a known user message", () => {
+    // Validates: when the server names a user message we already have (e.g.
+    // ids restored from message_history), the enrichment is keyed directly
+    // by that id so the chip renders under the right message.
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().appendMessage("s1", { id: "u1", role: "user", content: "hello", timestamp: 1 });
+
+    fireMessage({ type: "memory_enriched", user_message_id: "u1", items: MOCK_ITEMS });
+
+    const enrichment = useStore.getState().memoryEnrichments.get("s1")?.get("u1");
+    expect(enrichment).toBeDefined();
+    expect(enrichment!.items).toEqual(MOCK_ITEMS);
+    expect(enrichment!.truncated).toBeUndefined();
+  });
+
+  it("falls back to the most recent user message when user_message_id is unknown", () => {
+    // Validates: the local echo of a sent message uses a client-generated id
+    // the server does not know, so an unmatched user_message_id attaches to
+    // the latest user message (the one that was just enriched).
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().appendMessage("s1", { id: "u1", role: "user", content: "first", timestamp: 1 });
+    useStore.getState().appendMessage("s1", { id: "a1", role: "assistant", content: "reply", timestamp: 2 });
+    useStore.getState().appendMessage("s1", { id: "u2", role: "user", content: "second", timestamp: 3 });
+
+    fireMessage({ type: "memory_enriched", user_message_id: "server-side-id", items: MOCK_ITEMS, truncated: true });
+
+    const sessionEnrichments = useStore.getState().memoryEnrichments.get("s1");
+    expect(sessionEnrichments?.get("u2")).toBeDefined();
+    expect(sessionEnrichments?.get("u2")!.truncated).toBe(true);
+    expect(sessionEnrichments?.has("server-side-id")).toBe(false);
+  });
+
+  it("falls back to the most recent user message when user_message_id is absent", () => {
+    // Validates: omitted user_message_id (server couldn't name the message)
+    // still attaches the enrichment to the latest user message.
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().appendMessage("s1", { id: "u1", role: "user", content: "hi", timestamp: 1 });
+
+    fireMessage({ type: "memory_enriched", items: MOCK_ITEMS });
+
+    expect(useStore.getState().memoryEnrichments.get("s1")?.get("u1")).toBeDefined();
+  });
+
+  it("stores under the literal 'latest' key when no user message exists yet", () => {
+    // Validates: an enrichment arriving before any user message (e.g. replay
+    // ordering edge case) is retained under "latest" so the feed can still
+    // attach it once messages exist.
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    fireMessage({ type: "memory_enriched", items: MOCK_ITEMS });
+
+    expect(useStore.getState().memoryEnrichments.get("s1")?.get("latest")).toBeDefined();
+  });
+
+  it("disconnectSession clears stored enrichments for that session", () => {
+    // Validates: memory enrichments are cleaned up in disconnectSession like
+    // the other per-session state (task dedup sets, counters, etc.).
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().appendMessage("s1", { id: "u1", role: "user", content: "hi", timestamp: 1 });
+    fireMessage({ type: "memory_enriched", user_message_id: "u1", items: MOCK_ITEMS });
+    expect(useStore.getState().memoryEnrichments.get("s1")).toBeDefined();
+
+    wsModule.disconnectSession("s1");
+
+    expect(useStore.getState().memoryEnrichments.get("s1")).toBeUndefined();
+  });
+});
