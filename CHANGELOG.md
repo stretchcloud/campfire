@@ -2,6 +2,13 @@
 
 > Campfire began as a fork of [the-companion](https://github.com/The-Vibe-Company/companion) and diverged into a separate product. Pre-fork history (versions up to 0.42.0) lives in the upstream repository; Campfire's own releases start at 0.1.0.
 
+## 0.4.0 (2026-07-07)
+
+### Features
+
+* **desktop:** native macOS app (Apple Silicon) distributed as a DMG on GitHub Releases. An Electron shell boots the full Campfire server — every backend and feature included — as a bundled Bun sidecar, so no Bun install is required. Attaches to an already-running Campfire on port 4567 (service installs, `bunx the-campfire`) instead of double-spawning against `~/.campfire`; otherwise picks the first free port. Native menu, window-state persistence, external links open in the default browser, sidecar logs at `~/.campfire/logs/desktop-server.log`, crash dialog with relaunch. Build locally with `make dmg`; CI builds the DMG on the free macos-14 runner and attaches it to each release
+* **agents:** the orchestration MCP server is now spawned via the absolute path of the running Bun executable instead of a PATH lookup, so multi-agent tools work in the desktop app (where Bun ships inside the bundle) and on machines without a global Bun install
+
 ## 0.3.2 (2026-07-07)
 
 ### Documentation

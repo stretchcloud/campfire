@@ -23,9 +23,29 @@ describe("agent MCP tools", () => {
     });
 
     expect(config.type).toBe("stdio");
+    // Outside a Bun runtime (vitest runs on Node) the command falls back to
+    // the PATH-resolved `bun`.
     expect(config.command).toBe("bun");
     expect(config.args).toEqual(["/app/web/server/agent-mcp-stdio.ts"]);
     expect(config.env?.CAMPFIRE_PARENT_SESSION_ID).toBe("parent-1");
     expect(config.env?.CAMPFIRE_AGENT_MCP_BACKENDS).toBe("codex");
+  });
+
+  it("uses the absolute runtime path when running under Bun", () => {
+    // In production the server always runs under Bun. The desktop app bundles
+    // Bun inside the .app (not on PATH), so the MCP config must point the
+    // agent CLI at the absolute executable path, not a bare `bun` lookup.
+    (globalThis as Record<string, unknown>).Bun = {};
+    try {
+      const config = createAgentMcpServerConfig({
+        port: 4567,
+        token: "secret",
+        packageRoot: "/app/web",
+        parentSessionId: "parent-1",
+      });
+      expect(config.command).toBe(process.execPath);
+    } finally {
+      delete (globalThis as Record<string, unknown>).Bun;
+    }
   });
 });

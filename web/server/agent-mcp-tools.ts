@@ -55,6 +55,17 @@ export function generateAgentToolDefinitions(backends: BackendType[] = TOOL_BACK
     }));
 }
 
+/**
+ * Resolve the Bun executable to launch the stdio MCP server with. When the
+ * server itself runs under Bun (always in production, including the desktop
+ * app where Bun is bundled inside the .app and not on PATH), use the absolute
+ * path of the current runtime so the agent CLI can spawn it without needing
+ * a global `bun` install.
+ */
+function resolveBunCommand(): string {
+  return typeof Bun !== "undefined" && process.execPath ? process.execPath : "bun";
+}
+
 export function createAgentMcpServerConfig(options: {
   port: number;
   token: string;
@@ -64,7 +75,7 @@ export function createAgentMcpServerConfig(options: {
 }): McpServerConfig {
   return {
     type: "stdio",
-    command: "bun",
+    command: resolveBunCommand(),
     args: [`${options.packageRoot}/server/agent-mcp-stdio.ts`],
     env: {
       CAMPFIRE_AGENT_MCP_URL: `http://127.0.0.1:${options.port}/api/internal/agent-mcp`,

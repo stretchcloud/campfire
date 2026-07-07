@@ -1,0 +1,51 @@
+# Campfire desktop packaging (macOS, Apple Silicon).
+#
+# Distribution is deliberately unsigned/ad-hoc ("cheap" path): no Apple
+# Developer Program membership required. Downloaded builds carry the
+# quarantine attribute, so first launch needs either right-click → Open or:
+#   xattr -cr /Applications/Campfire.app
+# Signing + notarization can be layered on later by setting mac.identity and
+# notarize options once an Apple Developer certificate exists.
+appId: sh.campfire.desktop
+productName: Campfire
+copyright: © 2026 The Vibe Company
+
+directories:
+  output: dist
+  buildResources: build
+
+# The Electron app itself is tiny — just the main process + preload. The whole
+# Campfire server ships as extraResources (outside the asar) because it is
+# executed by the bundled Bun runtime, not by Electron's Node.
+files:
+  - main/**
+  - preload.cjs
+  - package.json
+
+extraResources:
+  - from: vendor/backend
+    to: backend
+  - from: vendor/bun
+    to: bun
+
+# The backend runs on Bun; nothing in the Electron app needs native rebuilds.
+npmRebuild: false
+
+# Copies backend node_modules into the bundle (electron-builder drops them
+# from extraResources by default) and ad-hoc signs the app (identity:null
+# skips builder signing, but Apple Silicon requires a valid signature).
+afterPack: scripts/after-pack.js
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  identity: null
+  minimumSystemVersion: "12.0"
+
+dmg:
+  sign: false
+  artifactName: Campfire-${version}-arm64.dmg

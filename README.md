@@ -85,7 +85,7 @@
 
 ## Quick Start
 
-There are three ways to run Campfire: from npm, from source, or with Docker.
+There are four ways to run Campfire: from npm, from source, with Docker, or as a native macOS app.
 
 ### Option 1: npm (fastest)
 
@@ -186,6 +186,22 @@ docker stop campfire && docker rm campfire
 ```
 
 See [Docker Deployment](#docker-deployment) for advanced configuration (mounting agent CLIs, reverse proxy, environment variables).
+
+### Option 4: macOS Desktop App (Apple Silicon)
+
+A native desktop app for Macs with Apple Silicon. It bundles the full Campfire server and the Bun runtime — no Bun install needed, every feature included.
+
+1. Download `Campfire-<version>-arm64.dmg` from the [latest release](https://github.com/stretchcloud/campfire/releases/latest)
+2. Drag **Campfire** into **Applications**
+3. First launch: right-click the app → **Open** (the build is not notarized with Apple; if macOS still refuses, run `xattr -cr /Applications/Campfire.app` once)
+
+The app stores its data in the same `~/.campfire` directory as the CLI, so sessions, recordings, and settings are shared. If a Campfire server is already running on port 4567 (for example the `the-campfire` background service), the app attaches to it instead of starting a second one. Agent CLIs (`claude`, `codex`, …) still need to be installed on your machine.
+
+To build the DMG from source:
+
+```bash
+make dmg    # stages the backend, then packages desktop/dist/Campfire-<version>-arm64.dmg
+```
 
 ### Requirements
 
