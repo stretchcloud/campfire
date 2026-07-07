@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: cd web && bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: cd web && bun run typecheck
+
+      - name: Test
+        run: cd web && bun run test
+
+      - name: Build
+        run: cd web && bun run build
