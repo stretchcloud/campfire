@@ -7,9 +7,12 @@
 <p align="center">A collaborative web platform for AI coding agents. Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, multi-agent orchestration, permission voting, session replay, scheduled tasks, and 30+ integrations.</p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/the-campfire"><img src="https://img.shields.io/npm/v/the-campfire.svg" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/the-campfire"><img src="https://img.shields.io/npm/dm/the-campfire.svg" alt="npm downloads" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
+  <a href="https://www.npmjs.com/package/the-campfire"><img src="https://img.shields.io/npm/v/the-campfire" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/the-campfire"><img src="https://img.shields.io/npm/dt/the-campfire" alt="npm downloads" /></a>
+  <a href="https://github.com/stretchcloud/campfire/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/stretchcloud/campfire/ci.yml?branch=main&label=CI" alt="CI status" /></a>
+  <a href="https://github.com/stretchcloud/campfire/stargazers"><img src="https://img.shields.io/github/stars/stretchcloud/campfire" alt="GitHub stars" /></a>
+  <a href="https://github.com/stretchcloud/campfire/pkgs/container/campfire"><img src="https://img.shields.io/badge/ghcr.io-campfire-2496ED?logo=docker&logoColor=white" alt="ghcr.io image" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/stretchcloud/campfire" alt="MIT License" /></a>
 </p>
 
 ---
