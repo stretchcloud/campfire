@@ -2,6 +2,12 @@
 
 > Campfire began as a fork of [the-companion](https://github.com/The-Vibe-Company/companion) and diverged into a separate product. Pre-fork history (versions up to 0.42.0) lives in the upstream repository; Campfire's own releases start at 0.1.0.
 
+## 0.3.2 (2026-07-07)
+
+### Documentation
+
+* **readme:** rewrite the Semantic Memory section for v2 — namespaces (global/repo/session/agent), decay + reinforcement + pinning, the auto-recall enrichment and recalled-context chip, the JUDGE→DISTILL→CONSOLIDATE pipeline, versioned `fragments_v2`/`consolidated_v2` storage, and the new overview/pin endpoints. The previous copy described the pre-v2 (and partly dead) behavior
+
 ## 0.3.1 (2026-07-07)
 
 ### Fixes
