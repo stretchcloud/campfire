@@ -1,6 +1,6 @@
 {
   "name": "the-campfire",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Campfire \u2014 collaborative web platform for AI coding agents. Run Claude Code, Codex, Goose, Aider, and more from one browser UI with real-time collaboration, permission voting, and automation.",
   "license": "MIT",
@@ -45,7 +45,7 @@
     "dev:vite": "vite",
     "build": "vite build",
     "start": "NODE_ENV=production bun server/index.ts",
-    "prepublishOnly": "bun run build",
+    "prepublishOnly": "cp ../README.md ../LICENSE . && bun run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
