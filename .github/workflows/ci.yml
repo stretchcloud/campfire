@@ -29,3 +29,8 @@ jobs:
 
       - name: Build
         run: cd web && bun run build
+
+      # Desktop shell helpers are pure Node/Bun modules — no Electron install
+      # needed to test them.
+      - name: Desktop tests
+        run: cd desktop && bun test test/

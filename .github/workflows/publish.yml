@@ -102,3 +102,34 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+
+  # macOS desktop app (Apple Silicon DMG). Runs on the free macos-14 arm64
+  # runner and attaches the DMG to the release created above — GitHub Releases
+  # is the distribution channel, so shipping the desktop app costs nothing.
+  build-dmg:
+    name: Build macOS app (arm64 DMG)
+    runs-on: macos-14
+    needs: [github-release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Stage backend + Bun runtime
+        run: ./desktop/scripts/stage.sh
+
+      - name: Desktop tests
+        run: cd desktop && bun test test/
+
+      - name: Install Electron toolchain
+        run: cd desktop && bun install
+
+      - name: Build DMG
+        run: cd desktop && bun run dist
+
+      - name: Attach DMG to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/dist/*.dmg

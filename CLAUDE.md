@@ -27,6 +27,10 @@ cd web && bun run typecheck
 # Production build + serve
 cd web && bun run build && bun run start
 
+# macOS desktop app (Electron shell, Apple Silicon DMG)
+make dmg                # stage backend + package desktop/dist/Campfire-<version>-arm64.dmg
+cd desktop && bun test  # desktop helper tests (no Electron needed)
+
 # Landing page (campfire.sh) — idempotent: starts if down, no-op if up
 # IMPORTANT: Always use this script to run the landing page. Never cd into landing/ and run bun/vite manually.
 ./scripts/landing-start.sh          # start
@@ -536,6 +540,9 @@ campfire/
 │   ├── bin/cli.ts            # CLI entry point (bunx the-campfire)
 │   ├── dist/                 # Built frontend assets
 │   └── package.json          # Published as "the-campfire"
+├── desktop/                  # macOS Electron app (arm64 DMG). Thin shell: spawns the
+│                             # bundled Bun server sidecar (vendor/ staged by scripts/stage.sh)
+│                             # and loads the web UI. See desktop/README.md.
 ├── landing/                  # Marketing site (separate Vite app)
 ├── scripts/                  # Utility scripts (landing-start.sh)
 ├── CLAUDE.md                 # This file (project instructions)

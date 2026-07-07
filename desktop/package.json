@@ -1,0 +1,25 @@
+{
+  "name": "campfire-desktop",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Campfire desktop app — native macOS shell around the Campfire server",
+  "license": "MIT",
+  "main": "main/index.js",
+  "scripts": {
+    "stage": "bash scripts/stage.sh",
+    "start": "electron .",
+    "smoke": "CAMPFIRE_SMOKE=1 electron .",
+    "test": "bun test test/",
+    "dist": "electron-builder --mac dmg --arm64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "trustedDependencies": [
+    "electron",
+    "electron-builder",
+    "dmg-builder",
+    "app-builder-bin"
+  ]
+}
