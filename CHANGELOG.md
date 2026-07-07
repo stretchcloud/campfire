@@ -2,6 +2,12 @@
 
 > Campfire began as a fork of [the-companion](https://github.com/The-Vibe-Company/companion) and diverged into a separate product. Pre-fork history (versions up to 0.42.0) lives in the upstream repository; Campfire's own releases start at 0.1.0.
 
+## 0.3.1 (2026-07-07)
+
+### Fixes
+
+* **memory:** warm the memory store's tables when a session becomes ready, so the session's first user message is enriched within the 250 ms budget instead of gracefully passing through on the cold (~230 ms) first query. The warm-up is fire-and-forget at session init, off the hot path, and never reinforces
+
 ## 0.3.0 (2026-07-07)
 
 ### Features

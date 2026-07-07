@@ -1089,4 +1089,21 @@ describe("provider/dimension change on a live v2 store", () => {
     await memory.storeFragment(frag());
     expect(await memory.processReembedBatch(5)).toBe(0);
   });
+
+  // warmMemory opens the store's tables without throwing and without
+  // reinforcing — it is a startup optimization, not a real recall, so access
+  // counts must be untouched (a warm must never inflate a fragment's weight).
+  it("warmMemory succeeds on an empty store and never throws", async () => {
+    await expect(memory.warmMemory({ repoRoot: "/repo", backendType: "claude" })).resolves.toBeUndefined();
+  });
+
+  it("warmMemory does not reinforce fragments (accessCount unchanged)", async () => {
+    await memory.storeFragment(frag({ content: "auth: warm should not touch me" }));
+    const before = (await memory.getSessionFragments("session-1"))[0];
+    await memory.warmMemory({ repoRoot: "/repo", backendType: "claude" });
+    await memory.flushReinforcements();
+    const after = (await memory.getSessionFragments("session-1"))[0];
+    expect(after.accessCount ?? 0).toBe(before.accessCount ?? 0);
+    expect(after.lastReinforcedAt).toBe(before.lastReinforcedAt);
+  });
 });

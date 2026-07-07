@@ -1254,6 +1254,28 @@ export interface NamespaceOverviewEntry {
  * Per-namespace fragment stats for the memory panel: count, average decayed
  * weight, and pinned count, over [session:<id>, repo:<hash>, agent:<backend>, global].
  */
+/**
+ * Open the LanceDB connection and the tables a subsequent enrichment query
+ * will touch, so the first real `queryForEnrichment` for a session lands
+ * within the 250 ms budget instead of paying the cold connect+open cost
+ * (~230 ms on a fresh process) and getting skipped. Best-effort and
+ * reinforcement-free — it must never throw into session startup, and it must
+ * not touch access counts (it is not a real recall).
+ */
+export async function warmMemory(opts: { repoRoot: string; backendType: string }): Promise<void> {
+  try {
+    const ns = opts.repoRoot ? repoNamespace(opts.repoRoot) : "global";
+    // getNamespaceOverview opens the fragments table + connection;
+    // getKnowledgeByNamespace opens the consolidated table. Neither reinforces.
+    await Promise.all([
+      getNamespaceOverview({ sessionId: "warm", repoRoot: opts.repoRoot, backendType: opts.backendType }),
+      getKnowledgeByNamespace(ns),
+    ]);
+  } catch {
+    // Warming is an optimization; a cold first query still works, just slower.
+  }
+}
+
 export async function getNamespaceOverview(opts: {
   sessionId: string;
   repoRoot: string;

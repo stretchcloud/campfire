@@ -45,6 +45,9 @@ vi.mock("./semantic-memory.js", () => ({
   getConsolidatedKnowledge: vi.fn(async () => []),
   // v2 enrichment entry point (§3.6.2) — reinforcement happens inside it
   queryForEnrichment: vi.fn(async () => ({ items: [], block: null })),
+  // Startup warm-up hook (opens the store tables so the first enrichment
+  // lands within budget).
+  warmMemory: vi.fn(async () => {}),
 }));
 
 // Mock the consolidation pipeline (§3.4) — onSessionEnd routes through it
@@ -290,6 +293,20 @@ describe("enrichUserMessage (§3.6.2)", () => {
       queryText: "how do we deploy?",
     });
     expect(result).toBe(enrichment);
+  });
+
+  it("warmForSession delegates to warmMemory fire-and-forget with repo + backend", () => {
+    // Called from WsBridge on session init so the first enrichment is warm.
+    // It must not throw synchronously and must pass through the store call.
+    vi.mocked(semanticMemory.warmMemory).mockClear();
+    ci.warmForSession("/repo", "codex");
+    expect(semanticMemory.warmMemory).toHaveBeenCalledWith({ repoRoot: "/repo", backendType: "codex" });
+  });
+
+  it("warmForSession swallows store rejection (best-effort)", async () => {
+    vi.mocked(semanticMemory.warmMemory).mockRejectedValueOnce(new Error("lancedb down"));
+    expect(() => ci.warmForSession("/repo", "claude")).not.toThrow();
+    await Promise.resolve();
   });
 });
 

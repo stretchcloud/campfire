@@ -24,7 +24,7 @@
  */
 
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, BackendType } from "./session-types.js";
-import { storeFragment, queryFragments, queryForEnrichment } from "./semantic-memory.js";
+import { storeFragment, queryFragments, queryForEnrichment, warmMemory } from "./semantic-memory.js";
 import type { GitContext, MemoryType, EnrichmentResult } from "./semantic-memory.js";
 import { consolidate } from "./memory-consolidation.js";
 import { deliberationEngine } from "./deliberation-engine.js";
@@ -353,6 +353,15 @@ export class CollectiveIntelligenceLayer {
       backendType: ctx.backendType,
       queryText: content,
     });
+  }
+
+  /**
+   * Fire-and-forget: open the memory store's tables when a session becomes
+   * ready so the session's first user message enriches within budget. Called
+   * from WsBridge on session init; never awaited, never throws.
+   */
+  warmForSession(repoRoot: string, backendType: BackendType): void {
+    void warmMemory({ repoRoot, backendType }).catch(() => { /* best-effort */ });
   }
 
   // ─── Session lifecycle ────────────────────────────────────────────────────
