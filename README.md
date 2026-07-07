@@ -1203,17 +1203,17 @@ It operates as a non-blocking observer: no agent message is ever delayed by it, 
 
 | Layer | What it does |
 |-------|-------------|
-| **Semantic Memory** | Stores observations, decisions, and patterns from each agent session as vector embeddings in a local LanceDB database. Any session can query this shared knowledge base for relevant context before starting a task. |
+| **Semantic Memory** | Stores observations, decisions, and patterns from each session in a local LanceDB database, scoped by namespace (global / repo / session / agent). Memories decay over time unless reused, and relevant ones are auto-recalled into a session's next prompt. See [Semantic Memory](#semantic-memory-details) below. |
 | **Deliberation Engine** | Proposes structured decisions across sessions (e.g. "which approach should we use?"). Connected viewers and agents can respond; the engine aggregates votes with role-weighted majority and resolves to `approved`, `rejected`, or `synthesized`. |
 | **Capability Discovery** | Each session self-reports its strengths, available tools, and context usage. When routing a task, the engine scores all connected sessions and picks the best fit. Confidence probes can be sent to agents in real time to verify self-reported capabilities. |
 | **Shared Context Stream** | A live think-aloud stream where agents can inject thoughts and observations. The engine detects semantic links (agrees, disagrees, builds on, contradicts) between fragments and tracks consensus scores across the session group. |
 
 **How it works end-to-end:**
 
-1. When an agent produces output, the CI layer silently extracts observations and stores them as `MemoryFragment` records (with vector embeddings if an embedding provider is configured).
-2. When a user sends a message, the CI layer queries the memory store for relevant context and prepends it to the message — giving agents access to knowledge from past sessions.
+1. When an agent produces output, the CI layer extracts observations, decisions, and patterns and stores them as `MemoryFragment` records in the right namespace (with vector embeddings if an embedding provider is configured). Thinking-block content is scrubbed before anything is stored.
+2. When a user sends a message, the CI layer recalls the most relevant memories from the repo, agent, and global namespaces (under a 250 ms budget so chat is never blocked) and prepends them to the message. The recalled items are shown to the user as a collapsible "recalled context" chip on that message.
 3. Browser clients can send `memory_query`, `memory_store`, `deliberation_respond`, `route_task`, and `inject_thought` messages over WebSocket. The server handles them and broadcasts results back to all connected viewers.
-4. Sessions consolidate their episodic memories into distilled `ConsolidatedKnowledge` entries when they end.
+4. Episodic fragments are consolidated into distilled `ConsolidatedKnowledge` — triggered on turn boundaries, idle, session end, or manually — via a JUDGE → DISTILL → CONSOLIDATE pipeline (see below).
 
 **Embedding providers:**
 
@@ -1225,16 +1225,25 @@ Vector search requires an embedding provider. Configure one in **Settings**:
 | `ollama` | `nomic-embed-text` (default) | 768 | Requires local Ollama instance |
 | `none` | — | — | Fragments stored without embeddings; metadata-only search |
 
-Without an embedding provider, memory still works — queries fall back to a full scan filtered by session, repo root, tags, and type.
+Without an embedding provider, memory still works — recall falls back to a recency- and confidence-ranked scan over the relevant namespaces (so recent repo decisions still surface, just without semantic similarity).
+
+<a id="semantic-memory-details"></a>
+
+**How Semantic Memory works:**
+
+- **Namespaces** — every memory lives in a scope: `global` (cross-repo conventions), `repo:<hash>` (one repository), `session:<id>` (one session's episodic notes), and `agent:<backend>` (backend-specific quirks). Recall for a session draws from repo, agent, and global scopes with per-namespace depth limits.
+- **Decay & reinforcement** — memories lose weight over time on a per-namespace half-life; being recalled reinforces a memory and extends its life (capped, so nothing becomes immortal). Low-weight, consolidated memories are eventually evicted. You can **pin** a memory so it never decays.
+- **Consolidation (JUDGE → DISTILL → CONSOLIDATE)** — raw fragments are filtered and clustered locally, then distilled into durable knowledge by an LLM (via your configured OpenRouter key). If no key is set, it falls back to a simple concatenation, badged as such in the UI — consolidation is never blocked on configuration.
+- **UI** — the Memory panel shows per-namespace counts and decayed-weight bars with pin/unpin controls; **Settings → Memory** exposes per-namespace decay half-lives, reinforce multipliers, and recall depths.
 
 **Storage:**
 
-All CI data is stored locally under `~/.campfire/memory/lancedb/` — no external service required.
+All CI data is stored locally under `~/.campfire/memory/` — no external service required. Schema is versioned via `meta.json` and migrated automatically from earlier versions.
 
 | Table | Purpose |
 |-------|---------|
-| `fragments.lance` | Episodic memory fragments with embeddings |
-| `consolidated.lance` | Distilled knowledge synthesized from sessions |
+| `fragments_v2` | Episodic memory fragments (namespace-scoped, with embeddings when available) |
+| `consolidated_v2` | Distilled knowledge synthesized from fragments |
 
 Capability data is stored as JSON in `~/.campfire/capabilities/` and learning history is appended to `~/.campfire/capability-learning.jsonl`.
 
@@ -1260,12 +1269,12 @@ curl -X POST http://localhost:4567/api/sessions/route-task \
 
 | Group | Endpoints |
 |-------|-----------|
-| Memory | `GET/POST /sessions/:id/memory`, `GET /sessions/:id/memory/query`, `POST /sessions/:id/memory/consolidate`, `GET /memory/global` |
+| Memory | `GET/POST /sessions/:id/memory`, `GET /sessions/:id/memory/query`, `GET /sessions/:id/memory/overview`, `POST /sessions/:id/memory/consolidate`, `POST /memory/pin`, `GET /memory/global` |
 | Deliberation | `GET /sessions/:id/deliberations`, `GET /sessions/:id/deliberations/:proposalId`, `POST .../respond`, `POST .../resolve` |
 | Capabilities | `POST /sessions/route-task`, `GET /capabilities`, `GET /capabilities/history`, `POST /capabilities/feedback` |
 | Shared Context | `GET /sessions/:id/context/stream`, `GET /sessions/:id/context/consensus`, `GET /sessions/:id/context/thread/:fragmentId` |
 
-Architecture details are documented in [`CLAUDE.md`](CLAUDE.md). A design study for the next iteration of the memory layer lives at [`docs/design/semantic-memory-v2.md`](docs/design/semantic-memory-v2.md).
+Architecture details are documented in [`CLAUDE.md`](CLAUDE.md). The full semantic-memory design (namespaces, decay, retrieval scoring, and the consolidation pipeline) is written up in [`docs/design/semantic-memory-v2.md`](docs/design/semantic-memory-v2.md).
 
 ---
 
