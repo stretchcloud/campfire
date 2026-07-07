@@ -19,6 +19,7 @@ export function RacePage() {
   const [repoRoot, setRepoRoot] = useState("");
   const [prompt, setPrompt] = useState("");
   const [selectedBackends, setSelectedBackends] = useState<string[]>(["claude", "codex"]);
+  const [cascade, setCascade] = useState(false);
   const [envs, setEnvs] = useState<CampfireEnv[]>([]);
   const [selectedEnv, setSelectedEnv] = useState(() => {
     try {
@@ -74,6 +75,7 @@ export function RacePage() {
         repoRoot,
         backends: selectedBackends,
         envSlug: selectedEnv || undefined,
+        cascade: cascade || undefined,
       });
       setRaces((current) => [race, ...current]);
       setSelectedRaceId(race.raceId);
@@ -129,6 +131,18 @@ export function RacePage() {
                   </label>
                 ))}
               </div>
+              <label className="flex items-start gap-2 rounded-md border border-cc-border px-2 py-1.5 text-[11px] text-cc-fg">
+                <input
+                  type="checkbox"
+                  checked={cascade}
+                  onChange={() => setCascade((current) => !current)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Cost cascade — run backends in order, stop at first success
+                  <span className="block text-[10px] text-cc-muted">List cheapest first; failures and empty patches escalate to the next backend.</span>
+                </span>
+              </label>
               <div>
                 <label className="block text-[10px] font-semibold text-cc-muted/60 uppercase tracking-wider mb-1.5" htmlFor="race-env-select">Environment</label>
                 <div className="flex gap-1">
@@ -185,7 +199,7 @@ export function RacePage() {
                   className={`w-full text-left px-3 py-2 border-b border-cc-border/40 hover:bg-cc-hover ${selectedRace?.raceId === race.raceId ? "bg-cc-hover" : ""}`}
                 >
                   <div className="text-[12px] text-cc-fg truncate">{race.prompt}</div>
-                  <div className="text-[10px] text-cc-muted uppercase font-mono-code">{race.status} / {race.entries.length} agents</div>
+                  <div className="text-[10px] text-cc-muted uppercase font-mono-code">{race.status} / {race.entries.length} agents{race.cascade ? " / cascade" : ""}</div>
                 </button>
               ))}
               {races.length === 0 && <div className="px-3 py-5 text-[12px] text-cc-muted">No races yet.</div>}
@@ -198,7 +212,7 @@ export function RacePage() {
                 <div className="rounded-lg border border-cc-border bg-cc-card p-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[13px] font-semibold text-cc-fg truncate">{selectedRace.prompt}</div>
-                    <div className="text-[10px] text-cc-muted font-mono-code uppercase">{selectedRace.status} on {selectedRace.baseBranch}</div>
+                    <div className="text-[10px] text-cc-muted font-mono-code uppercase">{selectedRace.status} on {selectedRace.baseBranch}{selectedRace.cascade ? " / cascade" : ""}</div>
                   </div>
                   {selectedRace.status === "running" && (
                     <button onClick={() => void cancelRace(selectedRace.raceId)} className="px-2 py-1 rounded-md text-[11px] text-cc-error border border-cc-error/40">

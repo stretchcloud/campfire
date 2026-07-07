@@ -617,7 +617,7 @@ export interface RaceEntryInfo {
   model?: string;
   worktreePath: string;
   branch: string;
-  status: "pending" | "running" | "completed" | "failed" | "timeout";
+  status: "pending" | "running" | "completed" | "failed" | "timeout" | "skipped";
   startedAt: number;
   completedAt?: number;
   error?: string;
@@ -643,6 +643,7 @@ export interface RaceInfo {
   entries: RaceEntryInfo[];
   winnerId?: string;
   error?: string;
+  cascade?: boolean;
 }
 
 export interface InstalledAdapterInfo {
@@ -1243,7 +1244,7 @@ export const api = {
   getRace: (id: string) => get<RaceInfo>(`/races/${encodeURIComponent(id)}`),
   getRaceEntryDiff: (raceId: string, entryId: string) =>
     get<{ diff: string; files: string[] }>(`/races/${encodeURIComponent(raceId)}/entries/${encodeURIComponent(entryId)}/diff`),
-  createRace: (data: { prompt: string; backends: string[]; repoRoot: string; baseBranch?: string; envSlug?: string; env?: Record<string, string> }) =>
+  createRace: (data: { prompt: string; backends: string[]; repoRoot: string; baseBranch?: string; envSlug?: string; env?: Record<string, string>; cascade?: boolean }) =>
     post<RaceInfo>("/races", data),
   pickRaceWinner: (id: string, sessionId: string) =>
     post<RaceInfo>(`/races/${encodeURIComponent(id)}/pick`, { sessionId }),

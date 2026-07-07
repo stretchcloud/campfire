@@ -791,6 +791,8 @@ curl http://localhost:4567/api/cron/jobs/:id/executions
 
 Install community agent adapters from npm to add new backends to Campfire. Adapters are npm packages with a `campfireAdapter` field in their `package.json`.
 
+> **Related:** you can also run [MetaHarness](https://github.com/ruvnet/metaharness)-generated agent harnesses inside Campfire sessions — their MCP servers attach at runtime and their tool calls go through Campfire's permission-voting UI. See [docs/integrations/metaharness.md](docs/integrations/metaharness.md).
+
 **Installing an adapter:**
 
 ```bash
