@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/stretchcloud/campfire/main/.github/og-image.png" alt="Campfire — Seven agents. One Campfire." width="100%" />
+</p>
+
 <h1 align="center">Campfire</h1>
 <p align="center"><strong>The collaborative web platform for AI coding agents.</strong></p>
 <p align="center">A collaborative web platform for AI coding agents. Run Claude Code, Codex, Goose, Aider, OpenHands, OpenClaw, and OpenCode sessions side by side — with real-time collaboration, multi-agent orchestration, permission voting, session replay, scheduled tasks, and 30+ integrations.</p>
