@@ -3436,3 +3436,36 @@ describe("WsBridge voting policy", () => {
     expect(bridge.getVotingPolicy()).toBe("owner-decides");
   });
 });
+
+describe("invite token expiry", () => {
+  // Invite tokens are bearer credentials that bypass password auth on the
+  // browser WebSocket upgrade, so they must expire (24h TTL) rather than
+  // living for the lifetime of the server process.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("resolves a token within its 24h TTL", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T00:00:00Z"));
+    bridge.getOrCreateSession("s1");
+    const token = bridge.createInviteToken("s1", "collaborator")!;
+
+    // 23 hours later: still valid.
+    vi.setSystemTime(new Date("2026-07-01T23:00:00Z"));
+    expect(bridge.resolveInviteToken(token)).toBe("s1");
+    expect(bridge.resolveInviteTokenRole(token)).toBe("collaborator");
+  });
+
+  it("rejects a token after its TTL and forgets it", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T00:00:00Z"));
+    bridge.getOrCreateSession("s1");
+    const token = bridge.createInviteToken("s1", "spectator")!;
+
+    // 25 hours later: expired for both session and role resolution.
+    vi.setSystemTime(new Date("2026-07-02T01:00:00Z"));
+    expect(bridge.resolveInviteToken(token)).toBeNull();
+    expect(bridge.resolveInviteTokenRole(token)).toBeNull();
+  });
+});

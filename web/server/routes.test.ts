@@ -134,6 +134,9 @@ function createMockBridge() {
     resolveInviteTokenRole: vi.fn(() => "collaborator"),
     getVotingPolicy: vi.fn(() => "majority-rules"),
     setVotingPolicy: vi.fn(),
+    // Called by POST /sessions/create to register orchestration metadata
+    // (role/parent/detected environment) for every newly launched session.
+    markSessionOrchestration: vi.fn(),
   } as any;
 }
 
@@ -192,6 +195,12 @@ describe("POST /api/sessions/create", () => {
     expect(json).toMatchObject({ sessionId: "session-1", state: "starting", cwd: "/test" });
     expect(launcher.launch).toHaveBeenCalledWith(
       expect.objectContaining({ model: "claude-sonnet-4-5-20250929", cwd: "/test" }),
+    );
+    // Every new session must have its orchestration metadata (role, parent
+    // session, detected environment) registered with the ws-bridge.
+    expect(bridge.markSessionOrchestration).toHaveBeenCalledWith(
+      "session-1",
+      expect.objectContaining({}),
     );
   });
 
@@ -740,11 +749,16 @@ describe("GET /api/settings", () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
+    // The response only exposes boolean "configured" flags — never key values.
     expect(json).toEqual({
       openrouterApiKeyConfigured: true,
       openrouterModel: "openrouter/free",
       moltbookApiKeyConfigured: false,
       linearApiKeyConfigured: false,
+      claudeOAuthTokenConfigured: false,
+      openaiApiKeyConfigured: false,
+      anthropicApiKeyConfigured: false,
+      onboardingCompleted: false,
     });
   });
 
@@ -774,6 +788,10 @@ describe("GET /api/settings", () => {
       openrouterModel: "openai/gpt-4o-mini",
       moltbookApiKeyConfigured: false,
       linearApiKeyConfigured: false,
+      claudeOAuthTokenConfigured: false,
+      openaiApiKeyConfigured: false,
+      anthropicApiKeyConfigured: false,
+      onboardingCompleted: false,
     });
   });
 });
@@ -810,11 +828,16 @@ describe("PUT /api/settings", () => {
       linearApiKey: undefined,
     });
     const json = await res.json();
+    // Updated settings echo back the same "configured" flags shape as GET.
     expect(json).toEqual({
       openrouterApiKeyConfigured: true,
       openrouterModel: "openrouter/free",
       moltbookApiKeyConfigured: false,
       linearApiKeyConfigured: false,
+      claudeOAuthTokenConfigured: false,
+      openaiApiKeyConfigured: false,
+      anthropicApiKeyConfigured: false,
+      onboardingCompleted: false,
     });
   });
 

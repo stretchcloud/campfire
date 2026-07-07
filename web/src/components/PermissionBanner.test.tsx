@@ -16,15 +16,41 @@ vi.mock("remark-gfm", () => ({
 }));
 
 const mockRemovePermission = vi.fn();
+const mockRemoveChangedFile = vi.fn();
 const mockSendToSession = vi.fn();
 
-vi.mock("../store.js", () => ({
-  useStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({ removePermission: mockRemovePermission }),
-}));
+// The component reads collaboration state from the store via Maps keyed by
+// session ID: myRole (viewer role), permissionVotes / voteResults (voting UI).
+// The viewer defaults to "owner" so the Allow/Deny actions are enabled —
+// spectators are deliberately guarded out of responding in the component.
+let mockStoreState: Record<string, unknown> = {};
+
+function setupMockStore() {
+  mockStoreState = {
+    removePermission: mockRemovePermission,
+    removeChangedFile: mockRemoveChangedFile,
+    myRole: new Map<string, string>([["s1", "owner"]]),
+    permissionVotes: new Map(),
+    voteResults: new Map(),
+    sessions: new Map(),
+    sdkSessions: [],
+  };
+}
+
+vi.mock("../store.js", () => {
+  // Mock zustand's useStore: a selector-taking function with getState for
+  // imperative access (used by handleDeny to resolve the session cwd).
+  const useStore = (selector: (state: Record<string, unknown>) => unknown) =>
+    selector(mockStoreState);
+  useStore.getState = () => mockStoreState;
+  return { useStore };
+});
 
 vi.mock("../ws.js", () => ({
   sendToSession: (...args: unknown[]) => mockSendToSession(...args),
+  // Identity resolver: the component uses this to map a denied Write/Edit
+  // file_path back to an absolute path before removing it from changedFiles.
+  resolveSessionFilePath: (path: string) => path,
 }));
 
 import { PermissionBanner } from "./PermissionBanner.js";
@@ -42,6 +68,7 @@ function makePermission(overrides: Partial<PermissionRequest> = {}): PermissionR
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setupMockStore();
 });
 
 // ─── Label rendering ────────────────────────────────────────────────────────
@@ -239,9 +266,11 @@ describe("GenericDisplay", () => {
         sessionId="s1"
       />,
     );
-    expect(screen.getByText("foo:")).toBeTruthy();
+    // GenericDisplay renders each input entry as a key/value row; the key is
+    // rendered bare (no trailing colon) and non-string values are stringified.
+    expect(screen.getByText("foo")).toBeTruthy();
     expect(screen.getByText("bar")).toBeTruthy();
-    expect(screen.getByText("count:")).toBeTruthy();
+    expect(screen.getByText("count")).toBeTruthy();
     expect(screen.getByText("42")).toBeTruthy();
   });
 

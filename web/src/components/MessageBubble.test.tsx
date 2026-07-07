@@ -25,13 +25,15 @@ function makeMessage(overrides: Partial<ChatMessage> & { role: ChatMessage["role
 // ─── System messages ─────────────────────────────────────────────────────────
 
 describe("MessageBubble - system messages", () => {
-  it("renders system message with italic text", () => {
+  it("renders system message as an uppercase divider label", () => {
+    // System messages render as a small uppercase tracking label between two
+    // divider lines (no longer italic text).
     const msg = makeMessage({ role: "system", content: "Session started" });
     const { container } = render(<MessageBubble message={msg} />);
 
-    const italicSpan = container.querySelector(".italic");
-    expect(italicSpan).toBeTruthy();
-    expect(italicSpan?.textContent).toBe("Session started");
+    const labelSpan = container.querySelector("span.uppercase");
+    expect(labelSpan).toBeTruthy();
+    expect(labelSpan?.textContent).toBe("Session started");
   });
 
   it("renders system message with divider lines", () => {
@@ -47,16 +49,18 @@ describe("MessageBubble - system messages", () => {
 // ─── User messages ───────────────────────────────────────────────────────────
 
 describe("MessageBubble - user messages", () => {
-  it("renders user message right-aligned with content", () => {
+  it("renders user message in a highlighted bubble with content", () => {
+    // User messages render as a full-width rounded card (rounded-xl) with the
+    // content in a <pre>; they are no longer right-aligned via justify-end.
     const msg = makeMessage({ role: "user", content: "Hello Claude" });
     const { container } = render(<MessageBubble message={msg} />);
 
-    // Check for right-alignment (justify-end)
-    const wrapper = container.querySelector(".justify-end");
-    expect(wrapper).toBeTruthy();
+    const bubble = container.querySelector(".rounded-xl");
+    expect(bubble).toBeTruthy();
 
-    // Check content
+    // Check content renders inside the bubble
     expect(screen.getByText("Hello Claude")).toBeTruthy();
+    expect(bubble?.textContent).toContain("Hello Claude");
   });
 
   it("renders user messages with image thumbnails", () => {
@@ -128,7 +132,9 @@ describe("MessageBubble - assistant messages", () => {
     expect(screen.getByText("pwd")).toBeTruthy();
   });
 
-  it("renders thinking blocks with 'Thinking' label and char count", () => {
+  it("renders thinking blocks with 'Reasoning' label and char count", () => {
+    // Thinking blocks now render a "Reasoning" header with a compact char
+    // count badge formatted as "<n>c" (e.g. "44c"), not "<n> chars".
     const thinkingText = "Let me analyze this problem step by step...";
     const msg = makeMessage({
       role: "assistant",
@@ -139,11 +145,14 @@ describe("MessageBubble - assistant messages", () => {
     });
     render(<MessageBubble message={msg} />);
 
-    expect(screen.getByText("Thinking")).toBeTruthy();
-    expect(screen.getByText(`${thinkingText.length} chars`)).toBeTruthy();
+    expect(screen.getByText("Reasoning")).toBeTruthy();
+    expect(screen.getByText(`${thinkingText.length}c`)).toBeTruthy();
   });
 
   it("thinking blocks expand and collapse on click", () => {
+    // The thinking text stays mounted in the DOM at all times; expand/collapse
+    // is animated via a max-height transition (0 when collapsed, 10rem when
+    // open). We assert on that inline style rather than DOM presence.
     const thinkingText = "Deep analysis of the problem at hand.";
     const msg = makeMessage({
       role: "assistant",
@@ -154,19 +163,22 @@ describe("MessageBubble - assistant messages", () => {
     });
     render(<MessageBubble message={msg} />);
 
-    // Initially collapsed - thinking text should not be visible in a pre
-    expect(screen.queryByText(thinkingText)).toBeNull();
+    const collapsible = screen
+      .getByText(thinkingText)
+      .closest('div[style*="max-height"]') as HTMLElement | null;
+    expect(collapsible).toBeTruthy();
 
-    // Find and click the thinking button
-    const thinkingButton = screen.getByText("Thinking").closest("button")!;
+    // Initially collapsed - max-height is 0 (jsdom normalizes "0" to "0px")
+    expect(collapsible!.style.maxHeight).toBe("0px");
+
+    // Find and click the Reasoning header button to expand
+    const thinkingButton = screen.getByText("Reasoning").closest("button")!;
     fireEvent.click(thinkingButton);
-
-    // Now the thinking text should be visible
-    expect(screen.getByText(thinkingText)).toBeTruthy();
+    expect(collapsible!.style.maxHeight).toBe("10rem");
 
     // Click again to collapse
     fireEvent.click(thinkingButton);
-    expect(screen.queryByText(thinkingText)).toBeNull();
+    expect(collapsible!.style.maxHeight).toBe("0px");
   });
 
   it("renders tool_result blocks with string content", () => {
@@ -244,13 +256,12 @@ describe("MessageBubble - content block grouping", () => {
         { type: "tool_use", id: "tu-3", name: "Read", input: { file_path: "/c.ts" } },
       ],
     });
-    const { container } = render(<MessageBubble message={msg} />);
+    render(<MessageBubble message={msg} />);
 
-    // When grouped, there should be a count badge showing "3"
-    expect(screen.getByText("3")).toBeTruthy();
-    // The label should appear once (grouped)
-    const labels = screen.getAllByText("Read File");
-    expect(labels.length).toBe(1);
+    // When grouped, the header renders count and label together as "3x Read File",
+    // so the grouped header should appear exactly once
+    const groupHeaders = screen.getAllByText("3x Read File");
+    expect(groupHeaders.length).toBe(1);
   });
 
   it("does not group different tool types together", () => {

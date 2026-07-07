@@ -20,20 +20,55 @@ jobs:
         with:
           bun-version: latest
 
+      # setup-node writes the .npmrc that makes `npm publish` read
+      # NODE_AUTH_TOKEN — without it the token env var is silently ignored.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
       - name: Install dependencies
         run: cd web && bun install --frozen-lockfile
 
       - name: Build frontend
         run: cd web && bun run build
 
+      # Skip (instead of fail) when this version is already on the registry,
+      # so re-pushed tags and locally-published versions stay idempotent.
+      - name: Check if version already published
+        id: check
+        run: |
+          VERSION=$(jq -r .version web/package.json)
+          if npm view "the-campfire@${VERSION}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "the-campfire@${VERSION} already on npm — skipping publish"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to npm
+        if: steps.check.outputs.published == 'false'
         run: cd web && npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  # Secrets aren't readable in job-level `if:` expressions, so a tiny check
+  # job exposes whether Docker Hub credentials exist. The docker job is
+  # skipped cleanly (not failed) until they're configured.
+  check-docker-creds:
+    name: Check Docker credentials
+    runs-on: ubuntu-latest
+    outputs:
+      has-creds: ${{ steps.check.outputs.has }}
+    steps:
+      - id: check
+        run: echo "has=${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
   publish-docker:
     name: Push Docker image
     runs-on: ubuntu-latest
+    needs: check-docker-creds
+    if: needs.check-docker-creds.outputs.has-creds == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -66,7 +101,9 @@ jobs:
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [publish-npm, publish-docker]
+    # Only the npm publish is required; the Docker image is optional and
+    # must not block a release when Docker Hub credentials are absent.
+    needs: [publish-npm]
     steps:
       - uses: actions/checkout@v4
 

@@ -122,7 +122,9 @@ export class ContainerManager {
       // Ensure host.docker.internal resolves (automatic on Mac/Win Docker
       // Desktop, but required explicitly on Linux)
       "--add-host=host.docker.internal:host-gateway",
-      "-v", `${homedir}/.claude:/root/.claude:ro`,
+      // Note: auth is seeded via `docker cp` (see claude-container-auth.ts /
+      // codex-container-auth.ts) rather than a bind mount, so the container
+      // gets a writable snapshot and cannot mutate the host's ~/.claude.
       "-v", `${hostCwd}:/workspace`,
       "-w", "/workspace",
     ];

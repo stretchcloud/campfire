@@ -101,10 +101,14 @@ describe("getPreview", () => {
   });
 
   it("truncates Bash commands longer than 60 chars", () => {
+    // The component truncates with a single Unicode ellipsis character ("…",
+    // U+2026), not three ASCII dots. This is intentional: the ellipsis char
+    // is more compact in the tool preview UI. So the truncated result is
+    // 60 chars + 1 ellipsis char = 61 characters total.
     const longCommand = "a".repeat(80);
     const result = getPreview("Bash", { command: longCommand });
-    expect(result).toBe("a".repeat(60) + "...");
-    expect(result.length).toBe(63);
+    expect(result).toBe("a".repeat(60) + "…");
+    expect(result.length).toBe(61);
   });
 
   it("does not truncate Bash commands at exactly 60 chars", () => {

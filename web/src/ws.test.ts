@@ -7,6 +7,16 @@ vi.mock("./utils/names.js", () => ({
   generateUniqueSessionName: vi.fn(() => "Test Session"),
 }));
 
+// Mock analytics before any imports: ws.ts imports api.ts, which imports
+// analytics.ts -> posthog-js. posthog-js reads `location.href` at module
+// load, and the stubbed `location` global below has no `href`, so importing
+// the real module crashes every test in this file. Mocking here also keeps
+// telemetry side effects out of unit tests (api.test.ts does the same).
+vi.mock("./analytics.js", () => ({
+  captureEvent: vi.fn(),
+  captureException: vi.fn(),
+}));
+
 let wsModule: typeof import("./ws.js");
 let useStore: typeof import("./store.js").useStore;
 

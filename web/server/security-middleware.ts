@@ -38,18 +38,39 @@ interface RateEntry {
 
 const ipBuckets = new Map<string, RateEntry>();
 
-// Clean up stale entries every 5 minutes
+// Clean up stale entries every 5 minutes. unref() so the interval never
+// keeps the process (or a test runner) alive on its own.
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of ipBuckets) {
     if (entry.resetAt <= now) ipBuckets.delete(ip);
   }
-}, 5 * 60_000);
+}, 5 * 60_000).unref?.();
+
+/** Socket-level remote IPs, tagged by the Bun.serve fetch handler before the
+ *  request reaches Hono. A WeakMap keyed by the raw Request cannot be spoofed
+ *  by client-supplied headers. */
+const requestIps = new WeakMap<Request, string>();
+
+/** Record the actual socket remote address for a request (called from index.ts). */
+export function tagRequestIp(req: Request, ip: string | undefined | null): void {
+  if (ip) requestIps.set(req, ip);
+}
+
+function isLoopback(ip: string): boolean {
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
 
 function getClientIp(c: Context): string {
-  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
-    || c.req.header("x-real-ip")
-    || "unknown";
+  const socketIp = requestIps.get(c.req.raw) ?? "";
+  // Forwarded headers are only trustworthy when the direct peer is a local
+  // reverse proxy — otherwise a client could spoof them to dodge the limiter.
+  if (!socketIp || isLoopback(socketIp)) {
+    const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
+      || c.req.header("x-real-ip");
+    if (forwarded) return forwarded;
+  }
+  return socketIp || "unknown";
 }
 
 export async function rateLimiter(c: Context, next: Next): Promise<void> {

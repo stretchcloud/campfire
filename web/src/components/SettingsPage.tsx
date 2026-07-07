@@ -718,17 +718,19 @@ export function SettingsPage({ embedded = false }: Readonly<SettingsPageProps>) 
     <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased overflow-y-auto`}>
       <div className="max-w-3xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
 
-        {/* ── Header with back button ─────────────────────────────── */}
+        {/* ── Header with back button (hidden when embedded in app chrome) ── */}
         <div className="flex items-center gap-3 mb-1">
-          <button
-            onClick={() => { globalThis.location.hash = ""; }}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-cc-fg/60 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-            aria-label="Go back"
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4">
-              <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          {!embedded && (
+            <button
+              onClick={() => { globalThis.location.hash = ""; }}
+              className="flex items-center justify-center w-8 h-8 rounded-lg text-cc-fg/60 hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+              aria-label="Go back"
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4">
+                <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
           <div>
             <p className="text-[11px] text-cc-fg/50 font-medium">Settings</p>
             <h1 className="text-xl font-semibold text-cc-fg -mt-0.5">Settings</h1>

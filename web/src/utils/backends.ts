@@ -19,7 +19,7 @@ const MODEL_ICONS: Record<string, string> = {
   "max": "\u25A0",      // ■ for max/flagship
   "mini": "\u26A1",     // ⚡ for mini/fast
   "ollama": "\u25CF",   // ● for local models
-  "goose": "\u1F9AA",   // for goose models
+  "goose": "\u{1FABF}", // \uD83E\uDEBF for goose models
 };
 
 function pickIcon(slug: string, index: number): string {
