@@ -14,7 +14,6 @@ import { registerAdapterRoutes } from "./adapter-routes.js";
 import { registerCiRoutes } from "./ci-routes.js";
 import { registerPromptRoutes } from "./prompt-routes.js";
 import { registerLinearRoutes } from "./linear-routes.js";
-import { registerDmuxRoutes } from "./dmux-routes.js";
 import { registerOrchestratorRoutes } from "./orchestrator-routes.js";
 import { registerAuthRoutes, authMiddleware } from "./auth-routes.js";
 import { registerSkillsRoutes } from "./skills-routes.js";
@@ -50,7 +49,6 @@ export function createRoutes(deps: RouteDeps): Hono {
   registerCiRoutes(api, deps);
   registerPromptRoutes(api, deps);
   registerLinearRoutes(api, deps);
-  registerDmuxRoutes(api, deps);
   registerOrchestratorRoutes(api, deps);
   registerSkillsRoutes(api, deps);
   registerFolderRoutes(api, deps);

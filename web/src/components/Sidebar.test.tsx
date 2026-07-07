@@ -20,6 +20,12 @@ const mockApi = {
   deleteSession: vi.fn().mockResolvedValue({}),
   archiveSession: vi.fn().mockResolvedValue({}),
   unarchiveSession: vi.fn().mockResolvedValue({}),
+  renameSession: vi.fn().mockResolvedValue({ ok: true, name: "" }),
+  listFolders: vi.fn().mockResolvedValue([]),
+  createFolder: vi.fn().mockResolvedValue({}),
+  deleteFolder: vi.fn().mockResolvedValue({}),
+  addSessionToFolder: vi.fn().mockResolvedValue({}),
+  removeSessionFromFolder: vi.fn().mockResolvedValue({}),
 };
 
 vi.mock("../api.js", () => ({
@@ -28,6 +34,12 @@ vi.mock("../api.js", () => ({
     deleteSession: (...args: unknown[]) => mockApi.deleteSession(...args),
     archiveSession: (...args: unknown[]) => mockApi.archiveSession(...args),
     unarchiveSession: (...args: unknown[]) => mockApi.unarchiveSession(...args),
+    renameSession: (...args: unknown[]) => mockApi.renameSession(...args),
+    listFolders: (...args: unknown[]) => mockApi.listFolders(...args),
+    createFolder: (...args: unknown[]) => mockApi.createFolder(...args),
+    deleteFolder: (...args: unknown[]) => mockApi.deleteFolder(...args),
+    addSessionToFolder: (...args: unknown[]) => mockApi.addSessionToFolder(...args),
+    removeSessionFromFolder: (...args: unknown[]) => mockApi.removeSessionFromFolder(...args),
   },
 }));
 
@@ -146,19 +158,37 @@ import { Sidebar } from "./Sidebar.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // vi.clearAllMocks wipes calls but keeps mockResolvedValue implementations.
   mockState = createMockState();
   window.location.hash = "";
+  // The Sidebar persists collapsed nav sections and folders to localStorage;
+  // clear it so each test starts from the component defaults.
+  localStorage.clear();
 });
+
+/**
+ * Nav sections ("Tools", "Data", "Config") are collapsed by default.
+ * Expands one by clicking its section header.
+ */
+function expandNavSection(title: string) {
+  fireEvent.click(screen.getByText(title));
+}
 
 describe("Sidebar", () => {
   it("renders 'New Session' button", () => {
+    // Validates: the header has a session-creation button. Its visible label
+    // is the compact "New", with the full name in the title attribute.
     render(<Sidebar />);
-    expect(screen.getByText("New Session")).toBeInTheDocument();
+    const newButton = screen.getByTitle("New Session");
+    expect(newButton).toBeInTheDocument();
+    expect(newButton).toHaveTextContent("New");
   });
 
   it("renders 'No sessions yet.' when no sessions exist", () => {
+    // Validates: empty state copy. The message spans multiple text nodes
+    // ("No sessions yet.<br/>Click New to start.") so we match with a regex.
     render(<Sidebar />);
-    expect(screen.getByText("No sessions yet.")).toBeInTheDocument();
+    expect(screen.getByText(/No sessions yet\./)).toBeInTheDocument();
   });
 
   it("renders session items for active sessions", () => {
@@ -197,17 +227,18 @@ describe("Sidebar", () => {
     expect(screen.getByText("abcdef12")).toBeInTheDocument();
   });
 
-  it("session items show project name in group header (not in session row)", () => {
+  it("session items appear under a time group header (Today)", () => {
+    // Validates: sessions are grouped by creation time (Today / Yesterday /
+    // Previous 7 Days / Older) rather than by project directory.
     const session = makeSession("s1", { cwd: "/home/user/projects/myapp" });
-    const sdk = makeSdkSession("s1");
+    const sdk = makeSdkSession("s1"); // createdAt defaults to Date.now()
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
     });
 
     render(<Sidebar />);
-    // "myapp" appears in the project group header
-    expect(screen.getByText("myapp")).toBeInTheDocument();
+    expect(screen.getByText("Today")).toBeInTheDocument();
   });
 
   it("session items show git branch when available", () => {
@@ -304,7 +335,7 @@ describe("Sidebar", () => {
 
   it("New Session button calls newSession", () => {
     render(<Sidebar />);
-    fireEvent.click(screen.getByText("New Session"));
+    fireEvent.click(screen.getByTitle("New Session"));
 
     expect(mockState.newSession).toHaveBeenCalled();
   });
@@ -385,8 +416,9 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // The component renders "Archived (2)"
-    expect(screen.getByText(/Archived \(2\)/)).toBeInTheDocument();
+    // The count is rendered in a pill inside the "Archived" toggle button
+    const toggleButton = screen.getByText("Archived").closest("button")!;
+    expect(toggleButton.textContent).toContain("2");
   });
 
   it("toggle archived shows/hides archived sessions", () => {
@@ -403,8 +435,7 @@ describe("Sidebar", () => {
     expect(screen.queryByText("archived-model")).not.toBeInTheDocument();
 
     // Click the archived toggle button
-    const toggleButton = screen.getByText(/Archived \(1\)/);
-    fireEvent.click(toggleButton);
+    fireEvent.click(screen.getByText("Archived").closest("button")!);
 
     // Now the archived session should be visible
     expect(screen.getByText("archived-model")).toBeInTheDocument();
@@ -417,19 +448,24 @@ describe("Sidebar", () => {
   });
 
   it("navigates to environments page when Environments is clicked", () => {
+    // "Environments" lives in the collapsed-by-default "Data" nav section.
     render(<Sidebar />);
+    expandNavSection("Data");
     fireEvent.click(screen.getByText("Environments").closest("button")!);
     expect(window.location.hash).toBe("#/environments");
   });
 
   it("navigates to settings page when Settings is clicked", () => {
+    // "Settings" is a persistent footer button below the nav sections.
     render(<Sidebar />);
     fireEvent.click(screen.getByText("Settings").closest("button")!);
     expect(window.location.hash).toBe("#/settings");
   });
 
   it("navigates to terminal page when Terminal is clicked", () => {
+    // "Terminal" lives in the collapsed-by-default "Tools" nav section.
     render(<Sidebar />);
+    expandNavSection("Tools");
     fireEvent.click(screen.getByText("Terminal").closest("button")!);
     expect(window.location.hash).toBe("#/terminal");
   });
@@ -446,7 +482,8 @@ describe("Sidebar", () => {
 
     render(<Sidebar />);
     const nameElement = screen.getByText("Auto Generated Title");
-    // Animation class is on the parent span wrapper, not the inner text span
+    // Animation class is applied to the session name span itself
+    // (closest() also matches the element it is called on).
     expect(nameElement.closest(".animate-name-appear")).toBeTruthy();
   });
 
@@ -519,7 +556,6 @@ describe("Sidebar", () => {
     const renamedElement = screen.getByText("Renamed Session");
     const otherElement = screen.getByText("Other Session");
 
-    // Animation class is on the parent span wrapper, not the inner text span
     expect(renamedElement.closest(".animate-name-appear")).toBeTruthy();
     expect(otherElement.closest(".animate-name-appear")).toBeFalsy();
   });
@@ -595,24 +631,26 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Should show "Codex" pill text
-    expect(screen.getByText("Codex")).toBeInTheDocument();
+    // The backend/model badge is rendered lowercase next to the session name
+    expect(screen.getByText("codex")).toBeInTheDocument();
   });
 
   it("session shows correct backend pill based on backendType", () => {
-    const session1 = makeSession("s1", { backend_type: "claude" });
-    const session2 = makeSession("s2", { backend_type: "codex" });
-    const sdk1 = makeSdkSession("s1", { backendType: "claude" });
-    const sdk2 = makeSdkSession("s2", { backendType: "codex" });
+    // Validates: the badge is derived from the model (abbreviated, lowercase),
+    // falling back to the backend type when the model is unknown.
+    const session1 = makeSession("s1", { backend_type: "claude", model: "claude-sonnet-4-5-20250929" });
+    const session2 = makeSession("s2", { backend_type: "codex", model: "gpt-5-codex" });
+    const sdk1 = makeSdkSession("s1", { backendType: "claude", model: "claude-sonnet-4-5-20250929" });
+    const sdk2 = makeSdkSession("s2", { backendType: "codex", model: "gpt-5-codex" });
     mockState = createMockState({
       sessions: new Map([["s1", session1], ["s2", session2]]),
       sdkSessions: [sdk1, sdk2],
     });
 
     render(<Sidebar />);
-    // Both backend pills should be present
-    const claudePills = screen.getAllByText("Claude");
-    const codexPills = screen.getAllByText("Codex");
+    // Both backend/model pills should be present (lowercase abbreviations)
+    const claudePills = screen.getAllByText("sonnet");
+    const codexPills = screen.getAllByText("codex");
     expect(claudePills.length).toBeGreaterThanOrEqual(1);
     expect(codexPills.length).toBeGreaterThanOrEqual(1);
   });
@@ -671,25 +709,29 @@ describe("Sidebar", () => {
     expect(brandLogo).toHaveAttribute("src", "/logo.svg");
   });
 
-  it("sessions are grouped by project directory", () => {
-    const session1 = makeSession("s1", { cwd: "/home/user/project-a" });
-    const session2 = makeSession("s2", { cwd: "/home/user/project-a" });
-    const session3 = makeSession("s3", { cwd: "/home/user/project-b" });
-    const sdk1 = makeSdkSession("s1", { cwd: "/home/user/project-a" });
-    const sdk2 = makeSdkSession("s2", { cwd: "/home/user/project-a" });
-    const sdk3 = makeSdkSession("s3", { cwd: "/home/user/project-b" });
+  it("sessions are grouped by creation time", () => {
+    // Validates: recent sessions land under "Today" while sessions older
+    // than 7 days land under "Older".
+    const dayMs = 86400000;
+    const sdkToday = makeSdkSession("s1", { model: "today-model" });
+    const sdkOld = makeSdkSession("s2", {
+      model: "older-model",
+      createdAt: Date.now() - 8 * dayMs,
+    });
     mockState = createMockState({
-      sessions: new Map([["s1", session1], ["s2", session2], ["s3", session3]]),
-      sdkSessions: [sdk1, sdk2, sdk3],
+      sdkSessions: [sdkToday, sdkOld],
     });
 
     render(<Sidebar />);
-    // Project group headers should be visible (also appears as dirName in session items)
-    expect(screen.getAllByText("project-a").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("project-b").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Today")).toBeInTheDocument();
+    expect(screen.getByText("Older")).toBeInTheDocument();
+    expect(screen.getByText("today-model")).toBeInTheDocument();
+    expect(screen.getByText("older-model")).toBeInTheDocument();
   });
 
-  it("project group header shows running count", () => {
+  it("sessions header shows total session count", () => {
+    // Validates: the "Sessions" section header displays the number of active
+    // (non-archived) sessions.
     const session1 = makeSession("s1", { cwd: "/home/user/myapp" });
     const session2 = makeSession("s2", { cwd: "/home/user/myapp" });
     const sdk1 = makeSdkSession("s1", { cwd: "/home/user/myapp" });
@@ -701,22 +743,31 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    expect(screen.getByText("2 running")).toBeInTheDocument();
+    expect(screen.getByText("Sessions")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("collapsing a project group hides its sessions", () => {
+  it("collapsing a folder hides its sessions", async () => {
+    // Validates: user-defined folders group sessions and can be collapsed by
+    // clicking the folder header. Collapsed folders hide their session rows.
+    mockApi.listFolders.mockResolvedValueOnce([
+      { id: "f1", name: "Work", sessionIds: ["s1"], createdAt: 1 },
+    ]);
     const session = makeSession("s1", { cwd: "/home/user/myapp", model: "hidden-model" });
-    const sdk = makeSdkSession("s1", { cwd: "/home/user/myapp" });
+    const sdk = makeSdkSession("s1", { cwd: "/home/user/myapp", model: "hidden-model" });
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
-      collapsedProjects: new Set(["/home/user/myapp"]),
     });
 
     render(<Sidebar />);
-    // Group header should still be visible
-    expect(screen.getByText("myapp")).toBeInTheDocument();
-    // But the session inside it should be hidden
+
+    // Folder header appears once folders load; its session is visible
+    const folderHeader = await screen.findByText("Work");
+    expect(screen.getByText("hidden-model")).toBeInTheDocument();
+
+    // Collapse the folder — the session inside it should be hidden
+    fireEvent.click(folderHeader.closest("button")!);
     expect(screen.queryByText("hidden-model")).not.toBeInTheDocument();
   });
 });

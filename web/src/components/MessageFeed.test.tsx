@@ -29,6 +29,11 @@ vi.mock("../store.js", () => ({
       streamingOutputTokens: mockStoreValues.streamingOutputTokens ?? new Map(),
       sessionStatus: mockStoreValues.sessionStatus ?? new Map(),
       toolProgress: mockStoreValues.toolProgress ?? new Map(),
+      // MessageFeed reads sessions (for cwd, to decide fork availability) and
+      // replaySessionId (to disable forking during replay) at render time, so
+      // the mock must provide them or every render throws.
+      sessions: mockStoreValues.sessions ?? new Map(),
+      replaySessionId: mockStoreValues.replaySessionId ?? null,
     };
     return selector(state);
   },
@@ -81,6 +86,8 @@ function resetStore() {
   mockStoreValues.streamingStartedAt = new Map();
   mockStoreValues.streamingOutputTokens = new Map();
   mockStoreValues.sessionStatus = new Map();
+  mockStoreValues.sessions = new Map();
+  mockStoreValues.replaySessionId = null;
 }
 
 beforeEach(() => {
@@ -158,8 +165,9 @@ describe("MessageFeed - empty state", () => {
 
     render(<MessageFeed sessionId={sid} />);
 
+    // Empty-state copy as rendered by MessageFeed
     expect(screen.getByText("Start a conversation")).toBeTruthy();
-    expect(screen.getByText(/Send a message to begin/)).toBeTruthy();
+    expect(screen.getByText("Type a message below to begin")).toBeTruthy();
   });
 
   it("does not show empty state when there are messages", () => {
@@ -218,8 +226,9 @@ describe("MessageFeed - streaming text", () => {
     const { container } = render(<MessageFeed sessionId={sid} />);
 
     expect(screen.getByText("I am currently thinking about")).toBeTruthy();
-    // Check for the blinking cursor element (animate class with pulse-dot)
-    const cursor = container.querySelector('[class*="animate-"]');
+    // The blinking cursor is a span with the animate-pulse class appended
+    // after the streaming text inside the streaming <pre>
+    const cursor = container.querySelector(".animate-pulse");
     expect(cursor).toBeTruthy();
   });
 
@@ -231,24 +240,31 @@ describe("MessageFeed - streaming text", () => {
 
     const { container } = render(<MessageFeed sessionId={sid} />);
 
-    // No pre element with streaming content
-    const preElements = container.querySelectorAll("pre.font-serif-assistant");
-    expect(preElements.length).toBe(0);
+    // The streaming indicator's blinking cursor (animate-pulse) must not be
+    // present when there is no streaming text. (The user bubble also renders
+    // a <pre>, so we assert on the cursor rather than <pre> presence.)
+    expect(container.querySelector(".animate-pulse")).toBeNull();
   });
 });
 
 // ─── Generation stats bar ────────────────────────────────────────────────────
 
 describe("MessageFeed - generation stats bar", () => {
+  // The stats bar no longer shows a "Generating..." label; it renders a pill
+  // with a breathing status dot plus the elapsed time (and token count when
+  // available). These tests assert on the elapsed-time text instead.
   it("renders stats bar when session is running", () => {
     const sid = "test-stats";
     setStoreMessages(sid, [makeMessage({ role: "user", content: "hi" })]);
     setStoreStatus(sid, "running");
     setStoreStreamingStartedAt(sid, Date.now() - 10_000);
 
-    render(<MessageFeed sessionId={sid} />);
+    const { container } = render(<MessageFeed sessionId={sid} />);
 
-    expect(screen.getByText("Generating...")).toBeTruthy();
+    // Elapsed time appears in the stats pill (e.g. "10s")
+    expect(screen.getByText(/^\d+s$/)).toBeTruthy();
+    // The breathing indicator dot is rendered alongside it
+    expect(container.querySelector(".animate-breathing")).toBeTruthy();
   });
 
   it("does not render stats bar when session is idle", () => {
@@ -256,9 +272,11 @@ describe("MessageFeed - generation stats bar", () => {
     setStoreMessages(sid, [makeMessage({ role: "user", content: "hi" })]);
     setStoreStatus(sid, "idle");
 
-    render(<MessageFeed sessionId={sid} />);
+    const { container } = render(<MessageFeed sessionId={sid} />);
 
-    expect(screen.queryByText("Generating...")).toBeNull();
+    // No elapsed-time pill and no breathing dot when idle
+    expect(screen.queryByText(/^\d+s$/)).toBeNull();
+    expect(container.querySelector(".animate-breathing")).toBeNull();
   });
 
   it("shows output tokens in stats bar when available", () => {
@@ -270,9 +288,9 @@ describe("MessageFeed - generation stats bar", () => {
 
     render(<MessageFeed sessionId={sid} />);
 
-    expect(screen.getByText("Generating...")).toBeTruthy();
-    // Should show "2.5k" token count
-    expect(screen.getByText(/2\.5k/)).toBeTruthy();
+    // Elapsed time and "2.5k tokens" both appear in the running stats pill
+    expect(screen.getByText(/^\d+s$/)).toBeTruthy();
+    expect(screen.getByText(/2\.5k tokens/)).toBeTruthy();
   });
 });
 
@@ -303,8 +321,8 @@ describe("MessageFeed - tool-only message detection", () => {
     render(<MessageFeed sessionId={sid} />);
 
     // When grouped at message level, both should appear under a single "Read File" group
-    // with a count badge showing "2"
-    expect(screen.getByText("2")).toBeTruthy();
+    // with a count badge rendered as "x2"
+    expect(screen.getByText("x2")).toBeTruthy();
     const labels = screen.getAllByText("Read File");
     expect(labels.length).toBe(1);
   });

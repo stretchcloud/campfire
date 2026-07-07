@@ -2,16 +2,27 @@
   "name": "the-campfire",
   "version": "0.1.0",
   "type": "module",
-  "description": "Web UI for launching and interacting with Claude Code agents",
+  "description": "Campfire — collaborative web platform for AI coding agents. Run Claude Code, Codex, Goose, Aider, and more from one browser UI with real-time collaboration, permission voting, and automation.",
   "license": "MIT",
   "author": "The Vibe Company",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stretchcloud/campfire.git",
+    "directory": "web"
+  },
+  "homepage": "https://github.com/stretchcloud/campfire#readme",
+  "bugs": {
+    "url": "https://github.com/stretchcloud/campfire/issues"
+  },
   "bin": {
     "the-campfire": "./bin/cli.ts"
   },
   "files": [
     "bin/",
     "server/",
-    "dist/"
+    "dist/",
+    "!server/**/*.test.ts",
+    "!server/protocol/"
   ],
   "engines": {
     "bun": ">=1.0.0"
@@ -19,8 +30,12 @@
   "keywords": [
     "claude",
     "claude-code",
+    "codex",
     "ai",
     "agent",
+    "multi-agent",
+    "self-hosted",
+    "mcp",
     "web-ui",
     "vibe-coding"
   ],

@@ -36,8 +36,6 @@ import { LinearSettingsPage } from "./components/LinearSettingsPage.js";
 import { MemoryPanel } from "./components/MemoryPanel.js";
 import { TaskRouterPage } from "./components/TaskRouterPage.js";
 import { CollectiveMindPanel } from "./components/CollectiveMindPanel.js";
-import { DmuxPage } from "./components/DmuxPage.js";
-import { DmuxReplayViewer } from "./components/DmuxReplayViewer.js";
 import { OrchestratorPage } from "./components/OrchestratorPage.js";
 import { RacePage } from "./components/RacePage.js";
 import { KanbanPage } from "./components/KanbanPage.js";
@@ -123,9 +121,6 @@ export default function App() {
   const isLinearSettingsPage = hash === "#/integrations/linear";
   const isMemoryPage = hash === "#/memory";
   const isRouterPage = hash === "#/router";
-  const isDmuxPage = hash === "#/dmux";
-  const dmuxReplayMatch = hash.match(/^#\/dmux\/replay\/(.+)$/);
-  const isDmuxReplayPage = !!dmuxReplayMatch;
   const isCollectiveMindPage = hash === "#/collective";
   const isOrchestratorPage = hash === "#/orchestrator";
   const isRacesPage = hash === "#/races" || hash.startsWith("#/races/");
@@ -139,7 +134,7 @@ export default function App() {
   const publicReplayMatch = hash.match(/^#\/public-replay\/(.+)$/);
   const isPublicReplayPage = !!publicReplayMatch;
 
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isDmuxPage && !isDmuxReplayPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentsPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isRacesPage && !isKanbanPage && !isSkillsPage && !isReplayPage && !isPublicReplayPage && !isHubPage && !isMonitorPage && !isCommandsPage;
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isEnvironmentsPage && !isScheduledPage && !isGalleryPage && !isWebhooksPage && !isAdaptersPage && !isClawHubPage && !isAgentsPage && !isPromptsPage && !isIntegrationsPage && !isLinearSettingsPage && !isMemoryPage && !isRouterPage && !isCollectiveMindPage && !isOrchestratorPage && !isRacesPage && !isKanbanPage && !isSkillsPage && !isReplayPage && !isPublicReplayPage && !isHubPage && !isMonitorPage && !isCommandsPage;
 
   useEffect(() => {
     capturePageView(hash || "#/");
@@ -258,18 +253,6 @@ export default function App() {
           {isTerminalPage && (
             <div className="absolute inset-0">
               <TerminalPage />
-            </div>
-          )}
-
-          {isDmuxPage && (
-            <div className="absolute inset-0">
-              <DmuxPage />
-            </div>
-          )}
-
-          {isDmuxReplayPage && dmuxReplayMatch && (
-            <div className="absolute inset-0">
-              <DmuxReplayViewer filename={decodeURIComponent(dmuxReplayMatch[1])} />
             </div>
           )}
 

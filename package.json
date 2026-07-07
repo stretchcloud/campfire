@@ -1,8 +1,8 @@
 {
-  "name": "the-campfire",
+  "name": "the-campfire-workspace",
   "version": "0.1.0",
   "private": true,
-  "description": "Web UI for Claude Code agents",
+  "description": "Workspace root for Campfire — the collaborative web platform for AI coding agents. The published package lives in web/.",
   "scripts": {
     "dev": "cd web && bun run dev",
     "build": "cd web && bun run build",
@@ -11,9 +11,6 @@
   },
   "author": "The Vibe Company",
   "license": "MIT",
-  "dependencies": {
-    "the-campfire": "^0.2.2"
-  },
   "devDependencies": {
     "husky": "^9.1.7"
   }

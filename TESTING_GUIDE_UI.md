@@ -12,11 +12,11 @@ bun install
 bun run dev
 
 # Opens:
-# - Backend: http://localhost:3456
-# - Frontend: http://localhost:5174
+# - Backend: http://localhost:14567
+# - Frontend: http://localhost:4567
 ```
 
-Access the app at: **http://localhost:5174**
+Access the app at: **http://localhost:4567**
 
 ---
 
@@ -25,7 +25,7 @@ Access the app at: **http://localhost:5174**
 ### Location: Home Page (`#/`)
 
 **Steps:**
-1. Open http://localhost:5174 (or click logo in sidebar)
+1. Open http://localhost:4567 (or click logo in sidebar)
 2. Click **"New Session"** button (big blue button)
 3. Fill out the form:
    - **Backend**: Select from dropdown (Claude Code, Codex, Goose, Aider, etc.)
@@ -148,7 +148,7 @@ Type: "What do you know about semantic memory in this codebase?"
 **Test:**
 ```bash
 # Manually trigger via API (agents don't emit this yet):
-curl -X POST http://localhost:3456/api/sessions/SESSION_ID/deliberations \
+curl -X POST http://localhost:14567/api/sessions/SESSION_ID/deliberations \
   -H "Content-Type: application/json" \
   -d '{
     "action": "refactor",
@@ -501,7 +501,7 @@ campfire-tui
      - **Collaborator**: Can approve permissions & send messages
      - **Spectator**: Watch only (read-only)
   4. Link automatically copied to clipboard
-  5. Share link: `http://localhost:5174/#/join/TOKEN`
+  5. Share link: `http://localhost:4567/#/join/TOKEN`
 
 **13.2: Multi-Viewer Permissions**
 - **How it works:**

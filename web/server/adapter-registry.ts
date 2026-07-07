@@ -175,8 +175,10 @@ class AdapterRegistry {
         "utf-8",
       );
 
-      // Run bun add in the temp directory
-      const proc = Bun.spawn(["bun", "add", npmPackage], {
+      // Run bun add in the temp directory. --ignore-scripts prevents the
+      // third-party package from executing arbitrary code at install time;
+      // adapter code only runs later, when the user launches it as a backend.
+      const proc = Bun.spawn(["bun", "add", "--ignore-scripts", npmPackage], {
         cwd: tempDir,
         stdout: "pipe",
         stderr: "pipe",

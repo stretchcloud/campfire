@@ -63,12 +63,7 @@ interface TerminalSocketData {
   terminalId: string;
 }
 
-interface DmuxSocketData {
-  kind: "dmux";
-  cwd: string;
-}
-
-export type SocketData = CLISocketData | BrowserSocketData | TerminalSocketData | DmuxSocketData;
+export type SocketData = CLISocketData | BrowserSocketData | TerminalSocketData;
 
 // ─── Session ──────────────────────────────────────────────────────────────────
 
@@ -297,9 +292,9 @@ export class WsBridge {
     "mcp_set_servers",
   ]);
   private static readonly VOTE_DEADLINE_MS = 30_000; // 30 seconds to vote
+  private static readonly INVITE_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
   private readonly sessions = new Map<string, Session>();
-  private readonly inviteTokens = new Map<string, string>(); // token → sessionId
-  private readonly inviteTokenRoles = new Map<string, SessionRole>(); // token → role
+  private readonly inviteTokens = new Map<string, { sessionId: string; role: SessionRole; expiresAt: number }>();
   private viewerCounter = 0;
   private votingPolicy: VotingPolicy = "majority-rules";
   private store: SessionStore | null = null;
@@ -403,25 +398,49 @@ export class WsBridge {
 
   // ── Invite tokens ────────────────────────────────────────────────────
 
-  /** Generate a short invite token for a session with a specified role. */
+  /** Drop expired invite tokens (called opportunistically on create/resolve). */
+  private pruneExpiredInviteTokens(): void {
+    const now = Date.now();
+    for (const [token, entry] of this.inviteTokens) {
+      if (entry.expiresAt <= now) this.inviteTokens.delete(token);
+    }
+  }
+
+  /** Generate a short invite token for a session with a specified role.
+   *  Tokens expire after 24 hours — an invite link is a bearer credential
+   *  that bypasses password auth, so it must not live forever. */
   createInviteToken(sessionId: string, role: SessionRole = "collaborator"): string | null {
     if (!this.sessions.has(sessionId)) return null;
 
+    this.pruneExpiredInviteTokens();
     // Generate a 12-char URL-safe token (always new — different roles may be desired)
     const token = randomUUID().replaceAll("-", "").substring(0, 12);
-    this.inviteTokens.set(token, sessionId);
-    this.inviteTokenRoles.set(token, role);
+    this.inviteTokens.set(token, {
+      sessionId,
+      role,
+      expiresAt: Date.now() + WsBridge.INVITE_TOKEN_TTL_MS,
+    });
     return token;
   }
 
-  /** Resolve an invite token to a session ID. Returns null if invalid. */
-  resolveInviteToken(token: string): string | null {
-    return this.inviteTokens.get(token) ?? null;
+  private getLiveInviteEntry(token: string): { sessionId: string; role: SessionRole } | null {
+    const entry = this.inviteTokens.get(token);
+    if (!entry) return null;
+    if (entry.expiresAt <= Date.now()) {
+      this.inviteTokens.delete(token);
+      return null;
+    }
+    return entry;
   }
 
-  /** Get the role associated with an invite token. */
+  /** Resolve an invite token to a session ID. Returns null if invalid or expired. */
+  resolveInviteToken(token: string): string | null {
+    return this.getLiveInviteEntry(token)?.sessionId ?? null;
+  }
+
+  /** Get the role associated with an invite token. Returns null if invalid or expired. */
   resolveInviteTokenRole(token: string): SessionRole | null {
-    return this.inviteTokenRoles.get(token) ?? null;
+    return this.getLiveInviteEntry(token)?.role ?? null;
   }
 
   /** Get presence info for all connected viewers in a session. */
@@ -694,7 +713,19 @@ export class WsBridge {
     return !!session.cliSocket;
   }
 
+  /** Run collective-intelligence end-of-session hooks (memory consolidation,
+   *  shared-context promotion) before a session's state is discarded. */
+  private notifySessionEnded(session: Session): void {
+    if (!this.collectiveIntelligence) return;
+    const repoRoot = session.state.repo_root || session.state.cwd || "";
+    void this.collectiveIntelligence
+      .onSessionEnd(session.id, session.backendType, repoRoot)
+      .catch((err) => console.warn(`[ws-bridge] CI onSessionEnd failed for ${session.id}:`, err));
+  }
+
   removeSession(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    if (session) this.notifySessionEnded(session);
     this.sessions.delete(sessionId);
     this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
@@ -706,6 +737,8 @@ export class WsBridge {
   closeSession(sessionId: string) {
     const session = this.sessions.get(sessionId);
     if (!session) return;
+
+    this.notifySessionEnded(session);
 
     // Close CLI socket (Claude)
     if (session.cliSocket) {

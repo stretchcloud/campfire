@@ -19,6 +19,8 @@ vi.mock("../ws.js", () => ({
 vi.mock("../api.js", () => ({
   api: {
     gitPull: vi.fn().mockResolvedValue({ success: true, output: "", git_ahead: 0, git_behind: 0 }),
+    // Fetched when the user types "@" to open the prompt-mention menu
+    listPrompts: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -26,6 +28,9 @@ vi.mock("../api.js", () => ({
 const mockAppendMessage = vi.fn();
 const mockUpdateSession = vi.fn();
 const mockSetPreviousPermissionMode = vi.fn();
+const mockEnqueueMessage = vi.fn();
+const mockDequeueMessage = vi.fn();
+const mockClearQueue = vi.fn();
 
 vi.mock("../store.js", () => {
   // Create a mock store function that acts like zustand's useStore
@@ -90,14 +95,25 @@ function setupMockStore(overrides: {
   const previousPermissionModeMap = new Map<string, string>();
   previousPermissionModeMap.set("s1", "acceptEdits");
 
+  // The viewer role gates sending/interrupting: spectators are read-only, so
+  // tests default to "owner" to exercise the interactive paths.
+  const myRoleMap = new Map<string, string>();
+  myRoleMap.set("s1", "owner");
+
   mockStoreState = {
     sessions: sessionsMap,
     cliConnected: cliConnectedMap,
     sessionStatus: sessionStatusMap,
     previousPermissionMode: previousPermissionModeMap,
+    myRole: myRoleMap,
+    // Follow-up messages typed while the agent is running are queued here
+    messageQueue: new Map<string, string[]>(),
     appendMessage: mockAppendMessage,
     updateSession: mockUpdateSession,
     setPreviousPermissionMode: mockSetPreviousPermissionMode,
+    enqueueMessage: mockEnqueueMessage,
+    dequeueMessage: mockDequeueMessage,
+    clearQueue: mockClearQueue,
   };
 }
 
@@ -114,7 +130,7 @@ describe("Composer basic rendering", () => {
     const textarea = container.querySelector("textarea");
     expect(textarea).toBeTruthy();
     // Send button (the round one with the arrow SVG) - identified by title
-    const sendBtn = screen.getByTitle("Send message");
+    const sendBtn = screen.getByTitle("Send message (Enter)");
     expect(sendBtn).toBeTruthy();
   });
 });
@@ -124,14 +140,14 @@ describe("Composer basic rendering", () => {
 describe("Composer send button state", () => {
   it("send button is disabled when text is empty", () => {
     render(<Composer sessionId="s1" />);
-    const sendBtn = screen.getByTitle("Send message");
+    const sendBtn = screen.getByTitle("Send message (Enter)");
     expect(sendBtn.hasAttribute("disabled")).toBe(true);
   });
 
   it("send button is disabled when CLI is not connected", () => {
     setupMockStore({ isConnected: false });
     render(<Composer sessionId="s1" />);
-    const sendBtn = screen.getByTitle("Send message");
+    const sendBtn = screen.getByTitle("Send message (Enter)");
     expect(sendBtn.hasAttribute("disabled")).toBe(true);
   });
 
@@ -141,7 +157,7 @@ describe("Composer send button state", () => {
 
     fireEvent.change(textarea, { target: { value: "Hello world" } });
 
-    const sendBtn = screen.getByTitle("Send message");
+    const sendBtn = screen.getByTitle("Send message (Enter)");
     expect(sendBtn.hasAttribute("disabled")).toBe(false);
   });
 });
@@ -178,7 +194,7 @@ describe("Composer sending messages", () => {
     const textarea = container.querySelector("textarea")!;
 
     fireEvent.change(textarea, { target: { value: "click send" } });
-    fireEvent.click(screen.getByTitle("Send message"));
+    fireEvent.click(screen.getByTitle("Send message (Enter)"));
 
     expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
       type: "user_message",
@@ -224,7 +240,7 @@ describe("Composer interrupt button", () => {
     const stopBtn = screen.getByTitle("Stop generation");
     expect(stopBtn).toBeTruthy();
     // Send button should not be present
-    expect(screen.queryByTitle("Send message")).toBeNull();
+    expect(screen.queryByTitle("Send message (Enter)")).toBeNull();
   });
 
   it("interrupt button sends interrupt message", () => {
@@ -240,7 +256,7 @@ describe("Composer interrupt button", () => {
     setupMockStore({ sessionStatus: "idle" });
     render(<Composer sessionId="s1" />);
 
-    expect(screen.getByTitle("Send message")).toBeTruthy();
+    expect(screen.getByTitle("Send message (Enter)")).toBeTruthy();
     expect(screen.queryByTitle("Stop generation")).toBeNull();
   });
 });
@@ -312,9 +328,12 @@ describe("Composer slash menu", () => {
 
     fireEvent.change(textarea, { target: { value: "/" } });
 
-    // Each command should display its type
+    // Each command should display its type. Commands show a "command" type
+    // label plus a "cmd" badge; skills show "skill" twice (type label AND
+    // badge), so use getAllByText for the skill entry.
     expect(screen.getByText("command")).toBeTruthy();
-    expect(screen.getByText("skill")).toBeTruthy();
+    expect(screen.getByText("cmd")).toBeTruthy();
+    expect(screen.getAllByText("skill").length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -334,7 +353,8 @@ describe("Composer disabled state", () => {
     const { container } = render(<Composer sessionId="s1" />);
     const textarea = container.querySelector("textarea")! as HTMLTextAreaElement;
 
-    expect(textarea.placeholder).toContain("Type a message");
+    // Current copy when connected and idle: "Send a message... (/ for commands)"
+    expect(textarea.placeholder).toContain("Send a message");
   });
 
   it("textarea shows waiting placeholder when not connected", () => {
@@ -342,6 +362,7 @@ describe("Composer disabled state", () => {
     const { container } = render(<Composer sessionId="s1" />);
     const textarea = container.querySelector("textarea")! as HTMLTextAreaElement;
 
-    expect(textarea.placeholder).toContain("Waiting for CLI connection");
+    // Current copy when the CLI socket is down: "Waiting for connection..."
+    expect(textarea.placeholder).toContain("Waiting for connection");
   });
 });

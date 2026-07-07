@@ -22,6 +22,11 @@ const mockHomedir = vi.hoisted(() => {
   };
 });
 
+// service.ts uses execFileSync with absolute binary paths (e.g. /bin/launchctl,
+// /usr/bin/which) for PATH-safety. To keep the string-based assertions in the
+// tests below readable, we intercept execFileSync and flatten each call into a
+// shell-like command string ("launchctl load -w /path") dispatched through this
+// single mock. Tests configure behavior / inspect calls via mockExecSync.
 const mockExecSync = vi.hoisted(() => {
   return vi.fn<(cmd: string, opts?: object) => string>();
 });
@@ -46,7 +51,13 @@ vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
   return {
     ...actual,
-    execSync: mockExecSync,
+    execFileSync: (file: string, args: readonly string[] = [], opts?: object) => {
+      // Strip the absolute directory ("/usr/bin/which" -> "which") and join
+      // the args so existing assertions like cmd.startsWith("launchctl load")
+      // keep working against the execFileSync-based implementation.
+      const bin = file.split("/").pop() ?? file;
+      return mockExecSync([bin, ...args].join(" "), opts);
+    },
   };
 });
 
@@ -346,8 +357,10 @@ describe("install", () => {
 
     expect(existsSync(oldPath)).toBe(false);
     expect(existsSync(plistPath())).toBe(true);
+    // execFileSync passes the plist path as a plain argv element (no shell
+    // quoting), so the flattened command contains the unquoted path.
     expect(mockExecSync).toHaveBeenCalledWith(
-      expect.stringContaining(`launchctl unload -w "${oldPath}"`),
+      expect.stringContaining(`launchctl unload -w ${oldPath}`),
       expect.any(Object),
     );
   });
@@ -491,8 +504,10 @@ describe("uninstall", () => {
     await service.uninstall();
 
     expect(existsSync(oldPath)).toBe(false);
+    // execFileSync passes the plist path as a plain argv element (no shell
+    // quoting), so the flattened command contains the unquoted path.
     expect(mockExecSync).toHaveBeenCalledWith(
-      expect.stringContaining(`launchctl unload -w "${oldPath}"`),
+      expect.stringContaining(`launchctl unload -w ${oldPath}`),
       expect.any(Object),
     );
   });
