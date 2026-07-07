@@ -4,7 +4,9 @@ import { join } from "node:path";
 import type { BackendType } from "./session-types.js";
 
 export type RaceStatus = "running" | "completed" | "failed" | "cancelled";
-export type RaceEntryStatus = "pending" | "running" | "completed" | "failed" | "timeout";
+// "skipped" is a terminal state used by cascade races: the entry was never
+// prompted because a cheaper backend earlier in the cascade already succeeded.
+export type RaceEntryStatus = "pending" | "running" | "completed" | "failed" | "timeout" | "skipped";
 
 export interface RaceEntry {
   id: string;
@@ -43,6 +45,9 @@ export interface RaceResult {
   entries: RaceEntry[];
   winnerId?: string;
   error?: string;
+  // Cost cascade mode: entries run sequentially in the order the user listed
+  // them and the race stops at the first entry with a non-empty patch.
+  cascade?: boolean;
 }
 
 const RACES_DIR = join(homedir(), ".campfire", "races");

@@ -21,6 +21,7 @@ function statusClass(status: RaceEntryInfo["status"]): string {
   if (status === "completed") return "text-cc-success";
   if (status === "failed" || status === "timeout") return "text-cc-error";
   if (status === "running") return "text-cc-primary";
+  // "pending" and "skipped" (cascade never reached this entry) stay muted.
   return "text-cc-muted";
 }
 
@@ -68,7 +69,7 @@ export function RaceComparison({ race, onUpdate }: Readonly<{ race: RaceInfo; on
           <div className="px-3 pb-3">
             <div className="text-[10px] text-cc-muted uppercase tracking-wider mb-1">Summary</div>
             <p className="min-h-20 max-h-40 overflow-auto rounded-md bg-cc-bg/60 px-2 py-1.5 text-[11px] text-cc-muted whitespace-pre-wrap">
-              {entry.error || entry.outputSummary || "No output yet."}
+              {entry.error || entry.outputSummary || (entry.status === "skipped" ? "Skipped — an earlier cascade entry succeeded." : "No output yet.")}
             </p>
           </div>
           <div className="px-3 pb-3">
