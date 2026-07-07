@@ -2,6 +2,22 @@
 
 > Campfire began as a fork of [the-companion](https://github.com/The-Vibe-Company/companion) and diverged into a separate product. Pre-fork history (versions up to 0.42.0) lives in the upstream repository; Campfire's own releases start at 0.1.0.
 
+## 0.2.0 (2026-07-07)
+
+### Features
+
+* **races:** cost-cascade mode — run backends sequentially cheapest-first and stop at the first entry that completes with a non-empty change set; failures, timeouts, and empty patches escalate to the next backend
+* **mcp:** default-deny injection policy with static scanning for auto-injected MCP servers (curated catalog match + shell-metacharacter/inline-eval/plaintext-http checks); `CAMPFIRE_MCP_AUTO_INJECT_POLICY=permissive` escape hatch
+
+### Security
+
+* auto-injected MCP servers can no longer be smuggled in via tampered persisted session state or crafted session-create payloads
+
+### Documentation
+
+* README: removed a documented-but-nonexistent feature (Adopt Running Sessions), corrected the auth setup endpoint and password-hashing description, documented cost-cascade races, the MCP injection policy, invite-link expiry, ClawHub/Moltbook/public-replay sharing, and added an Agents API reference table
+* new: MetaHarness integration recipe (docs/integrations/metaharness.md), semantic-memory v2 design study (docs/design/semantic-memory-v2.md), SECURITY.md
+
 ## 0.1.0 (2026-07-07)
 
 First public release of Campfire — a collaborative web platform for AI coding agents.
