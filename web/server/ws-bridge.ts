@@ -1038,6 +1038,7 @@ export class WsBridge {
       this.persistSession(session);
       this.injectDetectedEnvironmentMcp(session);
       this.agentMcpBridge?.onSessionReady(session.id, backendType, session.state.cwd);
+      this.collectiveIntelligence?.warmForSession(session.state.repo_root || session.state.cwd || "", backendType);
     } else if (msg.type === "session_update") {
       session.state = { ...session.state, ...msg.session, backend_type: backendType };
       this.refreshGitInfo(session, { notifyPoller: true });
@@ -1382,6 +1383,7 @@ export class WsBridge {
       this.persistSession(session);
       this.injectDetectedEnvironmentMcp(session);
       this.agentMcpBridge?.onSessionReady(session.id, session.backendType, session.state.cwd);
+      this.collectiveIntelligence?.warmForSession(session.state.repo_root || session.state.cwd || "", session.backendType);
     } else if (msg.subtype === "status") {
       session.state.is_compacting = msg.status === "compacting";
 
