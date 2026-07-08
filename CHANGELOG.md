@@ -2,6 +2,13 @@
 
 > Campfire began as a fork of [the-companion](https://github.com/The-Vibe-Company/companion) and diverged into a separate product. Pre-fork history (versions up to 0.42.0) lives in the upstream repository; Campfire's own releases start at 0.1.0.
 
+## 0.4.2 (2026-07-08)
+
+### Fixes
+
+* **server:** scrub inherited Claude Code session env markers (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH`, …) at bootstrap. A Campfire server started from inside a Claude Code session — an agent-run terminal, or the desktop app opened from such a shell — passed those markers to spawned `claude` CLIs, which then expected host-managed OAuth, skipped their own keychain credentials, and failed every call with `401 authentication_failed`. Deliberate configuration (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_*`) is preserved
+* **desktop:** the update banner now shows a **Download update** link to the GitHub releases page inside the desktop app instead of CLI instructions (`the-campfire install` / Update & Restart), which only update the npm-installed server — not the app bundle. Desktop updates = download the new DMG and replace the app; `~/.campfire` state survives
+
 ## 0.4.1 (2026-07-07)
 
 ### Fixes

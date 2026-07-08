@@ -42,6 +42,16 @@ bun run dist                 # electron-builder → dist/Campfire-<version>-arm6
 (free-port scan, Campfire probe, readiness wait). They need no Electron
 install.
 
+## Updating
+
+The bundled server's update checker compares its version against npm; when a
+newer release exists, the in-app banner shows a **Download update** link to
+the GitHub releases page. Updating = download the new DMG, drag Campfire into
+Applications to replace the old copy. All state lives in `~/.campfire`, so
+sessions, settings, and memory survive the swap. True in-app auto-update
+(electron-updater / Squirrel.Mac) requires Apple code signing, so it is
+deferred until a signing identity exists.
+
 ## Signing ("cheap" distribution)
 
 Builds are **ad-hoc signed** (`scripts/after-pack.js`) — valid signature, no
