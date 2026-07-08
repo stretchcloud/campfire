@@ -43,6 +43,8 @@ beforeEach(() => {
     dismissUpdate: mockDismissUpdate,
     setUpdateOverlayActive: mockSetUpdateOverlayActive,
   };
+  // Default: browser context, not the desktop shell.
+  delete (window as { campfireDesktop?: unknown }).campfireDesktop;
 });
 
 // ─── Visibility ────────────────────────────────────────────────────────────
@@ -110,6 +112,42 @@ describe("UpdateBanner service mode", () => {
     });
     render(<UpdateBanner />);
     expect(screen.getByText("Updating...")).toBeTruthy();
+  });
+});
+
+// ─── Desktop app ───────────────────────────────────────────────────────────
+// Inside the Electron shell (window.campfireDesktop set by the preload), CLI
+// update paths don't apply: `the-campfire install` / Update & Restart update
+// the npm-installed server, not the app bundle. The banner must instead link
+// to the GitHub releases page where the new DMG lives.
+
+describe("UpdateBanner desktop app", () => {
+  beforeEach(() => {
+    (window as { campfireDesktop?: unknown }).campfireDesktop = {
+      isDesktop: true,
+      platform: "darwin",
+      version: "0.4.0",
+    };
+  });
+
+  it("shows a download link to the releases page instead of CLI hints", () => {
+    storeState.updateInfo = makeUpdateInfo({ isServiceMode: false });
+    render(<UpdateBanner />);
+
+    const link = screen.getByText("Download update") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("https://github.com/stretchcloud/campfire/releases/latest");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(screen.queryByText("the-campfire install")).toBeNull();
+  });
+
+  it("prefers the download link even when the backing server is in service mode", () => {
+    // Update & Restart would update the npm service, not the app bundle the
+    // user is looking at — the DMG download is the only honest update path.
+    storeState.updateInfo = makeUpdateInfo({ isServiceMode: true });
+    render(<UpdateBanner />);
+
+    expect(screen.getByText("Download update")).toBeTruthy();
+    expect(screen.queryByText("Update & Restart")).toBeNull();
   });
 });
 

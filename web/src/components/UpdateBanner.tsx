@@ -2,6 +2,17 @@ import { useState } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 
+/**
+ * The desktop app's preload exposes window.campfireDesktop. In-app updates
+ * (`the-campfire install` / Update & Restart) only apply to the npm-installed
+ * server, so a desktop user updates by downloading the new DMG — the banner
+ * links to the releases page instead. True in-app auto-update on macOS would
+ * require Apple code signing.
+ */
+function isDesktopApp(): boolean {
+  return Boolean((window as { campfireDesktop?: { isDesktop?: boolean } }).campfireDesktop?.isDesktop);
+}
+
 export function UpdateBanner() {
   const updateInfo = useStore((s) => s.updateInfo);
   const dismissedVersion = useStore((s) => s.updateDismissedVersion);
@@ -40,7 +51,16 @@ export function UpdateBanner() {
         <span className="text-cc-muted ml-1">(current: v{updateInfo.currentVersion})</span>
       </span>
 
-      {updateInfo.isServiceMode ? (
+      {isDesktopApp() ? (
+        <a
+          href="https://github.com/stretchcloud/campfire/releases/latest"
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors"
+        >
+          Download update
+        </a>
+      ) : updateInfo.isServiceMode ? (
         <button
           onClick={handleUpdate}
           disabled={inProgress}

@@ -1,10 +1,21 @@
 process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1";
 
+// If this server was started from inside a Claude Code session (agent-run
+// terminal, desktop app opened from such a shell), strip the inherited
+// session markers — a `claude` CLI spawned with them expects host-managed
+// OAuth and fails with 401 instead of using its own credentials.
+import { scrubClaudeSessionEnv } from "./env-sanitizer.js";
+const scrubbedEnvKeys = scrubClaudeSessionEnv();
+
 // Enrich process PATH at startup so binary resolution and `which` calls can find
 // binaries installed via version managers (nvm, volta, fnm, etc.).
 // Critical when running as a launchd/systemd service with a restricted PATH.
 import { getEnrichedPath } from "./path-resolver.js";
 process.env.PATH = getEnrichedPath();
+
+if (scrubbedEnvKeys.length > 0) {
+  console.log(`[server] Scrubbed inherited Claude session env: ${scrubbedEnvKeys.join(", ")}`);
+}
 
 import { dirname, resolve } from "node:path";
 import { existsSync, readFileSync, statSync } from "node:fs";
